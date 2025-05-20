@@ -35,7 +35,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "1.13.1"
+version = "0.1.0"
 dependencies = [
 	{org = "ballerina", name = "io"}
 ]
