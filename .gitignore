@@ -11,6 +11,7 @@
 .mtj.tmp/
 
 # Package Files #
+*.jar
 *.war
 *.nar
 *.ear
@@ -32,7 +33,11 @@ target
 
 # MacOS
 *.DS_Store
-.vscode/
+.classpath
+.project
+.settings
+.vscode
+.idea
 
 # Ballerina
 velocity.log*
