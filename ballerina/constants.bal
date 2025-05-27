@@ -14,7 +14,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/io;
-public function main() {
-    io:println("This is MCP Library");
-}
+// Transport related constants (headers)
+const SESSION_ID_HEADER = "mcp-session-id";
+const ACCEPT_HEADER = "accept";
+const CONTENT_TYPE_HEADER = "content-type";
+const CONTENT_TYPE_JSON = "application/json";
+const CONTENT_TYPE_SSE = "text/event-stream";
