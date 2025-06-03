@@ -17,26 +17,26 @@
 # Defines the common error type for the module.
 public type Error distinct error;
 
-# Errors due to unsupported content type.
-public type UnsupportedContentTypeError distinct Error;
+# Errors related to streaming operations.
+public type StreamError distinct Error;
 
-# Errors related to transport issues.
-public type TransportError distinct Error;
+# Errors related to processing JSON-RPC message streams.
+public type JsonRpcMessageStreamError distinct StreamError;
 
 # Errors related to client.
 public type ClientError distinct Error;
 
-# Errors related to uninitialized transport.
-public type UninitializedTransportError distinct TransportError;
-
-# Errors related to initialization of the transport.
-public type TransportInitializationError distinct TransportError;
+# Errors related to transport operations.
+public type TransportError distinct Error;
 
 # Errors related to initialization of the client.
 public type ClientInitializationError distinct ClientError;
 
-# Errors related to list tools operation.
-public type ListToolError distinct ClientError;
+# Errors related to uninitialized transport.
+public type UninitializedTransportError distinct TransportError;
 
-# Errors related to tool call operation.
-public type CallToolError distinct ClientError;
+# Errors related to streamable HTTP transport operations.
+public type StreamableHttpTransportError distinct TransportError;
+
+# Errors due to unsupported content type.
+public type UnsupportedContentTypeError distinct StreamableHttpTransportError;

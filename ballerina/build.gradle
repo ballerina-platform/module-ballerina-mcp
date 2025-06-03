@@ -51,7 +51,8 @@ ballerina {
 
 task updateTomlFiles {
     doLast {
-        def newConfig = ballerinaTomlFilePlaceHolder.text.replace("@toml.version@", tomlVersion)
+        def newConfig = ballerinaTomlFilePlaceHolder.text.replace("@project.version@", project.version)
+        newConfig = newConfig.replace("@toml.version@", tomlVersion)
         ballerinaTomlFile.text = newConfig
     }
 }
@@ -91,6 +92,7 @@ publishing {
 updateTomlFiles.dependsOn copyStdlibs
 
 build.dependsOn "generatePomFileForMavenPublication"
+build.dependsOn ':mcp-native:build'
 
 publishToMavenLocal.dependsOn build
 publish.dependsOn build

@@ -16,31 +16,22 @@
 
 import ballerina/http;
 
-# Configuration options for the StreamableHTTPClientTransport.
-#
-# + sessionId - Session ID for the connection. This is used to identify the session on the server.
-# When not provided and connecting to a server that supports session IDs, the server will generate a new session ID.
-public type StreamableHttpClientTransportOptions record {|
+type StreamableHttpClientTransportOptions record {|
     string? sessionId = ();
 |};
 
-type SseHandler function (stream<JSONRPCServerMessage, error?> 'stream) returns future<error?>;
-
-distinct class StreamableHttpClientTransport {
+isolated class StreamableHttpClientTransport {
     private final string url;
     private final http:Client httpClient;
     private string? sessionId;
 
-    private SseHandler? streamHandler = ();
-    future<error?>? responseFuture = ();
-
-    function init(string url, StreamableHttpClientTransportOptions? options = ()) returns error? {
+    isolated function init(string url, StreamableHttpClientTransportOptions? options = ()) returns error? {
         self.url = url;
         self.httpClient = check new (url);
         self.sessionId = options?.sessionId;
     }
 
-    function send(JSONRPCMessage message) returns JSONRPCServerMessage|stream<JSONRPCServerMessage, error?>|error? {
+    isolated function send(JsonRpcMessage message) returns JsonRpcMessage|stream<JsonRpcMessage, error?>|error? {
         map<string> headers = self.commonHeaders();
         headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
         headers[ACCEPT_HEADER] = string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`;
@@ -49,21 +40,14 @@ distinct class StreamableHttpClientTransport {
 
         // Handle sessionId during the initialization request
         string|error sessionId = response.getHeader(SESSION_ID_HEADER);
-        if sessionId is string {
-            self.sessionId = sessionId;
+        lock {
+            if sessionId is string {
+                self.sessionId = sessionId;
+            }
         }
-
-        // TODO: Handle Authorization
 
         // If the response is 202 Accepted, there's no body to process
         if response.statusCode == 202 {
-            if (self.isInitializedNotification(message)) {
-                stream<JSONRPCServerMessage, error?> serverMsgEventStream = check self.startSse();
-                SseHandler? streamHandler = self.streamHandler;
-                if streamHandler is SseHandler {
-                    self.responseFuture = streamHandler(serverMsgEventStream);
-                }
-            }
             return;
         }
 
@@ -71,59 +55,62 @@ distinct class StreamableHttpClientTransport {
         string contentType = response.getContentType();
         if contentType.includes(CONTENT_TYPE_SSE) {
             stream<http:SseEvent, error?> sseEventStream = check response.getSseEventStream();
-            ServerMessageEventStreamGenerator serverMsgEventStreamGenerator = check new (sseEventStream);
-            stream<JSONRPCServerMessage, error?> serverMsgEventStream = new (serverMsgEventStreamGenerator);
-            return serverMsgEventStream;
+            MessageEventStreamGenerator msgEventStreamGenerator = new (sseEventStream);
+            stream<JsonRpcMessage, error?> msgEventStream = new (msgEventStreamGenerator);
+            return msgEventStream;
         } else if contentType.includes(CONTENT_TYPE_JSON) {
             json jsonPayload = check response.getJsonPayload();
-            JSONRPCServerMessage serverMsg = check jsonPayload.cloneWithType();
+            JsonRpcMessage serverMsg = check jsonPayload.cloneWithType();
             return serverMsg;
         } else {
             return error UnsupportedContentTypeError("Unsupported content type: " + contentType);
         }
     }
 
-    function getSessionId() returns string? {
-        return self.sessionId;
-    }
-
-    function setSseHandler(SseHandler handler) {
-        self.streamHandler = handler;
-    }
-
-    function waitForCompletion() returns error? {
-        future<error?>? responseFuture = self.responseFuture;
-        if (responseFuture is ()) {
-            return ();
-        }
-        return wait responseFuture;
-    }
-
-    private function startSse() returns stream<JSONRPCServerMessage, error?>|error {
+    isolated function startSse() returns stream<JsonRpcMessage, error?>|error {
         map<string> headers = self.commonHeaders();
         headers[ACCEPT_HEADER] = "text/event-stream";
 
         stream<http:SseEvent, error?> sseEventStream = check self.httpClient->get("/", headers = headers);
-        ServerMessageEventStreamGenerator serverMsgEventStreamGenerator = check new (sseEventStream);
-        stream<JSONRPCServerMessage, error?> serverMsgEventStream = new (serverMsgEventStreamGenerator);
-        return serverMsgEventStream;
+        MessageEventStreamGenerator msgEventStreamGenerator = new (sseEventStream);
+        stream<JsonRpcMessage, error?> msgEventStream = new (msgEventStreamGenerator);
+        return msgEventStream;
     }
 
-    private function commonHeaders() returns map<string> {
-        map<string> headers = {};
-        string? sessionId = self.sessionId;
-        if (sessionId is string) {
-            headers[SESSION_ID_HEADER] = sessionId;
-        }
-        return headers;
-    }
-
-    private function isInitializedNotification(JSONRPCServerMessage message) returns boolean {
-        if message is JSONRPCNotification {
-            if message.method == "notifications/initialized" {
-                return true;
+    isolated  function terminateSession() returns error? {
+        lock {
+            if (self.sessionId is ()) {
+                return;
             }
+
+            map<string> headers = self.commonHeaders();
+            headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
+
+            http:Response response = check self.httpClient->delete("/", headers = headers);
+
+            if response.statusCode == 405 {
+                return error TransportError("Session termination not supported by the server");
+            }
+
+            self.sessionId = ();
+            return;
         }
-        return false;
+    }
+
+    isolated function getSessionId() returns string? {
+        lock {
+            return self.sessionId;
+        }
+    }
+
+    private isolated function commonHeaders() returns map<string> {
+        lock {
+            map<string> headers = {};
+            string? sessionId = self.sessionId;
+            if (sessionId is string) {
+                headers[SESSION_ID_HEADER] = sessionId;
+            }
+            return headers.clone();
+        }
     }
 }

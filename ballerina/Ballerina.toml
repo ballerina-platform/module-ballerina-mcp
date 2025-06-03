@@ -11,3 +11,9 @@ distribution = "2201.12.0"
 
 [platform.java21]
 graalvmCompatible = true
+
+[[platform.java21.dependency]]
+groupId = "io.ballerina.stdlib."
+artifactId = "mcp-native"
+version = "0.1.0"
+path = "../native/build/libs/mcp-native-0.1.0-SNAPSHOT.jar"

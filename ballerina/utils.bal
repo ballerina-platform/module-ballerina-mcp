@@ -14,74 +14,60 @@
 // specific language governing permissions and limitations
 // under the License.
 
-function handleInitializeResponse(JSONRPCServerMessage|stream<JSONRPCServerMessage, error?>|() response) returns InitializeResult|error {
-    if response is stream<JSONRPCServerMessage, error?> {
-        (record {|JSONRPCServerMessage value;|}|error)? message = response.next();
+isolated function handleInitializeResponse(JsonRpcMessage|stream<JsonRpcMessage, error?>|() response) returns InitializeResult|error {
+    if response is stream<JsonRpcMessage, error?> {
+        (record {|JsonRpcMessage value;|}|error)? message = response.next();
         if message is () {
-            return error ClientInitializationError("Failed to receive an initialize response");
+            // return error ClientInitializationError("Failed to receive an initialize response");
+            return error("Error");
         }
         if message is error {
             return message;
         }
-        JSONRPCServerMessage serverMessage = message.value;
-        if serverMessage is JSONRPCResponse {
+        JsonRpcMessage serverMessage = message.value;
+        if serverMessage is JsonRpcResponse {
             ServerResult result = serverMessage.result;
             if result is InitializeResult {
                 return result;
-            } else {
-                return error ClientInitializationError("Received unexpected response type for initialization");
             }
-        } else {
-            return error ClientInitializationError("Received unexpected response type for initialization");
         }
-    } else if response is JSONRPCServerMessage {
-        if response is JSONRPCResponse {
+    } else if response is JsonRpcMessage {
+        if response is JsonRpcResponse {
             ServerResult result = response.result;
             if result is InitializeResult {
                 return result;
-            } else {
-                return error ClientInitializationError("Received unexpected response type for initialization");
             }
-        } else {
-            return error ClientInitializationError("Received unexpected response type for initialization");
         }
-    } else {
-        return error ClientInitializationError("No response received for initialization");
     }
+    return error("Error");
+    // return error ClientInitializationError("No response received for initialization");
 } 
 
-function handleListToolResult(JSONRPCServerMessage|stream<JSONRPCServerMessage, error?>|() response) returns ListToolsResult|error {
-    if response is stream<JSONRPCServerMessage, error?> {
-        (record {|JSONRPCServerMessage value;|}|error)? message = response.next();
+isolated function handleListToolResult(JsonRpcMessage|stream<JsonRpcMessage, error?>|() response) returns ListToolsResult|error {
+    if response is stream<JsonRpcMessage, error?> {
+        (record {|JsonRpcMessage value;|}|error)? message = response.next();
         if message is () {
-            return error ListToolError("Failed to receive a list tools response");
+            // return error ListToolError("Failed to receive a list tools response");
+            return error("Error");
         }
         if message is error {
             return message;
         }
-        JSONRPCServerMessage serverMessage = message.value;
-        if serverMessage is JSONRPCResponse {
+        JsonRpcMessage serverMessage = message.value;
+        if serverMessage is JsonRpcResponse {
             ServerResult result = serverMessage.result;
             if result is ListToolsResult {
                 return result;
-            } else {
-                return error ListToolError("Received unexpected response type for list tools");
             }
-        } else {
-            return error ListToolError("Received unexpected response type for list tools");
         }
-    } else if response is JSONRPCServerMessage {
-        if response is JSONRPCResponse {
+    } else if response is JsonRpcMessage {
+        if response is JsonRpcResponse {
             ServerResult result = response.result;
             if result is ListToolsResult {
                 return result;
-            } else {
-                return error ListToolError("Received unexpected response type for list tools");
             }
-        } else {
-            return error ListToolError("Received unexpected response type for list tools");
         }
-    } else {
-        return error ListToolError("No response received for list tools");
     }
+    return error("Error");
+    // return error ListToolError("No response received for list tools");
 }

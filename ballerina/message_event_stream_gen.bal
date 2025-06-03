@@ -15,16 +15,25 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/jballerina.java;
 
-class ServerMessageEventStreamGenerator {
-    private stream<http:SseEvent, error?> eventStream;
-
-    isolated function init(stream<http:SseEvent, error?> eventStream) returns error? {
-        self.eventStream = eventStream;
+isolated class MessageEventStreamGenerator {
+    
+    public isolated function init(stream<http:SseEvent, error?> eventStream) {
+        self.externInit(eventStream);
     }
 
-    public isolated function next() returns record {|JSONRPCServerMessage value;|}|error? {
-        record {|http:SseEvent value;|}? recordVal = check self.eventStream.next();
+    private isolated function externInit(stream<http:SseEvent, error?> eventStream) = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.MessageEventStream",
+        name: "initialize"
+    } external;
+
+    isolated function getNextData() returns record {|http:SseEvent value;|}?|error? = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.MessageEventStream"
+    } external;
+
+    public isolated function next() returns record {|JsonRpcMessage value;|}|error? {
+        record {|http:SseEvent value;|}? recordVal = check self.getNextData();
 
         // If End of Stream
         if recordVal is () {
@@ -33,17 +42,17 @@ class ServerMessageEventStreamGenerator {
 
         string? data = recordVal.value.data;
         if data is () {
-            return error("Received SSE event without 'data' field in the event stream.");
+            return error JsonRpcMessageStreamError("Received SSE event without 'data' field in the event stream.");
         }
 
         json jsonData = check data.fromJsonString();
-        JSONRPCServerMessage rpcResponse = check jsonData.cloneWithType();
+        JsonRpcMessage rpcResponse = check jsonData.cloneWithType();
         return {
             value: rpcResponse
         };
     };
 
     public isolated function close() returns error? {
-        check self.eventStream.close();
+        // check self.eventStream.close();
     }
 }

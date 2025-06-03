@@ -15,10 +15,7 @@
 // under the License.
 
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
-public type JSONRPCMessage JSONRPCRequest|JSONRPCNotification|JSONRPCResponse|JSONRPCError;
-
-# Refers to any valid JSON-RPC object that can be decoded off the wire.
-public type JSONRPCServerMessage JSONRPCNotification|JSONRPCResponse|JSONRPCError;
+public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse|JsonRpcError;
 
 public const LATEST_PROTOCOL_VERSION = "2025-03-26";
 public const SUPPORTED_PROTOCOL_VERSIONS = [
@@ -76,7 +73,7 @@ public type RequestId string|int;
 #
 # + jsonrpc - The JSON-RPC protocol version
 # + id - Identifier established by the client that should be returned in the response
-public type JSONRPCRequest record {
+public type JsonRpcRequest record {
     *Request;
     JSONRPC_VERSION jsonrpc;
     RequestId id;
@@ -85,7 +82,7 @@ public type JSONRPCRequest record {
 # A notification which does not expect a response.
 #
 # + jsonrpc - The JSON-RPC protocol version
-public type JSONRPCNotification record {
+public type JsonRpcNotification record {
     *Notification;
     JSONRPC_VERSION jsonrpc;
 };
@@ -95,7 +92,7 @@ public type JSONRPCNotification record {
 # + jsonrpc - The JSON-RPC protocol version
 # + id - Identifier of the request
 # + result - The result of the request
-public type JSONRPCResponse record {|
+public type JsonRpcResponse record {|
     JSONRPC_VERSION jsonrpc;
     RequestId id;
     ServerResult result;
@@ -113,7 +110,7 @@ public const INTERNAL_ERROR = -32603;
 # + jsonrpc - The JSON-RPC protocol version
 # + id - Identifier of the request
 # + error - The error information
-public type JSONRPCError record {
+public type JsonRpcError record {
     JSONRPC_VERSION jsonrpc;
     RequestId id;
     record {
@@ -260,7 +257,29 @@ public type PingRequest record {|
     *Request;
     "ping" method;
 |};
-// ProgressNotification
+
+# An out-of-band notification used to inform the receiver of a progress update for a long-running request.
+# 
+# + method - The method name for the notification
+# + params - The parameters for the progress notification
+public type ProgressNotification record {|
+    *Notification;
+    "notifications/progress" method;
+    record {
+        # The progress token which was given in the initial request, 
+        # used to associate this notification with the request that is proceeding.
+        ProgressToken progressToken;
+        # The progress thus far. This should increase every time progress is made, 
+        # even if the total is unknown.
+        int progress;
+        # Total number of items to process (or total progress required), if known.
+        int total?;
+        # An optional message describing the current progress.
+        string message?;
+        record {} _meta?;
+    } params;
+|};
+
 # Represents a paginated request with optional cursor-based pagination.
 #
 # + params - Optional pagination parameters
@@ -280,18 +299,32 @@ public type PaginatedResult record {|
     *Result;
     Cursor nextCursor?;
 |};
-// ListResourcesRequest
-// ListResourcesResult
-// ListResourceTemplatesRequest
-// ListResourceTemplatesResult
-// ReadResourceRequest
-// ReadResourceResult
-// ResourceListChangedNotification
-// SubscribeRequest
-// UnsubscribeRequest
-// ResourceUpdatedNotification
-// Resource
-// ResourceTemplate
+
+# An optional notification from the server to the client, informing it that the list of resources it can read from has changed. 
+# This may be issued by servers without any previous subscription from the client.
+# 
+# + method - The JSON-RPC method name for resource list changed notifications
+public type ResourceListChangedNotification record {|
+    *Notification;
+    "notifications/resources/list_changed" method;
+|};
+
+# A notification from the server to the client, informing it that a resource has changed and may need to be read again.
+# This should only be sent if the client previously sent a resources/subscribe request.
+# 
+# + method - The JSON-RPC method name for resource updated notifications
+public type ResourceUpdatedNotification record {|
+    *Notification;
+    "notifications/resources/updated" method;
+    # The parameters for the resource updated notification
+    record {
+        # The URI of the resource that has been updated. This might be a sub-resource of the one 
+        # that the client actually subscribed to.
+        string uri;
+        record {} _meta?;
+    } params;
+|};
+
 # The contents of a specific resource or sub-resource.
 # 
 # + uri - The URI of this resource.
@@ -317,15 +350,9 @@ public type BlobResourceContents record {|
     string blob;
 |};
 
-// ListPromptsRequest
-// ListPromptsResult
-// GetPromptRequest
-// GetPromptResult
-// Prompt
-// PromptArgument
 # The sender or recipient of messages and data in a conversation.
 public type Role "user"|"assistant";
-// PromptMessage
+
 # The contents of a resource, embedded into a prompt or tool call result.
 #
 # It is up to the client how best to render embedded resources for the benefit
@@ -339,7 +366,17 @@ public type EmbeddedResource record {|
     TextResourceContents|BlobResourceContents 'resource;
     Annotations annotations?;
 |};
-// PromptListChangedNotification
+
+# An optional notification from the server to the client, informing it that
+# the list of prompts it offers has changed. This may be issued by servers
+# without any previous subscription from the client.
+# 
+# + method - The JSON-RPC method name for prompt list changed notifications
+public type PromptListChangedNotification record {|
+    *Notification;
+    "notifications/prompts/list_changed" method;
+|};
+
 # Sent from the client to request a list of tools the server has.
 #
 # + method - The method identifier for this request
@@ -392,7 +429,16 @@ public type CallToolParams record {|
     string name;
     record {} arguments?;
 |};
-// ToolListChangedNotification
+
+# An optional notification from the server to the client, informing it that the list of tools 
+# it offers has changed. This may be issued by servers without any previous subscription from the client.
+# 
+# + method - The JSON-RPC method name for tool list changed notifications
+public type ToolListChangedNotification record {|
+    *Notification;
+    "notifications/tools/list_changed" method;
+|};
+
 # Additional properties describing a Tool to clients.
 # NOTE: all properties in ToolAnnotations are **hints**.
 # They are not guaranteed to provide a faithful description of
@@ -441,11 +487,32 @@ public type Tool record {|
     } inputSchema;
     ToolAnnotations annotations?;
 |};
-// SetLevelRequest
-// LoggingMessageNotification
-// CreateMessageRequest
-// CreateMessageResult
-// SamplingMessage
+
+# Notification of a log message passed from server to client. If no logging/setLevel request has been 
+# sent from the client, the server MAY decide which messages to send automatically.
+# 
+# + method - The method name for the notification
+# + params - The parameters for the logging message notification
+public type LoggingMessageNotification record {|
+    *Notification;
+    "notifications/message" method;
+    record {
+        # The severity of this log message.
+        LoggingLevel level;
+        # An optional name of the logger issuing this message.
+        string logger?;
+        # The data to be logged, such as a string message or an object. Any JSON serializable type is allowed here.
+        anydata data;
+        record {} _meta?;
+    } params;
+|};
+
+# The severity of a log message.
+#
+# These map to syslog message severities, as specified in RFC-5424:
+# https://datatracker.ietf.org/doc/html/rfc5424#section-6.2.1
+public type LoggingLevel "debug"|"info"|"notice"|"warning"|"error"|"critical"|"alert"|"emergency";
+
 # Optional annotations for the client. The client can use annotations to inform how objects are used or displayed
 #
 # + audience - Describes who the intended customer of this object or data is.
@@ -494,64 +561,29 @@ public type AudioContent record {|
     string mimeType;
     Annotations annotations?;
 |};
-// ModelPreferences
-// ModelHint
-// CompleteRequest
-// CompleteResult
-// ResourceReference
-// PromptReference
-// ListRootsRequest
-// ListRootsResult
-// Root
-// RootsListChangedNotification
 
 // Client messages
 # Represents a request sent from the client to the server.
 public type ClientRequest PingRequest | InitializeRequest | CallToolRequest | ListToolsRequest;
-//   | CompleteRequest
-//   | SetLevelRequest
-//   | GetPromptRequest
-//   | ListPromptsRequest
-//   | ListResourcesRequest
-//   | ListResourceTemplatesRequest
-//   | ReadResourceRequest
-//   | SubscribeRequest
-//   | UnsubscribeRequest
-//   | CallToolRequest
-//   | ListToolsRequest;
 
 # Represents a notification sent from the client to the server.
-public type ClientNotification CancelledNotification | InitializedNotification;
-//   | ProgressNotification
-//   | InitializedNotification
-//   | RootsListChangedNotification;
+public type ClientNotification CancelledNotification | ProgressNotification | InitializedNotification;
 
 # Represents a result sent from the client to the server.
 public type ClientResult EmptyResult;
-// | CreateMessageResult | ListRootsResult;
 
 // Server messages
 # Represents a response sent from the server to the client.
 public type ServerRequest PingRequest;
-//   | CreateMessageRequest
-//   | ListRootsRequest;
 
 # Represents a notification sent from the server to the client.
-public type ServerNotification CancelledNotification;
-//   | ProgressNotification
-//   | LoggingMessageNotification
-//   | ResourceUpdatedNotification
-//   | ResourceListChangedNotification
-//   | ToolListChangedNotification
-//   | PromptListChangedNotification;
+public type ServerNotification CancelledNotification
+    | ProgressNotification
+    | LoggingMessageNotification
+    | ResourceUpdatedNotification
+    | ResourceListChangedNotification
+    | ToolListChangedNotification
+    | PromptListChangedNotification;
 
 # Represents a result sent from the server to the client.
 public type ServerResult InitializeResult | CallToolResult | ListToolsResult | EmptyResult;
-//   | CompleteResult
-//   | GetPromptResult
-//   | ListPromptsResult
-//   | ListResourceTemplatesResult
-//   | ListResourcesResult
-//   | ReadResourceResult
-//   | CallToolResult
-//   | ListToolsResult;
