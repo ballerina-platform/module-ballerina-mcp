@@ -16,101 +16,170 @@
 
 import ballerina/http;
 
-type StreamableHttpClientTransportOptions record {|
+# Configuration options for the Streamable HTTP client transport.
+#
+# + sessionId - Optional session identifier for continued interactions.
+type StreamableHttpClientTransportConfig record {|
     string? sessionId = ();
 |};
 
+# Provides HTTP-based client transport with support for streaming.
 isolated class StreamableHttpClientTransport {
-    private final string url;
+    private final string serverUrl;
     private final http:Client httpClient;
     private string? sessionId;
 
-    isolated function init(string url, StreamableHttpClientTransportOptions? options = ()) returns error? {
-        self.url = url;
-        self.httpClient = check new (url);
-        self.sessionId = options?.sessionId;
+    # Initializes the HTTP client transport with the provided server URL.
+    #
+    # + serverUrl - The URL of the server endpoint.
+    # + config - Optional configuration, such as session ID.
+    # + return - A StreamableHttpTransportError if initialization fails; otherwise, nil.
+    isolated function init(string serverUrl, StreamableHttpClientTransportConfig? config = ()) returns StreamableHttpTransportError? {
+        self.serverUrl = serverUrl;
+        do {
+            self.httpClient = check new (serverUrl);
+        } on fail error e {
+            return error HttpClientError(string `Unable to initialize HTTP client for '${serverUrl}': ${e.message()}`);
+        }
+        self.sessionId = config?.sessionId;
     }
 
-    isolated function send(JsonRpcMessage message) returns JsonRpcMessage|stream<JsonRpcMessage, error?>|error? {
-        map<string> headers = self.commonHeaders();
+    # Sends a JSON-RPC message to the server and returns the response.
+    #
+    # + message - The JSON-RPC message to send.
+    # + return - A JSON-RPC response message, a stream of messages, or a transport error.
+    isolated function sendMessage(JsonRpcMessage message) returns JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? {
+        map<string> headers = self.prepareRequestHeaders();
         headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
         headers[ACCEPT_HEADER] = string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`;
 
-        http:Response response = check self.httpClient->post("/", message, headers = headers);
+        do {
+            http:Response response = check self.httpClient->post("/", message, headers = headers);
 
-        // Handle sessionId during the initialization request
-        string|error sessionId = response.getHeader(SESSION_ID_HEADER);
-        lock {
-            if sessionId is string {
-                self.sessionId = sessionId;
+            // Handle session ID in the initialization response.
+            string|error sessionIdHeader = response.getHeader(SESSION_ID_HEADER);
+            if sessionIdHeader is string {
+                lock {
+                    self.sessionId = sessionIdHeader;
+                }
             }
-        }
 
-        // If the response is 202 Accepted, there's no body to process
-        if response.statusCode == 202 {
-            return;
-        }
-
-        // Handle the response based on the content type
-        string contentType = response.getContentType();
-        if contentType.includes(CONTENT_TYPE_SSE) {
-            stream<http:SseEvent, error?> sseEventStream = check response.getSseEventStream();
-            MessageEventStreamGenerator msgEventStreamGenerator = new (sseEventStream);
-            stream<JsonRpcMessage, error?> msgEventStream = new (msgEventStreamGenerator);
-            return msgEventStream;
-        } else if contentType.includes(CONTENT_TYPE_JSON) {
-            json jsonPayload = check response.getJsonPayload();
-            JsonRpcMessage serverMsg = check jsonPayload.cloneWithType();
-            return serverMsg;
-        } else {
-            return error UnsupportedContentTypeError("Unsupported content type: " + contentType);
-        }
-    }
-
-    isolated function startSse() returns stream<JsonRpcMessage, error?>|error {
-        map<string> headers = self.commonHeaders();
-        headers[ACCEPT_HEADER] = "text/event-stream";
-
-        stream<http:SseEvent, error?> sseEventStream = check self.httpClient->get("/", headers = headers);
-        MessageEventStreamGenerator msgEventStreamGenerator = new (sseEventStream);
-        stream<JsonRpcMessage, error?> msgEventStream = new (msgEventStreamGenerator);
-        return msgEventStream;
-    }
-
-    isolated  function terminateSession() returns error? {
-        lock {
-            if (self.sessionId is ()) {
+            // If response is 202 Accepted, there is no content to process.
+            if response.statusCode == 202 {
                 return;
             }
 
-            map<string> headers = self.commonHeaders();
-            headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
-
-            http:Response response = check self.httpClient->delete("/", headers = headers);
-
-            if response.statusCode == 405 {
-                return error TransportError("Session termination not supported by the server");
+            // Dispatch response based on content type.
+            string contentType = response.getContentType();
+            if contentType.includes(CONTENT_TYPE_SSE) {
+                return self.processServerSentEvents(response);
+            } else if contentType.includes(CONTENT_TYPE_JSON) {
+                return self.processJsonResponse(response);
+            } else {
+                return error UnsupportedContentTypeError(
+                    string `Server returned unsupported content type '${contentType}'.`
+                );
             }
-
-            self.sessionId = ();
-            return;
+        } on fail error e {
+            return error HttpClientError(string `Failed to send message to server: ${e.message()}`);
         }
     }
 
+    # Establishes a Server-Sent Events (SSE) stream with the server.
+    #
+    # + return - A stream of JsonRpcMessages, or a StreamableHttpTransportError.
+    isolated function establishEventStream() returns stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError {
+        map<string> headers = self.prepareRequestHeaders();
+        headers[ACCEPT_HEADER] = CONTENT_TYPE_SSE;
+
+        do {
+            stream<http:SseEvent, error?> sseEventStream = check self.httpClient->get("/", headers = headers);
+
+            JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
+            return new stream<JsonRpcMessage, StreamError?>(streamTransformer);
+        } on fail error e {
+            return error SseStreamEstablishmentError(
+                string `Failed to establish SSE connection with server: ${e.message()}`
+            );
+        }
+    }
+
+    # Terminates the current session with the server.
+    #
+    # + return - A StreamableHttpTransportError if termination fails; otherwise, nil.
+    isolated function terminateSession() returns StreamableHttpTransportError? {
+        lock {
+            if self.sessionId is () {
+                return;
+            }
+
+            map<string> headers = self.prepareRequestHeaders();
+            headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
+
+            do {
+                http:Response response = check self.httpClient->delete("/", headers = headers);
+
+                if response.statusCode == 405 {
+                    return error SessionOperationError("Server does not support session termination.");
+                }
+
+                self.sessionId = ();
+                return;
+            } on fail error e {
+                return error SessionOperationError(
+                    string `Failed to terminate session: ${e.message()}`
+                );
+            }
+        }
+    }
+
+    # Returns the current session ID, or nil if no session is active.
+    # 
+    # + return - The current session ID as a string, or nil if not set.
     isolated function getSessionId() returns string? {
         lock {
             return self.sessionId;
         }
     }
 
-    private isolated function commonHeaders() returns map<string> {
+    # Prepares common HTTP headers for requests, including the session ID if present.
+    #
+    # + return - Map of common headers to include in each request.
+    private isolated function prepareRequestHeaders() returns map<string> {
         lock {
-            map<string> headers = {};
-            string? sessionId = self.sessionId;
-            if (sessionId is string) {
-                headers[SESSION_ID_HEADER] = sessionId;
-            }
-            return headers.clone();
+            string? currentSessionId = self.sessionId;
+            return currentSessionId is string ? {[SESSION_ID_HEADER]: currentSessionId} : {};
+        }
+    }
+
+    # Processes a Server-Sent Events HTTP response into a stream of JsonRpcMessages.
+    #
+    # + response - The HTTP response containing SSE data.
+    # + return - A stream of JsonRpcMessages, or a StreamableHttpTransportError.
+    private isolated function processServerSentEvents(http:Response response) returns stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError {
+        do {
+            stream<http:SseEvent, error?> sseEventStream = check response.getSseEventStream();
+            JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
+            return new stream<JsonRpcMessage, StreamError?>(streamTransformer);
+        } on fail error e {
+            return error ResponseParsingError(
+                string `Unable to process SSE response: ${e.message()}`
+            );
+        }
+    }
+
+    # Processes a JSON HTTP response into a JsonRpcMessage.
+    #
+    # + response - The HTTP response containing JSON data.
+    # + return - A JsonRpcMessage, or a StreamableHttpTransportError.
+    private isolated function processJsonResponse(http:Response response) returns JsonRpcMessage|StreamableHttpTransportError {
+        do {
+            json payload = check response.getJsonPayload();
+            return check payload.cloneWithType();
+        } on fail error e {
+            return error ResponseParsingError(
+                string `Unable to parse JSON response: ${e.message()}`
+            );
         }
     }
 }

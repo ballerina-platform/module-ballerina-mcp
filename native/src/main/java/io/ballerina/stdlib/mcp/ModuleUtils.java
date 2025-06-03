@@ -19,17 +19,21 @@
 package io.ballerina.stdlib.mcp;
 
 import io.ballerina.runtime.api.Environment;
-import io.ballerina.runtime.api.values.BObject;
-import io.ballerina.runtime.api.values.BStream;
+import io.ballerina.runtime.api.Module;
 
-public class MessageEventStream {
-    public static void initialize(BObject object, BStream eventStream) {
-        object.addNativeData("stream", eventStream);
+public final class ModuleUtils {
+    private static Module module;
+
+    private ModuleUtils() {
     }
 
-    public static Object getNextData(Environment env, BObject object) {
-        BStream eventStream = (BStream) object.getNativeData("stream");
-        BObject iteratorObj = eventStream.getIteratorObj();
-        return env.getRuntime().callMethod(iteratorObj, "next", null);
+    @SuppressWarnings("unused")
+    public static Module getModule() {
+        return module;
+    }
+
+    @SuppressWarnings("unused")
+    public static void setModule(Environment env) {
+        module = env.getCurrentModule();
     }
 }

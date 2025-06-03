@@ -14,60 +14,64 @@
 // specific language governing permissions and limitations
 // under the License.
 
-isolated function handleInitializeResponse(JsonRpcMessage|stream<JsonRpcMessage, error?>|() response) returns InitializeResult|error {
-    if response is stream<JsonRpcMessage, error?> {
-        (record {|JsonRpcMessage value;|}|error)? message = response.next();
-        if message is () {
-            // return error ClientInitializationError("Failed to receive an initialize response");
-            return error("Error");
-        }
-        if message is error {
-            return message;
-        }
-        JsonRpcMessage serverMessage = message.value;
-        if serverMessage is JsonRpcResponse {
-            ServerResult result = serverMessage.result;
-            if result is InitializeResult {
-                return result;
-            }
-        }
-    } else if response is JsonRpcMessage {
-        if response is JsonRpcResponse {
-            ServerResult result = response.result;
-            if result is InitializeResult {
-                return result;
-            }
-        }
-    }
-    return error("Error");
-    // return error ClientInitializationError("No response received for initialization");
-} 
+# Processes a server response and extracts the result.
+#
+# + serverResponse - The response from the server, which may be a single JsonRpcMessage, a stream, or a transport error.
+# + return - Extracted ServerResult, ServerResponseError, or StreamError.
+isolated function processServerResponse(JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? serverResponse)
+        returns ServerResult|ServerResponseError|StreamError {
 
-isolated function handleListToolResult(JsonRpcMessage|stream<JsonRpcMessage, error?>|() response) returns ListToolsResult|error {
-    if response is stream<JsonRpcMessage, error?> {
-        (record {|JsonRpcMessage value;|}|error)? message = response.next();
-        if message is () {
-            // return error ListToolError("Failed to receive a list tools response");
-            return error("Error");
-        }
-        if message is error {
-            return message;
-        }
-        JsonRpcMessage serverMessage = message.value;
-        if serverMessage is JsonRpcResponse {
-            ServerResult result = serverMessage.result;
-            if result is ListToolsResult {
-                return result;
-            }
-        }
-    } else if response is JsonRpcMessage {
-        if response is JsonRpcResponse {
-            ServerResult result = response.result;
-            if result is ListToolsResult {
-                return result;
-            }
-        }
+    // If response is a stream, extract the result from the stream.
+    if serverResponse is stream<JsonRpcMessage, StreamError?> {
+        return extractResultFromMessageStream(serverResponse);
     }
-    return error("Error");
-    // return error ListToolError("No response received for list tools");
+
+    // If response is a direct JsonRpcMessage, convert it to a result.
+    if serverResponse is JsonRpcMessage {
+        return convertMessageToResult(serverResponse);
+    }
+
+    // Null response: indicates malformed or missing server reply.
+    if serverResponse is () {
+        return error MalformedResponseError("Received null response from server.");
+    }
+
+    // If a transport error is returned, wrap as a ServerResponseError.
+    if serverResponse is StreamableHttpTransportError {
+        return error ServerResponseError(
+            string `Transport error connecting to server: ${serverResponse.message()}`
+        );
+    }
+}
+
+# Extracts the first valid result from a stream of JsonRpcMessages.
+#
+# + messageStream - The stream of JsonRpcMessages to process.
+# + return - The first valid ServerResult, a specific ServerResponseError, or StreamError.
+isolated function extractResultFromMessageStream(stream<JsonRpcMessage, StreamError?> messageStream)
+        returns ServerResult|ServerResponseError|StreamError {
+
+    record {|JsonRpcMessage value;|}|StreamError? streamItem = messageStream.next();
+    // Iterate until a valid result or an error is found.
+    while streamItem !is () {
+        if streamItem is StreamError {
+            return streamItem;
+        }
+
+        JsonRpcMessage message = streamItem.value;
+        return convertMessageToResult(message);
+    }
+
+    return error InvalidMessageTypeError("No valid messages found in server message stream.");
+}
+
+# Converts a JsonRpcMessage to a ServerResult.
+#
+# + message - The JsonRpcMessage to convert.
+# + return - The extracted ServerResult, or an InvalidMessageTypeError.
+isolated function convertMessageToResult(JsonRpcMessage message) returns ServerResult|ServerResponseError {
+    if message is JsonRpcResponse {
+        return message.result;
+    }
+    return error InvalidMessageTypeError("Received message from server is not a valid JsonRpcResponse.");
 }

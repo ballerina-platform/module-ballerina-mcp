@@ -19,9 +19,9 @@ public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse|Js
 
 public const LATEST_PROTOCOL_VERSION = "2025-03-26";
 public const SUPPORTED_PROTOCOL_VERSIONS = [
-  LATEST_PROTOCOL_VERSION,
-  "2024-11-05",
-  "2024-10-07"
+    LATEST_PROTOCOL_VERSION,
+    "2024-11-05",
+    "2024-10-07"
 ];
 
 public const JSONRPC_VERSION = "2.0";
@@ -251,7 +251,7 @@ public type Implementation record {|
 # A ping, issued by either the server or the client, to check that 
 # the other party is still alive. The receiver must promptly respond, 
 # or else may be disconnected.
-# 
+#
 # + method - The method name
 public type PingRequest record {|
     *Request;
@@ -259,7 +259,7 @@ public type PingRequest record {|
 |};
 
 # An out-of-band notification used to inform the receiver of a progress update for a long-running request.
-# 
+#
 # + method - The method name for the notification
 # + params - The parameters for the progress notification
 public type ProgressNotification record {|
@@ -292,7 +292,7 @@ public type PaginatedRequest record {|
 |};
 
 # Result that supports pagination
-# 
+#
 # + nextCursor - An opaque token representing the pagination position after the last returned result.
 # If present, there may be more results available.
 public type PaginatedResult record {|
@@ -302,7 +302,7 @@ public type PaginatedResult record {|
 
 # An optional notification from the server to the client, informing it that the list of resources it can read from has changed. 
 # This may be issued by servers without any previous subscription from the client.
-# 
+#
 # + method - The JSON-RPC method name for resource list changed notifications
 public type ResourceListChangedNotification record {|
     *Notification;
@@ -311,7 +311,7 @@ public type ResourceListChangedNotification record {|
 
 # A notification from the server to the client, informing it that a resource has changed and may need to be read again.
 # This should only be sent if the client previously sent a resources/subscribe request.
-# 
+#
 # + method - The JSON-RPC method name for resource updated notifications
 public type ResourceUpdatedNotification record {|
     *Notification;
@@ -326,7 +326,7 @@ public type ResourceUpdatedNotification record {|
 |};
 
 # The contents of a specific resource or sub-resource.
-# 
+#
 # + uri - The URI of this resource.
 # + mimeType - The MIME type of this resource, if known.
 public type ResourceContents record {|
@@ -335,7 +335,7 @@ public type ResourceContents record {|
 |};
 
 # Text resource contents
-# 
+#
 # + text - The text of the item. This must only be set if the item can actually be represented as text (not binary data).
 public type TextResourceContents record {|
     *ResourceContents;
@@ -343,7 +343,7 @@ public type TextResourceContents record {|
 |};
 
 # Binary resource contents
-# 
+#
 # + blob - A base64-encoded string representing the binary data of the item.
 public type BlobResourceContents record {|
     *ResourceContents;
@@ -357,7 +357,7 @@ public type Role "user"|"assistant";
 #
 # It is up to the client how best to render embedded resources for the benefit
 # of the LLM and/or the user.
-# 
+#
 # + type - The type of content
 # + resource - The resource content
 # + annotations - Optional annotations for the client
@@ -370,7 +370,7 @@ public type EmbeddedResource record {|
 # An optional notification from the server to the client, informing it that
 # the list of prompts it offers has changed. This may be issued by servers
 # without any previous subscription from the client.
-# 
+#
 # + method - The JSON-RPC method name for prompt list changed notifications
 public type PromptListChangedNotification record {|
     *Notification;
@@ -386,7 +386,7 @@ public type ListToolsRequest record {|
 |};
 
 # The server's response to a tools/list request from the client.
-# 
+#
 # + tools - A list of tools available on the server.
 public type ListToolsResult record {|
     *PaginatedResult;
@@ -394,16 +394,16 @@ public type ListToolsResult record {|
 |};
 
 # The server's response to a tool call.
-# 
+#
 # Any errors that originate from the tool SHOULD be reported inside the result
 # object, with `isError` set to true, _not_ as an MCP protocol-level error
 # response. Otherwise, the LLM would not be able to see that an error occurred
 # and self-correct.
-# 
+#
 # However, any errors in _finding_ the tool, an error indicating that the
 # server does not support tool calls, or any other exceptional conditions,
 # should be reported as an MCP error response.
-# 
+#
 # + content - The content of the tool call result
 # + isError - Whether the tool call ended in an error.
 # If not set, this is assumed to be false (the call was successful).
@@ -432,7 +432,7 @@ public type CallToolParams record {|
 
 # An optional notification from the server to the client, informing it that the list of tools 
 # it offers has changed. This may be issued by servers without any previous subscription from the client.
-# 
+#
 # + method - The JSON-RPC method name for tool list changed notifications
 public type ToolListChangedNotification record {|
     *Notification;
@@ -445,7 +445,7 @@ public type ToolListChangedNotification record {|
 # tool behavior (including descriptive properties like `title`).
 # Clients should never make tool use decisions based on ToolAnnotations
 # received from untrusted servers.
-# 
+#
 # + title - A human-readable title for the tool.
 # + readOnlyHint - If true, the tool does not modify its environment.
 # Default: false
@@ -471,7 +471,7 @@ public type ToolAnnotations record {|
 |};
 
 # Definition for a tool the client can call.
-# 
+#
 # + name - The name of the tool
 # + description - A human-readable description of the tool
 # This can be used by clients to improve the LLM's understanding of available tools.
@@ -490,7 +490,7 @@ public type Tool record {|
 
 # Notification of a log message passed from server to client. If no logging/setLevel request has been 
 # sent from the client, the server MAY decide which messages to send automatically.
-# 
+#
 # + method - The method name for the notification
 # + params - The parameters for the logging message notification
 public type LoggingMessageNotification record {|
@@ -526,7 +526,7 @@ public type Annotations record {|
 |};
 
 # Text provided to or from an LLM.
-# 
+#
 # + type - The type of content
 # + text - The text content of the message
 # + annotations - Optional annotations for the client
@@ -537,7 +537,7 @@ public type TextContent record {|
 |};
 
 # An image provided to or from an LLM.
-# 
+#
 # + type - The type of content
 # + data - The base64-encoded image data
 # + mimeType - The MIME type of the image. Different providers may support different image types.
@@ -550,7 +550,7 @@ public type ImageContent record {|
 |};
 
 # Audio provided to or from an LLM.
-# 
+#
 # + type - The type of content
 # + data - The base64-encoded audio data
 # + mimeType - The MIME type of the audio. Different providers may support different audio types.
@@ -564,10 +564,10 @@ public type AudioContent record {|
 
 // Client messages
 # Represents a request sent from the client to the server.
-public type ClientRequest PingRequest | InitializeRequest | CallToolRequest | ListToolsRequest;
+public type ClientRequest PingRequest|InitializeRequest|CallToolRequest|ListToolsRequest;
 
 # Represents a notification sent from the client to the server.
-public type ClientNotification CancelledNotification | ProgressNotification | InitializedNotification;
+public type ClientNotification CancelledNotification|ProgressNotification|InitializedNotification;
 
 # Represents a result sent from the client to the server.
 public type ClientResult EmptyResult;
@@ -578,12 +578,12 @@ public type ServerRequest PingRequest;
 
 # Represents a notification sent from the server to the client.
 public type ServerNotification CancelledNotification
-    | ProgressNotification
-    | LoggingMessageNotification
-    | ResourceUpdatedNotification
-    | ResourceListChangedNotification
-    | ToolListChangedNotification
-    | PromptListChangedNotification;
+    |ProgressNotification
+    |LoggingMessageNotification
+    |ResourceUpdatedNotification
+    |ResourceListChangedNotification
+    |ToolListChangedNotification
+    |PromptListChangedNotification;
 
 # Represents a result sent from the server to the client.
-public type ServerResult InitializeResult | CallToolResult | ListToolsResult | EmptyResult;
+public type ServerResult InitializeResult|CallToolResult|ListToolsResult|EmptyResult;
