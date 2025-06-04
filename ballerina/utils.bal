@@ -28,7 +28,7 @@ isolated function processServerResponse(JsonRpcMessage|stream<JsonRpcMessage, St
 
     // If response is a direct JsonRpcMessage, convert it to a result.
     if serverResponse is JsonRpcMessage {
-        return convertMessageToResult(serverResponse);
+        return extractResultFromMessage(serverResponse);
     }
 
     // Null response: indicates malformed or missing server reply.
@@ -59,17 +59,20 @@ isolated function extractResultFromMessageStream(stream<JsonRpcMessage, StreamEr
         }
 
         JsonRpcMessage message = streamItem.value;
-        return convertMessageToResult(message);
+        if message is JsonRpcResponse {
+            return message.result;
+        }
+        streamItem = messageStream.next();
     }
 
     return error InvalidMessageTypeError("No valid messages found in server message stream.");
 }
 
-# Converts a JsonRpcMessage to a ServerResult.
+# Extracts the result from a JsonRpcMessage and converts it to a ServerResult.
 #
 # + message - The JsonRpcMessage to convert.
 # + return - The extracted ServerResult, or an InvalidMessageTypeError.
-isolated function convertMessageToResult(JsonRpcMessage message) returns ServerResult|ServerResponseError {
+isolated function extractResultFromMessage(JsonRpcMessage message) returns ServerResult|ServerResponseError {
     if message is JsonRpcResponse {
         return message.result;
     }

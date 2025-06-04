@@ -96,17 +96,16 @@ isolated class JsonRpcMessageStreamTransformer {
             return error MissingSseDataError("SSE event is missing the required 'data' field.");
         }
 
-        json jsonData;
-        do {
-            jsonData = check eventData.fromJsonString();
-        } on fail error e {
-            return error JsonParsingError(string `Failed to parse SSE event data as JSON: ${e.message()}`);
+        json|error jsonData = eventData.fromJsonString();
+        if jsonData is error {
+            return error JsonParsingError(string `Failed to parse SSE event data as JSON: ${jsonData.message()}`);
         }
 
-        do {
-            return check jsonData.cloneWithType();
-        } on fail error e {
-            return error TypeConversionError(string `Failed to convert JSON data to JsonRpcMessage: ${e.message()}`);
+        JsonRpcMessage|error message = jsonData.cloneWithType(JsonRpcMessage);
+        if message is error {
+            return error TypeConversionError(string `Failed to convert JSON data to JsonRpcMessage: ${message.message()}`);
         }
+
+        return message;
     }
 }

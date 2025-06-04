@@ -54,7 +54,7 @@ isolated class StreamableHttpClientTransport {
         headers[ACCEPT_HEADER] = string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`;
 
         do {
-            http:Response response = check self.httpClient->post("/", message, headers = headers);
+            http:Response response = check self.httpClient->/.post(message, headers = headers);
 
             // Handle session ID in the initialization response.
             string|error sessionIdHeader = response.getHeader(SESSION_ID_HEADER);

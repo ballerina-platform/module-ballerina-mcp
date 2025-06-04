@@ -23,7 +23,7 @@ public type ClientConfiguration record {|
 |};
 
 # Represents an MCP client built on top of the Streamable HTTP transport.
-public distinct client class Client {
+public distinct isolated client class Client {
     # MCP server URL.
     private final string serverUrl;
     # Client implementation details (e.g., name and version).
@@ -47,8 +47,8 @@ public distinct client class Client {
     # + config - Optional configuration containing client capabilities.
     public isolated function init(string serverUrl, Implementation clientInfo, ClientConfiguration? config = ()) {
         self.serverUrl = serverUrl;
-        self.clientInfo = clientInfo;
-        self.clientCapabilities = config?.capabilities ?: {};
+        self.clientInfo = clientInfo.cloneReadOnly();
+        self.clientCapabilities = config?.capabilities.cloneReadOnly() ?: {};
     }
 
     # Establishes a connection to the MCP server and performs protocol initialization.
@@ -97,8 +97,6 @@ public distinct client class Client {
                     method: "notifications/initialized"
                 };
                 check self.sendNotificationMessage(initNotification);
-
-                return;
             } else {
                 return error ClientInitializationError(
                     string `Initialization failed: unexpected response type '${(typeof response).toString()}' received from server.`
@@ -111,13 +109,15 @@ public distinct client class Client {
     #
     # + return - Stream of JsonRpcMessages or a ClientError.
     isolated remote function subscribeToServerMessages() returns stream<JsonRpcMessage, StreamError?>|ClientError {
-        StreamableHttpClientTransport? currentTransport = self.transport;
-        if currentTransport is () {
-            return error UninitializedTransportError(
-                "Subscription failed: client transport is not initialized. Call initialize() first."
-            );
+        lock {
+            StreamableHttpClientTransport? currentTransport = self.transport;
+            if currentTransport is () {
+                return error UninitializedTransportError(
+                    "Subscription failed: client transport is not initialized. Call initialize() first."
+                );
+            }
+            return currentTransport.establishEventStream();
         }
-        return check currentTransport.establishEventStream();
     }
 
     # Retrieves the list of available tools from the server.
@@ -162,23 +162,25 @@ public distinct client class Client {
     #
     # + return - A ClientError if closure fails, or nil on success.
     isolated remote function close() returns ClientError? {
-        StreamableHttpClientTransport? currentTransport = self.transport;
-        if currentTransport is () {
-            return error UninitializedTransportError(
-                "Closure failed: client transport is not initialized. Call initialize() first."
-            );
-        }
-
-        do {
-            check currentTransport.terminateSession();
-            lock {
-                self.transport = ();
-                self.serverCapabilities = ();
-                self.serverInfo = ();
+        lock {
+            StreamableHttpClientTransport? currentTransport = self.transport;
+            if currentTransport is () {
+                return error UninitializedTransportError(
+                    "Closure failed: client transport is not initialized. Call initialize() first."
+                );
             }
-            return;
-        } on fail error e {
-            return error ClientError(string `Failed to disconnect from server: ${e.message()}`, e);
+
+            do {
+                check currentTransport.terminateSession();
+                lock {
+                    self.transport = ();
+                    self.serverCapabilities = ();
+                    self.serverInfo = ();
+                }
+                return;
+            } on fail error e {
+                return error ClientError(string `Failed to disconnect from server: ${e.message()}`, e);
+            }
         }
     }
 
@@ -187,25 +189,27 @@ public distinct client class Client {
     # + request - The request object to send.
     # + return - ServerResult, a stream of results, or a ClientError.
     private isolated function sendRequestMessage(Request request) returns ServerResult|ClientError {
-        StreamableHttpClientTransport? currentTransport = self.transport;
-        if currentTransport is () {
-            return error UninitializedTransportError(
-                "Cannot send request: client transport is not initialized. Call initialize() first."
-            );
-        }
-
         lock {
-            self.requestId += 1;
+            StreamableHttpClientTransport? currentTransport = self.transport;
+            if currentTransport is () {
+                return error UninitializedTransportError(
+                    "Cannot send request: client transport is not initialized. Call initialize() first."
+                );
+            }
 
-            JsonRpcRequest jsonRpcRequest = {
-                ...request,
-                jsonrpc: JSONRPC_VERSION,
-                id: self.requestId
-            };
+            lock {
+                self.requestId += 1;
 
-            JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? response =
-                currentTransport.sendMessage(jsonRpcRequest);
-            return processServerResponse(response);
+                JsonRpcRequest jsonRpcRequest = {
+                    ...request.cloneReadOnly(),
+                    jsonrpc: JSONRPC_VERSION,
+                    id: self.requestId
+                };
+
+                JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? response =
+                    currentTransport.sendMessage(jsonRpcRequest);
+                return processServerResponse(response).cloneReadOnly();
+            }
         }
     }
 
@@ -214,18 +218,20 @@ public distinct client class Client {
     # + notification - The notification object to send.
     # + return - A ClientError if sending fails, or nil on success.
     private isolated function sendNotificationMessage(Notification notification) returns ClientError? {
-        StreamableHttpClientTransport? currentTransport = self.transport;
-        if currentTransport is () {
-            return error UninitializedTransportError(
+        lock {
+            StreamableHttpClientTransport? currentTransport = self.transport;
+            if currentTransport is () {
+                return error UninitializedTransportError(
                 "Cannot send notification: client transport is not initialized. Call initialize() first."
-            );
+                );
+            }
+
+            JsonRpcNotification jsonRpcNotification = {
+                ...notification.cloneReadOnly(),
+                jsonrpc: JSONRPC_VERSION
+            };
+
+            _ = check currentTransport.sendMessage(jsonRpcNotification);
         }
-
-        JsonRpcNotification jsonRpcNotification = {
-            ...notification,
-            jsonrpc: JSONRPC_VERSION
-        };
-
-        _ = check currentTransport.sendMessage(jsonRpcNotification);
     }
 }
