@@ -19,8 +19,12 @@
 package io.ballerina.stdlib.mcp;
 
 import io.ballerina.runtime.api.Environment;
+import io.ballerina.runtime.api.creators.ErrorCreator;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BStream;
+import io.ballerina.runtime.api.values.BString;
+
+import static io.ballerina.runtime.api.utils.StringUtils.fromString;
 
 /**
  * Utility class for handling Server-Sent Events (SSE) streams in Ballerina via Java interop.
@@ -58,13 +62,14 @@ public final class SseEventStreamHelper {
      *
      * @param env       The Ballerina runtime environment.
      * @param object    The Ballerina object holding the SSE stream as native data.
-     * @return          The next SSE event record, or null if the stream is exhausted.
-     * @throws IllegalStateException if the SSE stream has not been attached to the object.
+     * @return          The next SSE event record, null if the stream is exhausted,
+     *                  or a Ballerina error object if unavailable.
      */
     public static Object getNextSseEvent(Environment env, BObject object) {
         BStream sseStream = (BStream) object.getNativeData(SSE_STREAM_NATIVE_KEY);
         if (sseStream == null) {
-            throw new IllegalStateException("SSE stream not attached to the provided Ballerina object.");
+            BString errorMessage = fromString("SSE stream not attached to the provided Ballerina object.");
+            return ErrorCreator.createError(errorMessage);
         }
         BObject iteratorObject = sseStream.getIteratorObj();
         // Use the Ballerina runtime to call the "next" method on the iterator and fetch the next event.
@@ -78,13 +83,13 @@ public final class SseEventStreamHelper {
      *
      * @param env       The Ballerina runtime environment.
      * @param object    The Ballerina object holding the SSE stream as native data.
-     * @return          The result of the close operation (could be null or error).
-     * @throws IllegalStateException if the SSE stream has not been attached to the object.
+     * @return          The result of the close operation (could be null or a Ballerina error object).
      */
     public static Object closeSseEventStream(Environment env, BObject object) {
         BStream sseStream = (BStream) object.getNativeData(SSE_STREAM_NATIVE_KEY);
         if (sseStream == null) {
-            throw new IllegalStateException("SSE stream not attached to the provided Ballerina object.");
+            BString errorMessage = fromString("SSE stream not attached to the provided Ballerina object.");
+            return ErrorCreator.createError(errorMessage);
         }
         BObject iteratorObject = sseStream.getIteratorObj();
         // Use the Ballerina runtime to call the "close" method on the iterator and release resources.
