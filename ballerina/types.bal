@@ -33,11 +33,10 @@ public type ProgressToken string|int;
 public type Cursor string;
 
 # Represents a generic request in the protocol
-#
-# + method - The method name for the request
-# + params - Optional parameters for the request
 public type Request record {|
+    # The method name for the request
     string method;
+    # Optional parameters for the request
     record {
         record {|
             # If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress).
@@ -48,21 +47,19 @@ public type Request record {|
 |};
 
 # Represents a notification.
-#
-# + method - The method name of the notification
-# + params - Additional parameters for the notification
 public type Notification record {|
+    # The method name of the notification
     string method;
+    # Additional parameters for the notification
     record {
         record {} _meta?;
     } params?;
 |};
 
 # Base result type with common fields.
-#
-# + _meta - This result property is reserved by the protocol to allow clients and servers
-# to attach additional metadata to their responses.
 public type Result record {
+    # This result property is reserved by the protocol to allow clients and servers
+    # to attach additional metadata to their responses.
     record {} _meta?;
 };
 
@@ -70,31 +67,28 @@ public type Result record {
 public type RequestId string|int;
 
 # A request that expects a response.
-#
-# + jsonrpc - The JSON-RPC protocol version
-# + id - Identifier established by the client that should be returned in the response
 public type JsonRpcRequest record {
     *Request;
+    # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
+    # Identifier established by the client that should be returned in the response
     RequestId id;
 };
 
 # A notification which does not expect a response.
-#
-# + jsonrpc - The JSON-RPC protocol version
 public type JsonRpcNotification record {
     *Notification;
+    # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
 };
 
 # A successful (non-error) response to a request.
-#
-# + jsonrpc - The JSON-RPC protocol version
-# + id - Identifier of the request
-# + result - The result of the request
 public type JsonRpcResponse record {|
+    # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
+    # Identifier of the request
     RequestId id;
+    # The result of the request
     ServerResult result;
 |};
 
@@ -106,13 +100,12 @@ public const INVALID_PARAMS = -32602;
 public const INTERNAL_ERROR = -32603;
 
 # A response to a request that indicates an error occurred.
-#
-# + jsonrpc - The JSON-RPC protocol version
-# + id - Identifier of the request
-# + error - The error information
 public type JsonRpcError record {
+    # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
+    # Identifier of the request
     RequestId id;
+    # The error information
     record {
         # The error type that occurred
         int code;
@@ -127,22 +120,13 @@ public type JsonRpcError record {
 public type EmptyResult Result;
 
 # This notification can be sent by either side to indicate that it is cancelling a previously-issued request.
-#
-# The request SHOULD still be in-flight, but due to communication latency, it is always possible that this notification 
-# MAY arrive after the request has already finished.
-#
-# This notification indicates that the result will be unused, so any associated processing SHOULD cease.
-#
-# A client MUST NOT attempt to cancel its `initialize` request.
-#
-# + method - The method name for this notification
-# + params - The parameters for the cancellation notification
 public type CancelledNotification record {|
     *Notification;
+    # The method name for this notification
     "notifications/cancelled" method;
+    # The parameters for the cancellation notification
     record {|
         # The ID of the request to cancel.
-        #
         # This MUST correspond to the ID of a request previously issued in the same direction.
         RequestId requestId;
         # An optional string describing the reason for the cancellation. This MAY be logged or presented to the user.
@@ -151,12 +135,11 @@ public type CancelledNotification record {|
 |};
 
 # This request is sent from the client to the server when it first connects, asking it to begin initialization.
-#
-# + method - Method name for the request
-# + params - Parameters for the initialize request
 type InitializeRequest record {|
     *Request;
+    # Method name for the request
     "initialize" method;
+    # Parameters for the initialize request
     record {|
         # The latest version of the Model Context Protocol that the client supports. 
         # The client MAY decide to support older versions as well.
@@ -169,70 +152,66 @@ type InitializeRequest record {|
 |};
 
 # After receiving an initialize request from the client, the server sends this response.
-#
-# + protocolVersion - The version of the Model Context Protocol that the server wants to use.
-# This may not match the version that the client requested.
-# If the client cannot support this version, it MUST disconnect.
-# + capabilities - The capabilities of the server.
-# + serverInfo - Information about the server implementation
-# + instructions - Instructions describing how to use the server and its features.
-# This can be used by clients to improve the LLM's understanding of available tools, resources, etc.
-# It can be thought of like a "hint" to the model.
-# For example, this information MAY be added to the system prompt.
 public type InitializeResult record {|
     *Result;
+    # The version of the Model Context Protocol that the server wants to use.
+    # This may not match the version that the client requested.
+    # If the client cannot support this version, it MUST disconnect.
     string protocolVersion;
+    # The capabilities of the server.
     ServerCapabilities capabilities;
+    # Information about the server implementation
     Implementation serverInfo;
+    # Instructions describing how to use the server and its features.
+    # This can be used by clients to improve the LLM's understanding of available tools, resources, etc.
+    # It can be thought of like a "hint" to the model.
+    # For example, this information MAY be added to the system prompt.
     string instructions?;
 |};
 
 # This notification is sent from the client to the server after initialization has finished.
-#
-# + method - The method identifier for the notification, must be "notifications/initialized"
 public type InitializedNotification record {|
     *Notification;
+    # The method identifier for the notification, must be "notifications/initialized"
     "notifications/initialized" method;
 |};
 
 # Capabilities a client may support. Known capabilities are defined here, in this schema,
 # but this is not a closed set: any client can define its own, additional capabilities.
-#
-# + experimental - Experimental, non-standard capabilities that the client supports.
-# + roots - Present if the client supports listing roots.
-# + sampling - Present if the client supports sampling from an LLM. 
 public type ClientCapabilities record {
+    # Experimental, non-standard capabilities that the client supports.
     record {|record {}...;|} experimental?;
+    # Present if the client supports listing roots.
     record {|
         # Whether the client supports notifications for changes to the roots list.
         boolean listChanged?;
     |} roots?;
+    # Present if the client supports sampling from an LLM. 
     record {} sampling?;
 };
 
 # Capabilities that a server may support. Known capabilities are defined here, in this schema,
 # but this is not a closed set: any server can define its own, additional capabilities.
-#
-# + experimental - Experimental, non-standard capabilities that the server supports.
-# + logging - Present if the server supports sending log messages to the client.
-# + completions - Present if the server supports argument autocompletion suggestions.
-# + prompts - Present if the server offers any prompt templates.
-# + resources - Present if the server offers any resources to read.
-# + tools - Present if the server offers any tools to call.
 public type ServerCapabilities record {
+    # Experimental, non-standard capabilities that the server supports.
     record {|record {}...;|} experimental?;
+    # Present if the server supports sending log messages to the client.
     record {} logging?;
+    # Present if the server supports argument autocompletion suggestions.
     record {} completions?;
+    # Present if the server offers any prompt templates.
     record {|
         # Whether this server supports notifications for changes to the prompt list.
         boolean listChanged?;
     |} prompts?;
+    # Present if the server offers any resources to read.
     record {|
         # Whether this server supports subscribing to resource updates.
         boolean subscribe?;
         # Whether this server supports notifications for changes to the resource list.
         boolean listChanged?;
     |} resources?;
+    # Present if the server offers any tools to call.
     record {|
         # Whether this server supports notifications for changes to the tool list.
         boolean listChanged?;
@@ -240,31 +219,28 @@ public type ServerCapabilities record {
 };
 
 # Describes the name and version of an MCP implementation.
-#
-# + name - The name of the implementation
-# + version - The version of the implementation
 public type Implementation record {|
+    # The name of the implementation
     string name;
+    # The version of the implementation
     string version;
 |};
 
 # A ping, issued by either the server or the client, to check that 
 # the other party is still alive. The receiver must promptly respond, 
 # or else may be disconnected.
-#
-# + method - The method name
 public type PingRequest record {|
     *Request;
+    # The method name
     "ping" method;
 |};
 
 # An out-of-band notification used to inform the receiver of a progress update for a long-running request.
-#
-# + method - The method name for the notification
-# + params - The parameters for the progress notification
 public type ProgressNotification record {|
     *Notification;
+    # The method name for the notification
     "notifications/progress" method;
+    # The parameters for the progress notification
     record {
         # The progress token which was given in the initial request, 
         # used to associate this notification with the request that is proceeding.
@@ -281,9 +257,8 @@ public type ProgressNotification record {|
 |};
 
 # Represents a paginated request with optional cursor-based pagination.
-#
-# + params - Optional pagination parameters
 public type PaginatedRequest record {|
+    # Optional pagination parameters
     record {|
         # An opaque token representing the current pagination position.
         # If provided, the server should return results starting after this cursor.
@@ -292,29 +267,24 @@ public type PaginatedRequest record {|
 |};
 
 # Result that supports pagination
-#
-# + nextCursor - An opaque token representing the pagination position after the last returned result.
-# If present, there may be more results available.
 public type PaginatedResult record {|
     *Result;
+    # An opaque token representing the pagination position after the last returned result.
+    # If present, there may be more results available.
     Cursor nextCursor?;
 |};
 
 # An optional notification from the server to the client, informing it that the list of resources it can read from has changed. 
-# This may be issued by servers without any previous subscription from the client.
-#
-# + method - The JSON-RPC method name for resource list changed notifications
 public type ResourceListChangedNotification record {|
     *Notification;
+    # The JSON-RPC method name for resource list changed notifications
     "notifications/resources/list_changed" method;
 |};
 
 # A notification from the server to the client, informing it that a resource has changed and may need to be read again.
-# This should only be sent if the client previously sent a resources/subscribe request.
-#
-# + method - The JSON-RPC method name for resource updated notifications
 public type ResourceUpdatedNotification record {|
     *Notification;
+    # The JSON-RPC method name for resource updated notifications
     "notifications/resources/updated" method;
     # The parameters for the resource updated notification
     record {
@@ -326,27 +296,24 @@ public type ResourceUpdatedNotification record {|
 |};
 
 # The contents of a specific resource or sub-resource.
-#
-# + uri - The URI of this resource.
-# + mimeType - The MIME type of this resource, if known.
 public type ResourceContents record {|
+    # The URI of this resource.
     string uri;
+    # The MIME type of this resource, if known.
     string mimeType?;
 |};
 
 # Text resource contents
-#
-# + text - The text of the item. This must only be set if the item can actually be represented as text (not binary data).
 public type TextResourceContents record {|
     *ResourceContents;
+    # The text of the item. This must only be set if the item can actually be represented as text (not binary data).
     string text;
 |};
 
 # Binary resource contents
-#
-# + blob - A base64-encoded string representing the binary data of the item.
 public type BlobResourceContents record {|
     *ResourceContents;
+    # A base64-encoded string representing the binary data of the item.
     string blob;
 |};
 
@@ -354,148 +321,120 @@ public type BlobResourceContents record {|
 public type Role "user"|"assistant";
 
 # The contents of a resource, embedded into a prompt or tool call result.
-#
-# It is up to the client how best to render embedded resources for the benefit
-# of the LLM and/or the user.
-#
-# + type - The type of content
-# + resource - The resource content
-# + annotations - Optional annotations for the client
 public type EmbeddedResource record {|
+    # The type of content
     "resource" 'type;
+    # The resource content
     TextResourceContents|BlobResourceContents 'resource;
+    # Optional annotations for the client
     Annotations annotations?;
 |};
 
 # An optional notification from the server to the client, informing it that
-# the list of prompts it offers has changed. This may be issued by servers
-# without any previous subscription from the client.
-#
-# + method - The JSON-RPC method name for prompt list changed notifications
+# the list of prompts it offers has changed.
 public type PromptListChangedNotification record {|
     *Notification;
+    # The JSON-RPC method name for prompt list changed notifications
     "notifications/prompts/list_changed" method;
 |};
 
 # Sent from the client to request a list of tools the server has.
-#
-# + method - The method identifier for this request
 public type ListToolsRequest record {|
     *PaginatedRequest;
+    # The method identifier for this request
     "tools/list" method;
 |};
 
 # The server's response to a tools/list request from the client.
-#
-# + tools - A list of tools available on the server.
 public type ListToolsResult record {|
     *PaginatedResult;
+    # A list of tools available on the server.
     Tool[] tools;
 |};
 
 # The server's response to a tool call.
-#
-# Any errors that originate from the tool SHOULD be reported inside the result
-# object, with `isError` set to true, _not_ as an MCP protocol-level error
-# response. Otherwise, the LLM would not be able to see that an error occurred
-# and self-correct.
-#
-# However, any errors in _finding_ the tool, an error indicating that the
-# server does not support tool calls, or any other exceptional conditions,
-# should be reported as an MCP error response.
-#
-# + content - The content of the tool call result
-# + isError - Whether the tool call ended in an error.
-# If not set, this is assumed to be false (the call was successful).
 public type CallToolResult record {|
+    # The content of the tool call result
     (TextContent|ImageContent|AudioContent|EmbeddedResource)[] content;
+    # Whether the tool call ended in an error.
+    # If not set, this is assumed to be false (the call was successful).
     boolean isError?;
 |};
 
 # Used by the client to invoke a tool provided by the server.
-#
-# + method - The JSON-RPC method name
-# + params - The parameters for the tool call
 public type CallToolRequest record {|
+    # The JSON-RPC method name
     "tools/call" method;
+    # The parameters for the tool call
     CallToolParams params;
 |};
 
 # Parameters for the tools/call request
-#
-# + name - The name of the tool to invoke
-# + arguments - Optional arguments to pass to the tool
 public type CallToolParams record {|
+    # The name of the tool to invoke
     string name;
+    # Optional arguments to pass to the tool
     record {} arguments?;
 |};
 
 # An optional notification from the server to the client, informing it that the list of tools 
-# it offers has changed. This may be issued by servers without any previous subscription from the client.
-#
-# + method - The JSON-RPC method name for tool list changed notifications
+# it offers has changed.
 public type ToolListChangedNotification record {|
     *Notification;
+    # The JSON-RPC method name for tool list changed notifications
     "notifications/tools/list_changed" method;
 |};
 
 # Additional properties describing a Tool to clients.
 # NOTE: all properties in ToolAnnotations are **hints**.
-# They are not guaranteed to provide a faithful description of
-# tool behavior (including descriptive properties like `title`).
-# Clients should never make tool use decisions based on ToolAnnotations
-# received from untrusted servers.
-#
-# + title - A human-readable title for the tool.
-# + readOnlyHint - If true, the tool does not modify its environment.
-# Default: false
-# + destructiveHint - If true, the tool may perform destructive updates to its environment.
-# If false, the tool performs only additive updates.
-# (This property is meaningful only when `readOnlyHint == false`)
-# Default: true
-# + idempotentHint - If true, calling the tool repeatedly with the same arguments
-# will have no additional effect on the its environment.
-# (This property is meaningful only when `readOnlyHint == false`)
-# Default: false
-# + openWorldHint - If true, this tool may interact with an "open world" of external
-# entities. If false, the tool's domain of interaction is closed.
-# For example, the world of a web search tool is open, whereas that
-# of a memory tool is not.
-# Default: true
 public type ToolAnnotations record {|
+    # A human-readable title for the tool.
     string title?;
+    # If true, the tool does not modify its environment.
+    # Default: false
     boolean readOnlyHint?;
+    # If true, the tool may perform destructive updates to its environment.
+    # If false, the tool performs only additive updates.
+    # (This property is meaningful only when `readOnlyHint == false`)
+    # Default: true
     boolean destructiveHint?;
+    # If true, calling the tool repeatedly with the same arguments
+    # will have no additional effect on the its environment.
+    # (This property is meaningful only when `readOnlyHint == false`)
+    # Default: false
     boolean idempotentHint?;
+    # If true, this tool may interact with an "open world" of external
+    # entities. If false, the tool's domain of interaction is closed.
+    # For example, the world of a web search tool is open, whereas that
+    # of a memory tool is not.
+    # Default: true
     boolean openWorldHint?;
 |};
 
 # Definition for a tool the client can call.
-#
-# + name - The name of the tool
-# + description - A human-readable description of the tool
-# This can be used by clients to improve the LLM's understanding of available tools.
-# + inputSchema - A JSON Schema object defining the expected parameters for the tool.
-# + annotations - Optional additional tool information.
 public type Tool record {|
+    # The name of the tool
     string name;
+    # A human-readable description of the tool
+    # This can be used by clients to improve the LLM's understanding of available tools.
     string description?;
+    # A JSON Schema object defining the expected parameters for the tool.
     record {
         "object" 'type;
         record {|record {}...;|} properties?;
         string[] required?;
     } inputSchema;
+    # Optional additional tool information.
     ToolAnnotations annotations?;
 |};
 
 # Notification of a log message passed from server to client. If no logging/setLevel request has been 
 # sent from the client, the server MAY decide which messages to send automatically.
-#
-# + method - The method name for the notification
-# + params - The parameters for the logging message notification
 public type LoggingMessageNotification record {|
     *Notification;
+    # The method name for the notification
     "notifications/message" method;
+    # The parameters for the logging message notification
     record {
         # The severity of this log message.
         LoggingLevel level;
@@ -508,61 +447,53 @@ public type LoggingMessageNotification record {|
 |};
 
 # The severity of a log message.
-#
-# These map to syslog message severities, as specified in RFC-5424:
-# https://datatracker.ietf.org/doc/html/rfc5424#section-6.2.1
 public type LoggingLevel "debug"|"info"|"notice"|"warning"|"error"|"critical"|"alert"|"emergency";
 
 # Optional annotations for the client. The client can use annotations to inform how objects are used or displayed
-#
-# + audience - Describes who the intended customer of this object or data is.
-# This can include multiple entries to indicate content useful for multiple audiences (e.g., `["user", "assistant"]`).
-# + priority - Describes how important this data is for operating the server.
-# A value of 1 means "most important," and indicates that the data is effectively required,
-# while 0 means "least important," and indicates that the data is entirely optional.
 public type Annotations record {|
+    # Describes who the intended customer of this object or data is.
+    # This can include multiple entries to indicate content useful for multiple audiences (e.g., `["user", "assistant"]`).
     Role[] audience?;
+    # Describes how important this data is for operating the server.
+    # A value of 1 means "most important," and indicates that the data is effectively required,
+    # while 0 means "least important," and indicates that the data is entirely optional.
     decimal priority?;
 |};
 
 # Text provided to or from an LLM.
-#
-# + type - The type of content
-# + text - The text content of the message
-# + annotations - Optional annotations for the client
 public type TextContent record {|
+    # The type of content
     "text" 'type;
+    # The text content of the message
     string text;
+    # Optional annotations for the client
     Annotations annotations?;
 |};
 
 # An image provided to or from an LLM.
-#
-# + type - The type of content
-# + data - The base64-encoded image data
-# + mimeType - The MIME type of the image. Different providers may support different image types.
-# + annotations - Optional annotations for the client
 public type ImageContent record {|
+    # The type of content
     "image" 'type;
+    # The base64-encoded image data
     string data;
+    # The MIME type of the image. Different providers may support different image types.
     string mimeType;
+    # Optional annotations for the client
     Annotations annotations?;
 |};
 
 # Audio provided to or from an LLM.
-#
-# + type - The type of content
-# + data - The base64-encoded audio data
-# + mimeType - The MIME type of the audio. Different providers may support different audio types.
-# + annotations - Optional annotations for the client
 public type AudioContent record {|
+    # The type of content
     "audio" 'type;
+    # The base64-encoded audio data
     string data;
+    # The MIME type of the audio. Different providers may support different audio types.
     string mimeType;
+    # Optional annotations for the client
     Annotations annotations?;
 |};
 
-// Client messages
 # Represents a request sent from the client to the server.
 public type ClientRequest PingRequest|InitializeRequest|CallToolRequest|ListToolsRequest;
 
@@ -572,7 +503,6 @@ public type ClientNotification CancelledNotification|ProgressNotification|Initia
 # Represents a result sent from the client to the server.
 public type ClientResult EmptyResult;
 
-// Server messages
 # Represents a response sent from the server to the client.
 public type ServerRequest PingRequest;
 
