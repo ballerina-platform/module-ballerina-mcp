@@ -68,7 +68,7 @@ public final class SseEventStreamHelper {
     public static Object getNextSseEvent(Environment env, BObject object) {
         BStream sseStream = (BStream) object.getNativeData(SSE_STREAM_NATIVE_KEY);
         if (sseStream == null) {
-            BString errorMessage = fromString("SSE stream not attached to the provided Ballerina object.");
+            BString errorMessage = fromString("Unable to obtain elements from stream. SSE stream not found.");
             return ErrorCreator.createError(errorMessage);
         }
         BObject iteratorObject = sseStream.getIteratorObj();
@@ -88,7 +88,7 @@ public final class SseEventStreamHelper {
     public static Object closeSseEventStream(Environment env, BObject object) {
         BStream sseStream = (BStream) object.getNativeData(SSE_STREAM_NATIVE_KEY);
         if (sseStream == null) {
-            BString errorMessage = fromString("SSE stream not attached to the provided Ballerina object.");
+            BString errorMessage = fromString("Unable to obtain elements from stream. SSE stream not found.");
             return ErrorCreator.createError(errorMessage);
         }
         BObject iteratorObject = sseStream.getIteratorObj();

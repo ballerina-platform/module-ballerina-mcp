@@ -21,27 +21,21 @@
 isolated function processServerResponse(JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? serverResponse)
         returns ServerResult|ServerResponseError|StreamError {
 
-    // If response is a stream, extract the result from the stream.
     if serverResponse is stream<JsonRpcMessage, StreamError?> {
         return extractResultFromMessageStream(serverResponse);
     }
 
-    // If response is a direct JsonRpcMessage, convert it to a result.
     if serverResponse is JsonRpcMessage {
         return extractResultFromMessage(serverResponse);
     }
 
-    // Null response: indicates malformed or missing server reply.
     if serverResponse is () {
         return error MalformedResponseError("Received null response from server.");
     }
 
-    // If a transport error is returned, wrap as a ServerResponseError.
-    if serverResponse is StreamableHttpTransportError {
-        return error ServerResponseError(
-            string `Transport error connecting to server: ${serverResponse.message()}`
-        );
-    }
+    return error ServerResponseError(
+        string `Transport error connecting to server: ${serverResponse.message()}`
+    );
 }
 
 # Extracts the first valid result from a stream of JsonRpcMessages.

@@ -1,5 +1,5 @@
 fixes:
-  - "io/ballerina/lib/ai/plugin/::./compiler-plugin/src/main/java/io/ballerina/lib/ai/plugin/"
+  - "io/ballerina/stdlib/mcp/plugin/"
 
 coverage:
   precision: 2
