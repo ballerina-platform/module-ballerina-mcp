@@ -9,6 +9,7 @@
 
 pluginManagement {
     plugins {
+        id "com.github.spotbugs-base" version "${spotbugsPluginVersion}"
         id "com.github.johnrengelman.shadow" version "${shadowJarPluginVersion}"
         id "de.undercouch.download" version "${downloadPluginVersion}"
         id "net.researchgate.release" version "${releasePluginVersion}"
@@ -33,9 +34,13 @@ plugins {
 
 rootProject.name = 'mcp'
 
+include ':checkstyle'
 include ':mcp-ballerina'
+include ':mcp-native'
 
+project(':checkstyle').projectDir = file("build-config${File.separator}checkstyle")
 project(':mcp-ballerina').projectDir = file('ballerina')
+project(':mcp-native').projectDir = file('native')
 
 gradleEnterprise {
     buildScan {
@@ -43,5 +48,3 @@ gradleEnterprise {
         termsOfServiceAgree = 'yes'
     }
 }
-
-
