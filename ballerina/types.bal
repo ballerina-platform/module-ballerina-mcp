@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/http;
+
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse|JsonRpcError;
 
@@ -114,7 +116,7 @@ public type JsonRpcError record {
     # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
     # Identifier of the request
-    RequestId id;
+    RequestId? id;
     # The error information
     record {
         # The error type that occurred
@@ -525,3 +527,22 @@ public type ServerNotification CancelledNotification
 
 # Represents a result sent from the server to the client.
 public type ServerResult InitializeResult|CallToolResult|ListToolsResult|EmptyResult;
+
+# Defines a mcp service interface that handles incoming mcp requests.
+public type McpService distinct isolated service object {
+    remote isolated function onListTools() returns ListToolsResult|error;
+    remote isolated function onCallTool(CallToolParams params) returns CallToolResult|error;
+};
+
+public type BasicMcpService distinct isolated service object {
+
+};
+
+public type ListenerConfiguration record {|
+    *http:ListenerConfiguration;
+|};
+
+public type ServerConfiguration record {|
+    Implementation serverInfo;
+    ServerOptions options?;
+|};
