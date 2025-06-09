@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/http;
+
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse;
 
@@ -97,6 +99,48 @@ public type JsonRpcResponse record {|
     RequestId id;
     # The result of the request
     ServerResult result;
+|};
+
+// Standard JSON-RPC error codes
+public const PARSE_ERROR = -32700;
+public const INVALID_REQUEST = -32600;
+public const METHOD_NOT_FOUND = -32601;
+public const INVALID_PARAMS = -32602;
+public const INTERNAL_ERROR = -32603;
+
+# A response to a request that indicates an error occurred.
+public type JsonRpcError record {
+    # The JSON-RPC protocol version
+    JSONRPC_VERSION jsonrpc;
+    # Identifier of the request
+    RequestId? id;
+    # The error information
+    record {
+        # The error type that occurred
+        int code;
+        # A short description of the error. The message SHOULD be limited to a concise single sentence.
+        string message;
+        # Additional information about the error. The value of this member is defined by the sender (e.g. detailed error information, nested errors etc.).
+        anydata data?;
+    } 'error;
+};
+
+# A response that indicates success but carries no data.
+public type EmptyResult Result;
+
+# This notification can be sent by either side to indicate that it is cancelling a previously-issued request.
+public type CancelledNotification record {|
+    *Notification;
+    # The method name for this notification
+    NOTIFICATION_CANCELLED method;
+    # The parameters for the cancellation notification
+    record {|
+        # The ID of the request to cancel.
+        # This MUST correspond to the ID of a request previously issued in the same direction.
+        RequestId requestId;
+        # An optional string describing the reason for the cancellation. This MAY be logged or presented to the user.
+        string? reason = ();
+    |} params;
 |};
 
 # This request is sent from the client to the server when it first connects, asking it to begin initialization.
@@ -368,4 +412,23 @@ public type AudioContent record {
 };
 
 # Represents a result sent from the server to the client.
-public type ServerResult InitializeResult|CallToolResult|ListToolsResult;
+public type ServerResult InitializeResult|CallToolResult|ListToolsResult|EmptyResult;
+
+# Defines a mcp service interface that handles incoming mcp requests.
+public type McpService distinct isolated service object {
+    remote isolated function onListTools() returns ListToolsResult|error;
+    remote isolated function onCallTool(CallToolParams params) returns CallToolResult|error;
+};
+
+public type BasicMcpService distinct isolated service object {
+
+};
+
+public type ListenerConfiguration record {|
+    *http:ListenerConfiguration;
+|};
+
+public type ServerConfiguration record {|
+    Implementation serverInfo;
+    ServerOptions options?;
+|};
