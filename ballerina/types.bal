@@ -147,7 +147,7 @@ type InitializeRequest record {|
         # Capabilities supported by the client
         ClientCapabilities capabilities;
         # Information about the client implementation
-        Implementation clientInfo;
+        McpInfo clientInfo;
     |} params;
 |};
 
@@ -161,7 +161,7 @@ public type InitializeResult record {|
     # The capabilities of the server.
     ServerCapabilities capabilities;
     # Information about the server implementation
-    Implementation serverInfo;
+    McpInfo serverInfo;
     # Instructions describing how to use the server and its features.
     # This can be used by clients to improve the LLM's understanding of available tools, resources, etc.
     # It can be thought of like a "hint" to the model.
@@ -179,8 +179,6 @@ public type InitializedNotification record {|
 # Capabilities a client may support. Known capabilities are defined here, in this schema,
 # but this is not a closed set: any client can define its own, additional capabilities.
 public type ClientCapabilities record {
-    # Experimental, non-standard capabilities that the client supports.
-    record {|record {}...;|} experimental?;
     # Present if the client supports listing roots.
     record {|
         # Whether the client supports notifications for changes to the roots list.
@@ -219,7 +217,7 @@ public type ServerCapabilities record {
 };
 
 # Describes the name and version of an MCP implementation.
-public type Implementation record {|
+public type McpInfo record {|
     # The name of the implementation
     string name;
     # The version of the implementation

@@ -15,11 +15,20 @@
 // under the License.
 
 # Configuration options for initializing an MCP client.
-#
-# + capabilities - Capabilities to be advertised by this client.
 public type ClientConfiguration record {|
-    *ProtocolOptions;
+    *StreamableHttpClientTransportConfig;
+    # Client information such as name and version.
+    McpInfo info;
+    # Client capabilities configuration.
+    ClientCapabilityConfiguration capabilityConfig?;
+|};
+
+# Configuration options for initializing an MCP client.
+public type ClientCapabilityConfiguration record {|
+    # Capabilities to be advertised by this client.
     ClientCapabilities capabilities?;
+    # Whether to enforce strict capabilities compliance.
+    boolean enforceStrictCapabilities?;
 |};
 
 # Represents an MCP client built on top of the Streamable HTTP transport.
@@ -27,7 +36,7 @@ public distinct isolated client class Client {
     # MCP server URL.
     private final string serverUrl;
     # Client implementation details (e.g., name and version).
-    private final Implementation clientInfo;
+    private final McpInfo clientInfo;
     # Capabilities supported by the client.
     private final ClientCapabilities clientCapabilities;
 
@@ -36,7 +45,7 @@ public distinct isolated client class Client {
     # Server capabilities.
     private ServerCapabilities? serverCapabilities = ();
     # Server implementation information.
-    private Implementation? serverInfo = ();
+    private McpInfo? serverInfo = ();
     # Request ID generator for tracking requests.
     private int requestId = 0;
 
@@ -45,10 +54,10 @@ public distinct isolated client class Client {
     # + serverUrl - MCP server URL.
     # + clientInfo - Client details, such as name and version.
     # + config - Optional configuration containing client capabilities.
-    public isolated function init(string serverUrl, Implementation clientInfo, ClientConfiguration? config = ()) {
+    public isolated function init(string serverUrl, *ClientConfiguration config) {
         self.serverUrl = serverUrl;
-        self.clientInfo = clientInfo.cloneReadOnly();
-        self.clientCapabilities = config?.capabilities.cloneReadOnly() ?: {};
+        self.clientInfo = config.info.cloneReadOnly();
+        self.clientCapabilities = (config.capabilityConfig?.capabilities).cloneReadOnly() ?: {};
     }
 
     # Establishes a connection to the MCP server and performs protocol initialization.
