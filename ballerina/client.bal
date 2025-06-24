@@ -18,7 +18,7 @@
 public type ClientConfiguration record {|
     *StreamableHttpClientTransportConfig;
     # Client information such as name and version.
-    McpInfo info;
+    Implementation info;
     # Client capabilities configuration.
     ClientCapabilityConfiguration capabilityConfig?;
 |};
@@ -36,7 +36,7 @@ public distinct isolated client class Client {
     # MCP server URL.
     private final string serverUrl;
     # Client implementation details (e.g., name and version).
-    private final McpInfo clientInfo;
+    private final Implementation clientInfo;
     # Capabilities supported by the client.
     private final ClientCapabilities clientCapabilities;
 
@@ -45,7 +45,7 @@ public distinct isolated client class Client {
     # Server capabilities.
     private ServerCapabilities? serverCapabilities = ();
     # Server implementation information.
-    private McpInfo? serverInfo = ();
+    private Implementation? serverInfo = ();
     # Request ID generator for tracking requests.
     private int requestId = 0;
 
@@ -93,7 +93,9 @@ public distinct isolated client class Client {
                 // Validate protocol compatibility.
                 if (!SUPPORTED_PROTOCOL_VERSIONS.some(v => v == protocolVersion)) {
                     return error ProtocolVersionError(
-                        string `Server protocol version '${protocolVersion}' is not supported. Supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
+                        string `Server protocol version '${
+                            protocolVersion}' is not supported. Supported versions: ${
+                            SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
                     );
                 }
 
@@ -108,7 +110,8 @@ public distinct isolated client class Client {
                 check self.sendNotificationMessage(initNotification);
             } else {
                 return error ClientInitializationError(
-                    string `Initialization failed: unexpected response type '${(typeof response).toString()}' received from server.`
+                    string `Initialization failed: unexpected response type '${
+                        (typeof response).toString()}' received from server.`
                 );
             }
         }
@@ -122,7 +125,7 @@ public distinct isolated client class Client {
             StreamableHttpClientTransport? currentTransport = self.transport;
             if currentTransport is () {
                 return error UninitializedTransportError(
-                    "Subscription failed: client transport is not initialized. Call initialize() first."
+                    "Subscription failed: client transport is not initialized."
                 );
             }
             return currentTransport.establishEventStream();
@@ -175,7 +178,7 @@ public distinct isolated client class Client {
             StreamableHttpClientTransport? currentTransport = self.transport;
             if currentTransport is () {
                 return error UninitializedTransportError(
-                    "Closure failed: client transport is not initialized. Call initialize() first."
+                    "Closure failed: client transport is not initialized."
                 );
             }
 
@@ -202,7 +205,7 @@ public distinct isolated client class Client {
             StreamableHttpClientTransport? currentTransport = self.transport;
             if currentTransport is () {
                 return error UninitializedTransportError(
-                    "Cannot send request: client transport is not initialized. Call initialize() first."
+                    "Cannot send request: client transport is not initialized."
                 );
             }
 
@@ -231,7 +234,7 @@ public distinct isolated client class Client {
             StreamableHttpClientTransport? currentTransport = self.transport;
             if currentTransport is () {
                 return error UninitializedTransportError(
-                "Cannot send notification: client transport is not initialized. Call initialize() first."
+                "Cannot send notification: client transport is not initialized."
                 );
             }
 

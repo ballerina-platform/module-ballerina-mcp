@@ -21,7 +21,7 @@ import ballerina/http;
 # + sessionId - Optional session identifier for continued interactions.
 type StreamableHttpClientTransportConfig record {|
     *http:ClientConfiguration;
-    string? sessionId = ();
+    string sessionId?;
 |};
 
 # Provides HTTP-based client transport with support for streaming.
@@ -68,7 +68,7 @@ isolated class StreamableHttpClientTransport {
             }
 
             // If response is 202 Accepted, there is no content to process.
-            if response.statusCode == 202 {
+            if response.statusCode == http:STATUS_ACCEPTED {
                 return;
             }
 
