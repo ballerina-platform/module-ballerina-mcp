@@ -15,9 +15,12 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/io;
 import ballerina/uuid;
 
+# Custom error type for dispatcher service operations.
+type DispatcherError distinct error;
+
+# Represents the dispatcher service type definition.
 type DispatcherService distinct service object {
     *http:Service;
 
@@ -50,157 +53,213 @@ DispatcherService dispatcherService = isolated service object {
         }
     }
 
-    isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers) returns http:BadRequest|http:Accepted|http:Ok|error {
+    isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers)
+            returns http:BadRequest|http:Accepted|http:Ok|error {
+
+        http:BadRequest? headerValidationError = self.validateHeaders(headers);
+        if headerValidationError is http:BadRequest {
+            return headerValidationError;
+        }
+
         lock {
-            string|http:HeaderNotFoundError acceptHeader = headers.getHeader(ACCEPT_HEADER);
-            if acceptHeader is http:HeaderNotFoundError {
-                return <http:BadRequest>{
-                    body: {
-                        jsonrpc: JSONRPC_VERSION,
-                        id: 1,
-                        'error: {
-                            code: -32000,
-                            message: "Not Acceptable: Client must accept both application/json and text/event-stream"
-                        }
-                    }
-                };
-            }
-            if !acceptHeader.includes(CONTENT_TYPE_JSON) || !acceptHeader.includes(CONTENT_TYPE_SSE) {
-                return <http:BadRequest>{
-                    body: {
-                        jsonrpc: JSONRPC_VERSION,
-                        id: 1,
-                        'error: {
-                            code: -32000,
-                            message: "Not Acceptable: Client must accept both application/json and text/event-stream"
-                        }
-                    }
-                };
-            }
-
-            string|http:HeaderNotFoundError contentTypeHeader = headers.getHeader(CONTENT_TYPE_HEADER);
-            if contentTypeHeader is http:HeaderNotFoundError {
-                return <http:BadRequest>{
-                    body: {
-                        jsonrpc: JSONRPC_VERSION,
-                        id: null,
-                        'error: {
-                            code: -32000,
-                            message: "Unsupported Media Type: Content-Type must be application/json"
-                        }
-                    }
-                };
-            }
-            if !contentTypeHeader.includes(CONTENT_TYPE_JSON) {
-                return <http:BadRequest>{
-                    body: {
-                        jsonrpc: JSONRPC_VERSION,
-                        id: null,
-                        'error: {
-                            code: -32000,
-                            message: "Unsupported Media Type: Content-Type must be application/json"
-                        }
-                    }
-                };
-            }
-
             if request is JsonRpcRequest {
-                if request.method == "initialize" {
-                    if self.isInitialized && self.sessionId != () {
-                        return <http:BadRequest>{
-                            body: {
-                                jsonrpc: JSONRPC_VERSION,
-                                id: null,
-                                'error: {
-                                    code: -32600,
-                                    message: "Invalid Request: Only one initialization request is allowed"
-                                }
-                            }
-                        };
-                    }
-                    self.isInitialized = true;
-                    self.sessionId = uuid:createRandomUuid();
-
-                    final string requestedVersion = check (request.params["protocolVersion"]).cloneWithType();
-                    final readonly & ServerCapabilities? capabilities = (self.serverConfigs?.options?.capabilities).cloneReadOnly();
-                    final readonly & Implementation? serverInfo = (self.serverConfigs?.serverInfo).cloneReadOnly();
-
-                    if serverInfo is () {
-                        return <http:BadRequest>{
-                            body: {
-                                jsonrpc: JSONRPC_VERSION,
-                                id: null,
-                                'error: {
-                                    code: -32000,
-                                    message: "Server Info not provided in configuration"
-                                }
-                            }
-                        };
-                    }
-
-                    string protocolVersion = SUPPORTED_PROTOCOL_VERSIONS.some(v => v == requestedVersion) ? requestedVersion
-                        : LATEST_PROTOCOL_VERSION;
-
-                    return <http:Ok>{
-                        headers: {
-                            [SESSION_ID_HEADER]: self.sessionId ?: ""
-                        },
-                        body: {
-                            jsonrpc: JSONRPC_VERSION,
-                            id: request.id,
-                            result: <InitializeResult>{
-                                protocolVersion: protocolVersion,
-                                capabilities: capabilities ?: {},
-                                serverInfo: serverInfo
-                            }
-                        }
-                    };
-                } else if request.method == "tools/list" {
-                    ListToolsResult listToolsResult = check self.executeOnListTools();
-                    io:println("ListToolsResult: ", listToolsResult.cloneReadOnly());
-                    return <http:Ok>{
-                        headers: {
-                            [SESSION_ID_HEADER]: self.sessionId ?: ""
-                        },
-                        body: {
-                            jsonrpc: JSONRPC_VERSION,
-                            id: request.id,
-                            result: listToolsResult.cloneReadOnly()
-                        }
-                    };
-                } else if request.method == "tools/call" {
-                    CallToolParams params = check request.cloneReadOnly().params.ensureType(CallToolParams);
-                    CallToolResult callToolResult = check self.executeOnCallTool(params);
-                    return <http:Ok>{
-                        headers: {
-                            [SESSION_ID_HEADER]: self.sessionId ?: ""
-                        },
-                        body: {
-                            jsonrpc: JSONRPC_VERSION,
-                            id: request.id,
-                            result: callToolResult.cloneReadOnly()
-                        }
-                    };
-                } else {
-                    return <http:BadRequest>{
-                        body: {
-                            jsonrpc: JSONRPC_VERSION,
-                            id: request.id,
-                            'error: {
-                                code: -32601,
-                                message: "Method not found"
-                            }
-                        }
-                    };
-                }
+                return self.processJsonRpcRequest(request.cloneReadOnly());
             }
             else if request is JsonRpcNotification {
-                if request.method == "notifications/initialized" {
-                    return http:ACCEPTED;
-                }
+                return self.processJsonRpcNotification(request.cloneReadOnly());
+            }
+
+            return self.createErrorResponse(null, INVALID_REQUEST, "Unsupported request type");
+        }
+    }
+
+    private isolated function validateHeaders(http:Headers headers) returns http:BadRequest? {
+        // Validate Accept header
+        string|http:HeaderNotFoundError acceptHeader = headers.getHeader(ACCEPT_HEADER);
+        if acceptHeader is http:HeaderNotFoundError {
+            return self.createErrorResponse(1, -32000,
+                "Not Acceptable: Client must accept both application/json and text/event-stream");
+        }
+
+        if !acceptHeader.includes(CONTENT_TYPE_JSON) || !acceptHeader.includes(CONTENT_TYPE_SSE) {
+            return self.createErrorResponse(1, -32000,
+                "Not Acceptable: Client must accept both application/json and text/event-stream");
+        }
+
+        // Validate Content-Type header
+        string|http:HeaderNotFoundError contentTypeHeader = headers.getHeader(CONTENT_TYPE_HEADER);
+        if contentTypeHeader is http:HeaderNotFoundError {
+            return self.createErrorResponse(null, -32000,
+                "Unsupported Media Type: Content-Type must be application/json");
+        }
+
+        if !contentTypeHeader.includes(CONTENT_TYPE_JSON) {
+            return self.createErrorResponse(null, -32000,
+                "Unsupported Media Type: Content-Type must be application/json");
+        }
+
+        return ();
+    }
+
+    private isolated function processJsonRpcRequest(JsonRpcRequest request) returns http:BadRequest|http:Ok|error {
+        match request.method {
+            "initialize" => {
+                return self.handleInitializeRequest(request);
+            }
+            "tools/list" => {
+                return self.handleListToolsRequest(request);
+            }
+            "tools/call" => {
+                return self.handleCallToolRequest(request);
+            }
+            _ => {
+                return self.createErrorResponse(request.id, METHOD_NOT_FOUND, "Method not found");
             }
         }
-        return error("Unsupported request type");
+    }
+
+    private isolated function processJsonRpcNotification(JsonRpcNotification notification) returns http:Accepted|http:BadRequest {
+        match notification.method {
+            "notifications/initialized" => {
+                return http:ACCEPTED;
+            }
+            _ => {
+                return <http:BadRequest>{
+                    body: {
+                        jsonrpc: JSONRPC_VERSION,
+                        'error: {
+                            code: METHOD_NOT_FOUND,
+                            message: "Unknown notification method"
+                        }
+                    }
+                };
+            }
+        }
+    }
+
+    private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest) returns http:BadRequest|http:Ok {
+        JsonRpcRequest {jsonrpc, id, ...request} = jsonRpcRequest;
+        InitializeRequest|error initRequest = request.cloneWithType(InitializeRequest);
+        if initRequest is error {
+            return self.createErrorResponse(id, INVALID_REQUEST,
+                string `Invalid request: ${initRequest.message()}`);
+        }
+
+        lock {
+            // If it's a server with session management and the session ID is already set we should reject the request
+            // to avoid re-initialization.
+            if self.isInitialized && self.sessionId != () {
+                return self.createErrorResponse(id, INVALID_REQUEST,
+                "Invalid Request: Only one initialization request is allowed");
+            }
+
+            self.isInitialized = true;
+            self.sessionId = uuid:createRandomUuid();
+
+            string requestedVersion = initRequest.params.protocolVersion;
+            string protocolVersion = self.selectProtocolVersion(requestedVersion);
+
+            return <http:Ok>{
+                headers: {
+                    [SESSION_ID_HEADER]: self.sessionId ?: ""
+                },
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: id,
+                    result: <InitializeResult>{
+                        protocolVersion: protocolVersion,
+                        capabilities: (self.serverConfigs?.options?.capabilities ?: {}).cloneReadOnly(),
+                        serverInfo: (self.serverConfigs?.serverInfo ?: {
+                            name: "MCP Server",
+                            version: "1.0.0"
+                        }).cloneReadOnly()
+                    }
+                }
+            };
+        }
+    }
+
+    private isolated function handleListToolsRequest(JsonRpcRequest request) returns http:BadRequest|http:Ok {
+        lock {
+            // Check if initialized
+            if !self.isInitialized {
+                return self.createErrorResponse(request.id, INVALID_REQUEST,
+                "Client must be initialized before making requests");
+            }
+
+            ListToolsResult|error listToolsResult = self.executeOnListTools();
+            if listToolsResult is error {
+                return self.createErrorResponse(request.id, INTERNAL_ERROR,
+                string `Failed to list tools: ${listToolsResult.message()}`);
+            }
+
+            return <http:Ok>{
+                headers: {
+                    [SESSION_ID_HEADER]: self.sessionId ?: ""
+                },
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: request.id,
+                    result: listToolsResult.cloneReadOnly()
+                }
+            };
+        }
+    }
+
+    private isolated function handleCallToolRequest(JsonRpcRequest request) returns http:BadRequest|http:Ok {
+        lock {
+            // Check if initialized
+            if !self.isInitialized {
+                return self.createErrorResponse(request.id, INVALID_REQUEST,
+                "Client must be initialized before making requests");
+            }
+
+            // Extract and validate parameters
+            CallToolParams|error params = request.cloneReadOnly().params.ensureType(CallToolParams);
+            if params is error {
+                return self.createErrorResponse(request.id, INVALID_PARAMS,
+                string `Invalid parameters: ${params.message()}`);
+            }
+
+            CallToolResult|error callToolResult = self.executeOnCallTool(params);
+            if callToolResult is error {
+                return self.createErrorResponse(request.id, INTERNAL_ERROR,
+                string `Failed to call tool '${params.name}': ${callToolResult.message()}`);
+            }
+
+            return <http:Ok>{
+                headers: {
+                    [SESSION_ID_HEADER]: self.sessionId ?: ""
+                },
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: request.id,
+                    result: callToolResult.cloneReadOnly()
+                }
+            };
+        }
+    }
+
+    private isolated function selectProtocolVersion(string requestedVersion) returns string {
+        foreach string supportedVersion in SUPPORTED_PROTOCOL_VERSIONS {
+            if supportedVersion == requestedVersion {
+                return requestedVersion;
+            }
+        }
+        return LATEST_PROTOCOL_VERSION;
+    }
+
+    private isolated function createErrorResponse(RequestId? id, int code, string message) returns http:BadRequest {
+        return {
+            body: {
+                jsonrpc: JSONRPC_VERSION,
+                id: id,
+                'error: {
+                    code: code,
+                    message: message
+                }
+            }
+        };
     }
 
     private isolated function executeOnListTools() returns ListToolsResult|error {
@@ -211,7 +270,7 @@ DispatcherService dispatcherService = isolated service object {
             } else if mcpService is McpDeclarativeService {
                 return check listToolsForRemoteFunctions(mcpService);
             }
-            return error("MCP Service is not attached");
+            return error DispatcherError("MCP Service is not attached");
         }
     }
 
@@ -223,7 +282,7 @@ DispatcherService dispatcherService = isolated service object {
             } else if mcpService is McpDeclarativeService {
                 return check callToolForRemoteFunctions(mcpService, params.cloneReadOnly());
             }
-            return error("MCP Service is not attached");
+            return error DispatcherError("MCP Service is not attached");
         }
     }
 };
