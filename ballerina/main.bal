@@ -63,39 +63,21 @@
 //     }
 // }
 
-// listener BasicListener basicListener = check new (9091, serverConfigs = {
-//     serverInfo: {
-//         name: "Basic MCP Server",
-//         version: "1.0.0"
-//     },
-//     options: {capabilities: {}}
-// });
+listener Listener basicListener = check new (9091, serverInfo = {name: "Basic MCP Server", version: "1.0.0"});
 
-// service /mcp on basicListener {
-//     @McpTool {
-//         description: "Add two numbers",
-//         schema: {
-//             'type: "object",
-//             properties: {
-//                 "a": {"type": "integer", "description": "First number"},
-//                 "b": {"type": "integer", "description": "Second number"}
-//             },
-//             required: ["a", "b"]
-//         }
-//     }
-//     remote function add(int a, int b) returns int {
-//         return a + b;
-//     }
-// }
-
-listener Listener mcpListener = check new (9090, serverInfo = {name: "", version: ""});
-
-isolated service McpService /mcp on mcpListener {
-    remote isolated function onListTools() returns ListToolsResult|error {
-        return error("Not implemented");
+isolated service McpDeclarativeService /mcp on basicListener {
+    @McpTool {
+        description: "Add two numbers",
+        schema: {
+            'type: "object",
+            properties: {
+                "a": {"type": "integer", "description": "First number"},
+                "b": {"type": "integer", "description": "Second number"}
+            },
+            required: ["a", "b"]
+        }
     }
-
-    remote isolated function onCallTool(CallToolParams params) returns CallToolResult|error {
-        return error("Not implemented");
+    remote function add(int a, int b) returns int {
+        return a + b;
     }
 }
