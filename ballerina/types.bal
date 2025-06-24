@@ -26,6 +26,16 @@ public const SUPPORTED_PROTOCOL_VERSIONS = [
 
 public const JSONRPC_VERSION = "2.0";
 
+# Notification methods
+public const NOTIFICATION_INITIALIZED = "notifications/initialized";
+public const NOTIFICATION_CANCELLED = "notifications/cancelled";
+public const NOTIFICATION_PROGRESS = "notifications/progress";
+public const NOTIFICATION_RESOURCES_LIST_CHANGED = "notifications/resources/list_changed";
+public const NOTIFICATION_RESOURCES_UPDATED = "notifications/resources/updated";
+public const NOTIFICATION_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed";
+public const NOTIFICATION_TOOLS_LIST_CHANGED = "notifications/tools/list_changed";
+public const NOTIFICATION_MESSAGE = "notifications/message";
+
 # A progress token, used to associate progress notifications with the original request.
 public type ProgressToken string|int;
 
@@ -123,7 +133,7 @@ public type EmptyResult Result;
 public type CancelledNotification record {|
     *Notification;
     # The method name for this notification
-    "notifications/cancelled" method;
+    NOTIFICATION_CANCELLED method;
     # The parameters for the cancellation notification
     record {|
         # The ID of the request to cancel.
@@ -173,14 +183,12 @@ public type InitializeResult record {|
 public type InitializedNotification record {|
     *Notification;
     # The method identifier for the notification, must be "notifications/initialized"
-    "notifications/initialized" method;
+    NOTIFICATION_INITIALIZED method;
 |};
 
 # Capabilities a client may support. Known capabilities are defined here, in this schema,
 # but this is not a closed set: any client can define its own, additional capabilities.
 public type ClientCapabilities record {
-    # Experimental, non-standard capabilities that the client supports.
-    record {|record {}...;|} experimental?;
     # Present if the client supports listing roots.
     record {|
         # Whether the client supports notifications for changes to the roots list.
@@ -239,7 +247,7 @@ public type PingRequest record {|
 public type ProgressNotification record {|
     *Notification;
     # The method name for the notification
-    "notifications/progress" method;
+    NOTIFICATION_PROGRESS method;
     # The parameters for the progress notification
     record {
         # The progress token which was given in the initial request, 
@@ -278,14 +286,14 @@ public type PaginatedResult record {|
 public type ResourceListChangedNotification record {|
     *Notification;
     # The JSON-RPC method name for resource list changed notifications
-    "notifications/resources/list_changed" method;
+    NOTIFICATION_RESOURCES_LIST_CHANGED method;
 |};
 
 # A notification from the server to the client, informing it that a resource has changed and may need to be read again.
 public type ResourceUpdatedNotification record {|
     *Notification;
     # The JSON-RPC method name for resource updated notifications
-    "notifications/resources/updated" method;
+    NOTIFICATION_RESOURCES_UPDATED method;
     # The parameters for the resource updated notification
     record {
         # The URI of the resource that has been updated. This might be a sub-resource of the one 
@@ -335,7 +343,7 @@ public type EmbeddedResource record {|
 public type PromptListChangedNotification record {|
     *Notification;
     # The JSON-RPC method name for prompt list changed notifications
-    "notifications/prompts/list_changed" method;
+    NOTIFICATION_PROMPTS_LIST_CHANGED method;
 |};
 
 # Sent from the client to request a list of tools the server has.
@@ -382,7 +390,7 @@ public type CallToolParams record {|
 public type ToolListChangedNotification record {|
     *Notification;
     # The JSON-RPC method name for tool list changed notifications
-    "notifications/tools/list_changed" method;
+    NOTIFICATION_TOOLS_LIST_CHANGED method;
 |};
 
 # Additional properties describing a Tool to clients.
@@ -433,7 +441,7 @@ public type Tool record {|
 public type LoggingMessageNotification record {|
     *Notification;
     # The method name for the notification
-    "notifications/message" method;
+    NOTIFICATION_MESSAGE method;
     # The parameters for the logging message notification
     record {
         # The severity of this log message.

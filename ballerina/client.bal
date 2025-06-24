@@ -15,11 +15,20 @@
 // under the License.
 
 # Configuration options for initializing an MCP client.
-#
-# + capabilities - Capabilities to be advertised by this client.
 public type ClientConfiguration record {|
-    *ProtocolOptions;
+    *StreamableHttpClientTransportConfig;
+    # Client information such as name and version.
+    Implementation info;
+    # Client capabilities configuration.
+    ClientCapabilityConfiguration capabilityConfig?;
+|};
+
+# Configuration options for initializing an MCP client.
+public type ClientCapabilityConfiguration record {|
+    # Capabilities to be advertised by this client.
     ClientCapabilities capabilities?;
+    # Whether to enforce strict capabilities compliance.
+    boolean enforceStrictCapabilities?;
 |};
 
 # Represents an MCP client built on top of the Streamable HTTP transport.
@@ -45,10 +54,10 @@ public distinct isolated client class Client {
     # + serverUrl - MCP server URL.
     # + clientInfo - Client details, such as name and version.
     # + config - Optional configuration containing client capabilities.
-    public isolated function init(string serverUrl, Implementation clientInfo, ClientConfiguration? config = ()) {
+    public isolated function init(string serverUrl, *ClientConfiguration config) {
         self.serverUrl = serverUrl;
-        self.clientInfo = clientInfo.cloneReadOnly();
-        self.clientCapabilities = config?.capabilities.cloneReadOnly() ?: {};
+        self.clientInfo = config.info.cloneReadOnly();
+        self.clientCapabilities = (config.capabilityConfig?.capabilities).cloneReadOnly() ?: {};
     }
 
     # Establishes a connection to the MCP server and performs protocol initialization.
@@ -84,7 +93,9 @@ public distinct isolated client class Client {
                 // Validate protocol compatibility.
                 if (!SUPPORTED_PROTOCOL_VERSIONS.some(v => v == protocolVersion)) {
                     return error ProtocolVersionError(
-                        string `Server protocol version '${protocolVersion}' is not supported. Supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
+                        string `Server protocol version '${
+                            protocolVersion}' is not supported. Supported versions: ${
+                            SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
                     );
                 }
 
@@ -99,7 +110,8 @@ public distinct isolated client class Client {
                 check self.sendNotificationMessage(initNotification);
             } else {
                 return error ClientInitializationError(
-                    string `Initialization failed: unexpected response type '${(typeof response).toString()}' received from server.`
+                    string `Initialization failed: unexpected response type '${
+                        (typeof response).toString()}' received from server.`
                 );
             }
         }
@@ -113,7 +125,7 @@ public distinct isolated client class Client {
             StreamableHttpClientTransport? currentTransport = self.transport;
             if currentTransport is () {
                 return error UninitializedTransportError(
-                    "Subscription failed: client transport is not initialized. Call initialize() first."
+                    "Subscription failed: client transport is not initialized."
                 );
             }
             return currentTransport.establishEventStream();
@@ -166,7 +178,7 @@ public distinct isolated client class Client {
             StreamableHttpClientTransport? currentTransport = self.transport;
             if currentTransport is () {
                 return error UninitializedTransportError(
-                    "Closure failed: client transport is not initialized. Call initialize() first."
+                    "Closure failed: client transport is not initialized."
                 );
             }
 
@@ -193,7 +205,7 @@ public distinct isolated client class Client {
             StreamableHttpClientTransport? currentTransport = self.transport;
             if currentTransport is () {
                 return error UninitializedTransportError(
-                    "Cannot send request: client transport is not initialized. Call initialize() first."
+                    "Cannot send request: client transport is not initialized."
                 );
             }
 
@@ -222,7 +234,7 @@ public distinct isolated client class Client {
             StreamableHttpClientTransport? currentTransport = self.transport;
             if currentTransport is () {
                 return error UninitializedTransportError(
-                "Cannot send notification: client transport is not initialized. Call initialize() first."
+                "Cannot send notification: client transport is not initialized."
                 );
             }
 

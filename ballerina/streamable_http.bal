@@ -20,7 +20,8 @@ import ballerina/http;
 #
 # + sessionId - Optional session identifier for continued interactions.
 type StreamableHttpClientTransportConfig record {|
-    string? sessionId = ();
+    *http:ClientConfiguration;
+    string sessionId?;
 |};
 
 # Provides HTTP-based client transport with support for streaming.
@@ -34,14 +35,16 @@ isolated class StreamableHttpClientTransport {
     # + serverUrl - The URL of the server endpoint.
     # + config - Optional configuration, such as session ID.
     # + return - A StreamableHttpTransportError if initialization fails; otherwise, nil.
-    isolated function init(string serverUrl, StreamableHttpClientTransportConfig? config = ()) returns StreamableHttpTransportError? {
+    isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config) returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
+
+        StreamableHttpClientTransportConfig {sessionId, ...clientConfig} = config;
         do {
-            self.httpClient = check new (serverUrl);
+            self.httpClient = check new (serverUrl, clientConfig);
         } on fail error e {
             return error HttpClientError(string `Unable to initialize HTTP client for '${serverUrl}': ${e.message()}`);
         }
-        self.sessionId = config?.sessionId;
+        self.sessionId = sessionId;
     }
 
     # Sends a JSON-RPC message to the server and returns the response.
@@ -65,7 +68,7 @@ isolated class StreamableHttpClientTransport {
             }
 
             // If response is 202 Accepted, there is no content to process.
-            if response.statusCode == 202 {
+            if response.statusCode == http:STATUS_ACCEPTED {
                 return;
             }
 
@@ -134,7 +137,7 @@ isolated class StreamableHttpClientTransport {
     }
 
     # Returns the current session ID, or nil if no session is active.
-    # 
+    #
     # + return - The current session ID as a string, or nil if not set.
     isolated function getSessionId() returns string? {
         lock {

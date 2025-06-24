@@ -72,3 +72,4 @@ isolated function extractResultFromMessage(JsonRpcMessage message) returns Serve
     }
     return error InvalidMessageTypeError("Received message from server is not a valid JsonRpcResponse.");
 }
+
