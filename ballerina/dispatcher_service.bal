@@ -18,23 +18,21 @@ import ballerina/http;
 import ballerina/io;
 import ballerina/uuid;
 
-// import ballerina/io;
-
 type DispatcherService distinct service object {
     *http:Service;
 
-    isolated function addServiceRef(McpService mcpService);
+    isolated function addServiceRef(McpService|McpDeclarativeService mcpService);
     isolated function removeServiceRef();
     isolated function setServerConfigs(ServerConfiguration serverConfigs);
 };
 
 DispatcherService dispatcherService = isolated service object {
     private ServerConfiguration? serverConfigs = ();
-    private McpService? mcpService = ();
+    private McpService|McpDeclarativeService? mcpService = ();
     private boolean isInitialized = false;
     private string? sessionId = ();
 
-    isolated function addServiceRef(McpService mcpService) {
+    isolated function addServiceRef(McpService|McpDeclarativeService mcpService) {
         lock {
             self.mcpService = mcpService;
         }
@@ -52,13 +50,8 @@ DispatcherService dispatcherService = isolated service object {
         }
     }
 
-    isolated resource function get .() returns error? {
-        
-    }
-
     isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers) returns http:BadRequest|http:Accepted|http:Ok|error {
         lock {
-            io:println("Received request: ", request.cloneReadOnly());
             string|http:HeaderNotFoundError acceptHeader = headers.getHeader(ACCEPT_HEADER);
             if acceptHeader is http:HeaderNotFoundError {
                 return <http:BadRequest>{
@@ -207,35 +200,16 @@ DispatcherService dispatcherService = isolated service object {
                 }
             }
         }
-        // if request is InitializeRequest {
-        //     lock {
-        //         if self.isInitialized && self.sessionId != () {
-        //             return {
-        //                 jsonrpc: JSONRPC_VERSION,
-        //                 id: null,
-        //                 'error: {
-        //                     code: -32600,
-        //                     message: "Invalid Request: Only one initialization request is allowed" 
-        //                 }
-        //             };
-        //         }
-        //         self.isInitialized = true;
-        //         self.sessionId = uuid:createRandomUuid();
-        //         io:println("Session initialized with ID: ", self.sessionId);
-        //     }
-        // } else if request is ListToolsRequest {
-        //     io:println("Received ListToolsRequest");
-        // } else if request is CallToolRequest {
-        //     io:println("Received CallToolRequest");
-        // }
         return error("Unsupported request type");
     }
 
     private isolated function executeOnListTools() returns ListToolsResult|error {
         lock {
-            McpService? chatService = self.mcpService;
-            if chatService is McpService {
-                return check invokeOnListTools(chatService);
+            McpService|McpDeclarativeService? mcpService = self.mcpService;
+            if mcpService is McpService {
+                return check invokeOnListTools(mcpService);
+            } else if mcpService is McpDeclarativeService {
+                return check listToolsForRemoteFunctions(mcpService);
             }
             return error("MCP Service is not attached");
         }
@@ -243,9 +217,11 @@ DispatcherService dispatcherService = isolated service object {
 
     private isolated function executeOnCallTool(CallToolParams params) returns CallToolResult|error {
         lock {
-            McpService? chatService = self.mcpService;
-            if chatService is McpService {
-                return check invokeOnCallTool(chatService, params.cloneReadOnly());
+            McpService|McpDeclarativeService? mcpService = self.mcpService;
+            if mcpService is McpService {
+                return check invokeOnCallTool(mcpService, params.cloneReadOnly());
+            } else if mcpService is McpDeclarativeService {
+                return check callToolForRemoteFunctions(mcpService, params.cloneReadOnly());
             }
             return error("MCP Service is not attached");
         }
