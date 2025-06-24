@@ -14,8 +14,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/http;
-
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse;
 
@@ -414,21 +412,23 @@ public type AudioContent record {
 # Represents a result sent from the server to the client.
 public type ServerResult InitializeResult|CallToolResult|ListToolsResult|EmptyResult;
 
+# Represents a tool configuration that can be used to define tools available in the MCP service.
+public type McpToolConfig record {|
+    # The description of the tool.
+    string description?;
+    # The JSON schema for the tool's parameters.
+    json schema?;
+|};
+
+# Annotation to mark a function as an MCP tool configuration.
+public annotation McpToolConfig McpTool on object function;
+
 # Defines a mcp service interface that handles incoming mcp requests.
 public type McpService distinct isolated service object {
     remote isolated function onListTools() returns ListToolsResult|error;
     remote isolated function onCallTool(CallToolParams params) returns CallToolResult|error;
 };
 
-public type BasicMcpService distinct isolated service object {
+public type McpDeclarativeService distinct isolated service object {
 
 };
-
-public type ListenerConfiguration record {|
-    *http:ListenerConfiguration;
-|};
-
-public type ServerConfiguration record {|
-    Implementation serverInfo;
-    ServerOptions options?;
-|};
