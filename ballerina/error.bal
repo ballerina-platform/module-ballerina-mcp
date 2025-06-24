@@ -79,3 +79,6 @@ public type ListToolsError distinct ClientError;
 
 # Error for failures during tool execution operations.
 public type ToolCallError distinct ClientError;
+
+# Errors for failures occuring during server operations.
+public type ServerError distinct Error;
