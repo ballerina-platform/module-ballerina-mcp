@@ -18,11 +18,12 @@ import ballerina/http;
 
 # Represents the options for configuring an MCP server.
 public type ServerOptions record {|
-    *ProtocolOptions;
     # Capabilities to advertise as being supported by this server.
     ServerCapabilities capabilities?;
     # Optional instructions describing how to use the server and its features.
     string instructions?;
+    # Whether to enforce strict capabilities compliance.
+    boolean enforceStrictCapabilities?;
 |};
 
 # Configuration options for initializing an MCP listener.
