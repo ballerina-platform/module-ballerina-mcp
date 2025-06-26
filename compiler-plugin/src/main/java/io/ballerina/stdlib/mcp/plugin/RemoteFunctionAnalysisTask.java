@@ -26,6 +26,7 @@ import io.ballerina.compiler.syntax.tree.ExpressionNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
 import io.ballerina.compiler.syntax.tree.MappingFieldNode;
 import io.ballerina.compiler.syntax.tree.NodeFactory;
+import io.ballerina.compiler.syntax.tree.NodeLocation;
 import io.ballerina.compiler.syntax.tree.NodeParser;
 import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
@@ -67,20 +68,25 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                 context.semanticModel(), functionDefinitionNode
         ).orElse(null);
 
-        ToolAnnotationConfig config = createAnnotationConfig(functionDefinitionNode, toolAnnotationNode);
+        NodeLocation functionNodeLocation = functionDefinitionNode.location();
+        Optional<FunctionSymbol> functionSymbol = getFunctionSymbol(functionDefinitionNode);
+        if (functionSymbol.isEmpty()) {
+            return;
+        }
+        ToolAnnotationConfig config = createAnnotationConfig(functionSymbol.get(), functionNodeLocation,
+                toolAnnotationNode);
         addToModifierContext(context, functionDefinitionNode, config);
     }
 
-    private ToolAnnotationConfig createAnnotationConfig(FunctionDefinitionNode functionDefinitionNode,
+    private ToolAnnotationConfig createAnnotationConfig(FunctionSymbol functionSymbol,
+                                                        NodeLocation functionNodeLocation,
                                                         AnnotationNode annotationNode) {
-        @SuppressWarnings("OptionalGetWithoutIsPresent") // is present already check in perform method
-        FunctionSymbol functionSymbol = getFunctionSymbol(functionDefinitionNode).get();
         String functionName = functionSymbol.getName().orElse("unknownFunction");
         String description = Utils.addDoubleQuotes(
                 Utils.escapeDoubleQuotes(
                         Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
         if (annotationNode == null) {
-            String schema = getParameterSchema(functionSymbol, functionDefinitionNode.location());
+            String schema = getParameterSchema(functionSymbol, functionNodeLocation);
             return new ToolAnnotationConfig(description, schema);
         }
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty() ?
@@ -91,7 +97,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         }
         String parameters = fieldValues.containsKey(SCHEMA_FIELD_NAME)
                 ? fieldValues.get(SCHEMA_FIELD_NAME).toSourceCode()
-                : getParameterSchema(functionSymbol, functionDefinitionNode.location());
+                : getParameterSchema(functionSymbol, functionNodeLocation);
         return new ToolAnnotationConfig(description, parameters);
     }
 
