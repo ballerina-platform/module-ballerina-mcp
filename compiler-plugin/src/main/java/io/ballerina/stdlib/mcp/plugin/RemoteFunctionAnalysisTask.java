@@ -18,7 +18,6 @@
 
 package io.ballerina.stdlib.mcp.plugin;
 
-import io.ballerina.compiler.api.symbols.AnnotationSymbol;
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
 import io.ballerina.compiler.api.symbols.SymbolKind;
@@ -26,9 +25,7 @@ import io.ballerina.compiler.syntax.tree.AnnotationNode;
 import io.ballerina.compiler.syntax.tree.ExpressionNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
 import io.ballerina.compiler.syntax.tree.MappingFieldNode;
-import io.ballerina.compiler.syntax.tree.MetadataNode;
 import io.ballerina.compiler.syntax.tree.NodeFactory;
-import io.ballerina.compiler.syntax.tree.NodeList;
 import io.ballerina.compiler.syntax.tree.NodeParser;
 import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
@@ -47,6 +44,7 @@ import java.util.stream.Collectors;
 
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.DESCRIPTION_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCHEMA_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
 import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION;
 
 public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
@@ -65,39 +63,32 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         this.context = context;
 
         FunctionDefinitionNode functionDefinitionNode = (FunctionDefinitionNode) context.node();
-        Optional<MetadataNode> metadataNode = functionDefinitionNode.metadata();
-        if (metadataNode.isEmpty()) {
-            return;
-        }
+        AnnotationNode toolAnnotationNode = getToolAnnotationNode(
+                context.semanticModel(), functionDefinitionNode
+        ).orElse(null);
 
-        NodeList<AnnotationNode> annotationNodeList = metadataNode.get().annotations();
-        Optional<AnnotationNode> toolAnnotationNode = annotationNodeList.stream()
-                .filter(annotationNode ->
-                        context.semanticModel().symbol(annotationNode)
-                                .filter(symbol -> symbol.kind() == SymbolKind.ANNOTATION)
-                                .filter(symbol -> Utils.isMcpToolAnnotation((AnnotationSymbol) symbol))
-                                .isPresent()
-                )
-                .findFirst();
-        if (toolAnnotationNode.isEmpty()) {
-            return;
-        }
-
-        ToolAnnotationConfig config = createAnnotationConfig(toolAnnotationNode.get(), functionDefinitionNode);
-        addToModifierContext(context, toolAnnotationNode.get(), config);
+        ToolAnnotationConfig config = createAnnotationConfig(functionDefinitionNode, toolAnnotationNode);
+        addToModifierContext(context, functionDefinitionNode, config);
     }
 
-    private ToolAnnotationConfig createAnnotationConfig(AnnotationNode annotationNode,
-                                                        FunctionDefinitionNode functionDefinitionNode) {
+    private ToolAnnotationConfig createAnnotationConfig(FunctionDefinitionNode functionDefinitionNode,
+                                                        AnnotationNode annotationNode) {
         @SuppressWarnings("OptionalGetWithoutIsPresent") // is present already check in perform method
         FunctionSymbol functionSymbol = getFunctionSymbol(functionDefinitionNode).get();
         String functionName = functionSymbol.getName().orElse("unknownFunction");
+        String description = Utils.addDoubleQuotes(
+                Utils.escapeDoubleQuotes(
+                        Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
+        if (annotationNode == null) {
+            String schema = getParameterSchema(functionSymbol, functionDefinitionNode.location());
+            return new ToolAnnotationConfig(description, schema);
+        }
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty() ?
                 NodeFactory.createSeparatedNodeList() : annotationNode.annotValue().get().fields();
         Map<String, ExpressionNode> fieldValues = extractFieldValues(fields);
-        String description = fieldValues.containsKey(DESCRIPTION_FIELD_NAME)
-                ? fieldValues.get(DESCRIPTION_FIELD_NAME).toSourceCode()
-                : Utils.addDoubleQuotes(Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName));
+        if (fieldValues.containsKey(DESCRIPTION_FIELD_NAME)) {
+            description = fieldValues.get(DESCRIPTION_FIELD_NAME).toSourceCode();
+        }
         String parameters = fieldValues.containsKey(SCHEMA_FIELD_NAME)
                 ? fieldValues.get(SCHEMA_FIELD_NAME).toSourceCode()
                 : getParameterSchema(functionSymbol, functionDefinitionNode.location());
@@ -137,9 +128,9 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         this.context.reportDiagnostic(diagnostic);
     }
 
-    private void addToModifierContext(SyntaxNodeAnalysisContext context, AnnotationNode annotationNode,
-                                      ToolAnnotationConfig functionDefinitionNode) {
+    private void addToModifierContext(SyntaxNodeAnalysisContext context, FunctionDefinitionNode functionDefinitionNode,
+                                      ToolAnnotationConfig toolAnnotationConfig) {
         this.modifierContextMap.computeIfAbsent(context.documentId(), document -> new ModifierContext())
-                .add(annotationNode, functionDefinitionNode);
+                .add(functionDefinitionNode, toolAnnotationConfig);
     }
 }
