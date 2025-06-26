@@ -17,9 +17,6 @@
 import ballerina/http;
 import ballerina/uuid;
 
-# Custom error type for dispatcher service operations.
-type DispatcherError distinct error;
-
 # Represents the dispatcher service type definition.
 type DispatcherService distinct service object {
     *http:Service;
@@ -54,10 +51,10 @@ DispatcherService dispatcherService = isolated service object {
     }
 
     isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers)
-            returns http:BadRequest|http:Accepted|http:Ok|error {
+            returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok|ServerError {
 
-        http:BadRequest? headerValidationError = self.validateHeaders(headers);
-        if headerValidationError is http:BadRequest {
+        http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = self.validateHeaders(headers);
+        if !(headerValidationError is ()) {
             return headerValidationError;
         }
 
@@ -69,39 +66,56 @@ DispatcherService dispatcherService = isolated service object {
                 return self.processJsonRpcNotification(request.cloneReadOnly());
             }
 
-            return self.createErrorResponse(null, INVALID_REQUEST, "Unsupported request type");
+            JsonRpcError jsonRpcError = self.createErrorResponse(null, INVALID_REQUEST, "Unsupported request type");
+            return <http:BadRequest>{
+                body: jsonRpcError.cloneReadOnly()
+            };
         }
     }
 
-    private isolated function validateHeaders(http:Headers headers) returns http:BadRequest? {
+    private isolated function validateHeaders(http:Headers headers)
+            returns http:NotAcceptable|http:UnsupportedMediaType? {
+
         // Validate Accept header
         string|http:HeaderNotFoundError acceptHeader = headers.getHeader(ACCEPT_HEADER);
         if acceptHeader is http:HeaderNotFoundError {
-            return self.createErrorResponse(1, -32000,
+            JsonRpcError jsonRpcError = self.createErrorResponse(1, NOT_ACCEPTABLE,
                 "Not Acceptable: Client must accept both application/json and text/event-stream");
+            return <http:NotAcceptable>{
+                body: jsonRpcError
+            };
         }
 
         if !acceptHeader.includes(CONTENT_TYPE_JSON) || !acceptHeader.includes(CONTENT_TYPE_SSE) {
-            return self.createErrorResponse(1, -32000,
+            JsonRpcError jsonRpcError = self.createErrorResponse(1, NOT_ACCEPTABLE,
                 "Not Acceptable: Client must accept both application/json and text/event-stream");
+            return <http:NotAcceptable>{
+                body: jsonRpcError
+            };
         }
 
         // Validate Content-Type header
         string|http:HeaderNotFoundError contentTypeHeader = headers.getHeader(CONTENT_TYPE_HEADER);
         if contentTypeHeader is http:HeaderNotFoundError {
-            return self.createErrorResponse(null, -32000,
+            JsonRpcError jsonRpcError = self.createErrorResponse(null, UNSUPPORTED_MEDIA_TYPE,
                 "Unsupported Media Type: Content-Type must be application/json");
+            return <http:UnsupportedMediaType>{
+                body: jsonRpcError
+            };
         }
 
         if !contentTypeHeader.includes(CONTENT_TYPE_JSON) {
-            return self.createErrorResponse(null, -32000,
+            JsonRpcError jsonRpcError = self.createErrorResponse(null, UNSUPPORTED_MEDIA_TYPE,
                 "Unsupported Media Type: Content-Type must be application/json");
+            return <http:UnsupportedMediaType>{
+                body: jsonRpcError
+            };
         }
 
         return ();
     }
 
-    private isolated function processJsonRpcRequest(JsonRpcRequest request) returns http:BadRequest|http:Ok|error {
+    private isolated function processJsonRpcRequest(JsonRpcRequest request) returns http:BadRequest|http:Ok {
         match request.method {
             "initialize" => {
                 return self.handleInitializeRequest(request);
@@ -113,7 +127,10 @@ DispatcherService dispatcherService = isolated service object {
                 return self.handleCallToolRequest(request);
             }
             _ => {
-                return self.createErrorResponse(request.id, METHOD_NOT_FOUND, "Method not found");
+                JsonRpcError jsonRpcError = self.createErrorResponse(request.id, METHOD_NOT_FOUND, "Method not found");
+                return <http:BadRequest>{
+                    body: jsonRpcError
+                };
             }
         }
     }
@@ -141,16 +158,22 @@ DispatcherService dispatcherService = isolated service object {
         JsonRpcRequest {jsonrpc, id, ...request} = jsonRpcRequest;
         InitializeRequest|error initRequest = request.cloneWithType(InitializeRequest);
         if initRequest is error {
-            return self.createErrorResponse(id, INVALID_REQUEST,
+            JsonRpcError jsonRpcError = self.createErrorResponse(id, INVALID_REQUEST,
                 string `Invalid request: ${initRequest.message()}`);
+            return <http:BadRequest>{
+                body: jsonRpcError
+            };
         }
 
         lock {
             // If it's a server with session management and the session ID is already set we should reject the request
             // to avoid re-initialization.
             if self.isInitialized && self.sessionId != () {
-                return self.createErrorResponse(id, INVALID_REQUEST,
-                "Invalid Request: Only one initialization request is allowed");
+                JsonRpcError jsonRpcError = self.createErrorResponse(id, INVALID_REQUEST,
+                    "Invalid Request: Only one initialization request is allowed");
+                return <http:BadRequest>{
+                    body: jsonRpcError.cloneReadOnly()
+                };
             }
 
             self.isInitialized = true;
@@ -183,14 +206,20 @@ DispatcherService dispatcherService = isolated service object {
         lock {
             // Check if initialized
             if !self.isInitialized {
-                return self.createErrorResponse(request.id, INVALID_REQUEST,
-                "Client must be initialized before making requests");
+                JsonRpcError jsonRpcError = self.createErrorResponse(request.id, INVALID_REQUEST,
+                    "Client must be initialized before making requests");
+                return <http:BadRequest>{
+                    body: jsonRpcError.cloneReadOnly()
+                };
             }
 
             ListToolsResult|error listToolsResult = self.executeOnListTools();
             if listToolsResult is error {
-                return self.createErrorResponse(request.id, INTERNAL_ERROR,
-                string `Failed to list tools: ${listToolsResult.message()}`);
+                JsonRpcError jsonRpcError = self.createErrorResponse(request.id, INTERNAL_ERROR,
+                    string `Failed to list tools: ${listToolsResult.message()}`);
+                return <http:BadRequest>{
+                    body: jsonRpcError.cloneReadOnly()
+                };
             }
 
             return <http:Ok>{
@@ -210,21 +239,30 @@ DispatcherService dispatcherService = isolated service object {
         lock {
             // Check if initialized
             if !self.isInitialized {
-                return self.createErrorResponse(request.id, INVALID_REQUEST,
-                "Client must be initialized before making requests");
+                JsonRpcError jsonRpcError = self.createErrorResponse(request.id, INVALID_REQUEST,
+                    "Client must be initialized before making requests");
+                return <http:BadRequest>{
+                    body: jsonRpcError.cloneReadOnly()
+                };
             }
 
             // Extract and validate parameters
             CallToolParams|error params = request.cloneReadOnly().params.ensureType(CallToolParams);
             if params is error {
-                return self.createErrorResponse(request.id, INVALID_PARAMS,
-                string `Invalid parameters: ${params.message()}`);
+                JsonRpcError jsonRpcError = self.createErrorResponse(request.id, INVALID_PARAMS,
+                    string `Invalid parameters: ${params.message()}`);
+                return <http:BadRequest>{
+                    body: jsonRpcError.cloneReadOnly()
+                };
             }
 
             CallToolResult|error callToolResult = self.executeOnCallTool(params);
             if callToolResult is error {
-                return self.createErrorResponse(request.id, INTERNAL_ERROR,
-                string `Failed to call tool '${params.name}': ${callToolResult.message()}`);
+                JsonRpcError jsonRpcError = self.createErrorResponse(request.id, INTERNAL_ERROR,
+                    string `Failed to call tool '${params.name}': ${callToolResult.message()}`);
+                return <http:BadRequest>{
+                    body: jsonRpcError.cloneReadOnly()
+                };
             }
 
             return <http:Ok>{
@@ -249,15 +287,13 @@ DispatcherService dispatcherService = isolated service object {
         return LATEST_PROTOCOL_VERSION;
     }
 
-    private isolated function createErrorResponse(RequestId? id, int code, string message) returns http:BadRequest {
+    private isolated function createErrorResponse(RequestId? id, int code, string message) returns JsonRpcError {
         return {
-            body: {
-                jsonrpc: JSONRPC_VERSION,
-                id: id,
-                'error: {
-                    code: code,
-                    message: message
-                }
+            jsonrpc: JSONRPC_VERSION,
+            id: id,
+            'error: {
+                code: code,
+                message: message
             }
         };
     }

@@ -80,5 +80,8 @@ public type ListToolsError distinct ClientError;
 # Error for failures during tool execution operations.
 public type ToolCallError distinct ClientError;
 
-# Errors for failures occuring during server operations.
+# Errors for failures occurring during server operations.
 public type ServerError distinct Error;
+
+# Custom error type for dispatcher service operations.
+public type DispatcherError distinct ServerError;

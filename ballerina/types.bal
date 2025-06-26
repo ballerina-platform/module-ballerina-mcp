@@ -106,6 +106,10 @@ public const METHOD_NOT_FOUND = -32601;
 public const INVALID_PARAMS = -32602;
 public const INTERNAL_ERROR = -32603;
 
+// Library-defined error codes
+public const NOT_ACCEPTABLE = -32001;
+public const UNSUPPORTED_MEDIA_TYPE = -32002;
+
 # A response to a request that indicates an error occurred.
 public type JsonRpcError record {
     # The JSON-RPC protocol version
