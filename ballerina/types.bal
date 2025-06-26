@@ -109,12 +109,16 @@ public const METHOD_NOT_FOUND = -32601;
 public const INVALID_PARAMS = -32602;
 public const INTERNAL_ERROR = -32603;
 
+// Library-defined error codes
+public const NOT_ACCEPTABLE = -32001;
+public const UNSUPPORTED_MEDIA_TYPE = -32002;
+
 # A response to a request that indicates an error occurred.
 public type JsonRpcError record {
     # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
     # Identifier of the request
-    RequestId id;
+    RequestId? id;
     # The error information
     record {
         # The error type that occurred
@@ -525,3 +529,24 @@ public type ServerNotification CancelledNotification
 
 # Represents a result sent from the server to the client.
 public type ServerResult InitializeResult|CallToolResult|ListToolsResult|EmptyResult;
+
+# Represents a tool configuration that can be used to define tools available in the MCP service.
+public type McpToolConfig record {|
+    # The description of the tool.
+    string description?;
+    # The JSON schema for the tool's parameters.
+    json schema?;
+|};
+
+# Annotation to mark a function as an MCP tool configuration.
+public annotation McpToolConfig McpTool on object function;
+
+# Defines a mcp service interface that handles incoming mcp requests.
+public type AdvancedService distinct isolated service object {
+    remote isolated function onListTools() returns ListToolsResult|error;
+    remote isolated function onCallTool(CallToolParams params) returns CallToolResult|error;
+};
+
+public type Service distinct isolated service object {
+
+};
