@@ -18,19 +18,19 @@
 
 package io.ballerina.stdlib.mcp.plugin;
 
-import io.ballerina.compiler.syntax.tree.AnnotationNode;
+import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class ModifierContext {
-    private final Map<AnnotationNode, ToolAnnotationConfig> annotationConfigMap = new HashMap<>();
+    private final Map<FunctionDefinitionNode, ToolAnnotationConfig> annotationConfigMap = new HashMap<>();
 
-    void add(AnnotationNode node, ToolAnnotationConfig config) {
+    void add(FunctionDefinitionNode node, ToolAnnotationConfig config) {
         annotationConfigMap.put(node, config);
     }
 
-    Map<AnnotationNode, ToolAnnotationConfig> getAnnotationConfigMap() {
+    Map<FunctionDefinitionNode, ToolAnnotationConfig> getAnnotationConfigMap() {
         return annotationConfigMap;
     }
 }

@@ -18,18 +18,26 @@
 
 package io.ballerina.stdlib.mcp.plugin;
 
+import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.api.symbols.AnnotationSymbol;
 import io.ballerina.compiler.api.symbols.Documentable;
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
+import io.ballerina.compiler.api.symbols.SymbolKind;
+import io.ballerina.compiler.syntax.tree.AnnotationNode;
+import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
+import io.ballerina.compiler.syntax.tree.MetadataNode;
+import io.ballerina.compiler.syntax.tree.NodeList;
+
+import java.util.Optional;
 
 /**
  * Util class for the compiler plugin.
  */
 public class Utils {
     public static final String BALLERINA_ORG = "ballerina";
-    private static final String TOOL_ANNOTATION_NAME = "McpTool";
-    private static final String MCP_PACKAGE_NAME = "mcp";
+    public static final String TOOL_ANNOTATION_NAME = "McpTool";
+    public static final String MCP_PACKAGE_NAME = "mcp";
 
     private Utils() {
     }
@@ -63,7 +71,30 @@ public class Utils {
         return documentable.documentation().get().description().get();
     }
 
-    public static String addDoubleQuotes(String functionName) {
-        return "\"" + functionName + "\"";
+    public static String escapeDoubleQuotes(String input) {
+        return input.replace("\"", "\\\"");
+    }
+
+
+    public static String addDoubleQuotes(String input) {
+        return "\"" + input + "\"";
+    }
+
+    public static Optional<AnnotationNode> getToolAnnotationNode(SemanticModel semanticModel,
+                                                                 FunctionDefinitionNode functionDefinitionNode) {
+        Optional<MetadataNode> metadataNode = functionDefinitionNode.metadata();
+        if (metadataNode.isEmpty()) {
+            return Optional.empty();
+        }
+
+        NodeList<AnnotationNode> annotationNodes = metadataNode.get().annotations();
+        return annotationNodes.stream()
+                .filter(annotationNode ->
+                        semanticModel.symbol(annotationNode)
+                                .filter(symbol -> symbol.kind() == SymbolKind.ANNOTATION)
+                                .filter(symbol -> Utils.isMcpToolAnnotation((AnnotationSymbol) symbol))
+                                .isPresent()
+                )
+                .findFirst();
     }
 }

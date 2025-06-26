@@ -424,11 +424,11 @@ public type McpToolConfig record {|
 public annotation McpToolConfig McpTool on object function;
 
 # Defines a mcp service interface that handles incoming mcp requests.
-public type McpService distinct isolated service object {
+public type AdvancedService distinct isolated service object {
     remote isolated function onListTools() returns ListToolsResult|error;
     remote isolated function onCallTool(CallToolParams params) returns CallToolResult|error;
 };
 
-public type McpDeclarativeService distinct isolated service object {
+public type Service distinct isolated service object {
 
 };

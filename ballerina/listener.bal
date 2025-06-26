@@ -65,7 +65,7 @@ public class Listener {
     # + mcpService - Service to attach.
     # + name - Path(s) to mount the service on (string or string array).
     # + return - error? if attachment fails.
-    public isolated function attach(McpService|McpDeclarativeService mcpService, string[]|string? name = ()) returns error? {
+    public isolated function attach(Service|AdvancedService mcpService, string[]|string? name = ()) returns error? {
         check self.httpListener.attach(self.dispatcherService, name);
         self.dispatcherService.addServiceRef(mcpService);
     }
@@ -74,7 +74,7 @@ public class Listener {
     #
     # + mcpService - Service to detach.
     # + return - error? if detachment fails.
-    public isolated function detach(McpService|McpDeclarativeService mcpService) returns error? {
+    public isolated function detach(Service|AdvancedService mcpService) returns error? {
         check self.httpListener.detach(self.dispatcherService);
         self.dispatcherService.removeServiceRef();
     }

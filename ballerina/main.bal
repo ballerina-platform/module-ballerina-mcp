@@ -63,9 +63,9 @@
 //     }
 // }
 
-listener Listener basicListener = check new (9091, serverInfo = {name: "Basic MCP Server", version: "1.0.0"});
+listener Listener basicListener = check new (9092, serverInfo = {name: "Basic MCP Server", version: "1.0.0"});
 
-isolated service McpDeclarativeService /mcp on basicListener {
+isolated service Service /mcp on basicListener {
     @McpTool {
         description: "Add two numbers",
         schema: {
@@ -78,6 +78,11 @@ isolated service McpDeclarativeService /mcp on basicListener {
         }
     }
     remote function add(int a, int b) returns int {
+        return a + b;
+    }
+
+    @McpTool
+    remote function add1(int a, int b) returns int {
         return a + b;
     }
 }

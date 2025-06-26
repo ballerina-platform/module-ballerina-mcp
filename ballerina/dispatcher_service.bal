@@ -24,18 +24,18 @@ type DispatcherError distinct error;
 type DispatcherService distinct service object {
     *http:Service;
 
-    isolated function addServiceRef(McpService|McpDeclarativeService mcpService);
+    isolated function addServiceRef(Service|AdvancedService mcpService);
     isolated function removeServiceRef();
     isolated function setServerConfigs(ServerConfiguration serverConfigs);
 };
 
 DispatcherService dispatcherService = isolated service object {
     private ServerConfiguration? serverConfigs = ();
-    private McpService|McpDeclarativeService? mcpService = ();
+    private Service|AdvancedService? mcpService = ();
     private boolean isInitialized = false;
     private string? sessionId = ();
 
-    isolated function addServiceRef(McpService|McpDeclarativeService mcpService) {
+    isolated function addServiceRef(Service|AdvancedService mcpService) {
         lock {
             self.mcpService = mcpService;
         }
@@ -264,10 +264,10 @@ DispatcherService dispatcherService = isolated service object {
 
     private isolated function executeOnListTools() returns ListToolsResult|error {
         lock {
-            McpService|McpDeclarativeService? mcpService = self.mcpService;
-            if mcpService is McpService {
+            Service|AdvancedService? mcpService = self.mcpService;
+            if mcpService is AdvancedService {
                 return check invokeOnListTools(mcpService);
-            } else if mcpService is McpDeclarativeService {
+            } else if mcpService is Service {
                 return check listToolsForRemoteFunctions(mcpService);
             }
             return error DispatcherError("MCP Service is not attached");
@@ -276,10 +276,10 @@ DispatcherService dispatcherService = isolated service object {
 
     private isolated function executeOnCallTool(CallToolParams params) returns CallToolResult|error {
         lock {
-            McpService|McpDeclarativeService? mcpService = self.mcpService;
-            if mcpService is McpService {
+            Service|AdvancedService? mcpService = self.mcpService;
+            if mcpService is AdvancedService {
                 return check invokeOnCallTool(mcpService, params.cloneReadOnly());
-            } else if mcpService is McpDeclarativeService {
+            } else if mcpService is Service {
                 return check callToolForRemoteFunctions(mcpService, params.cloneReadOnly());
             }
             return error DispatcherError("MCP Service is not attached");
