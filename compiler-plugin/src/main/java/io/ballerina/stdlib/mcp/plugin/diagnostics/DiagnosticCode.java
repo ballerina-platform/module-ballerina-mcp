@@ -19,8 +19,8 @@
 package io.ballerina.stdlib.mcp.plugin.diagnostics;
 
 /**
- * Compilation error codes used in Ballerina AI package compiler plugin.
+ * Compilation error codes used in Ballerina mcp package compiler plugin.
  */
 public enum DiagnosticCode {
-    AI_101
+    MCP_101
 }

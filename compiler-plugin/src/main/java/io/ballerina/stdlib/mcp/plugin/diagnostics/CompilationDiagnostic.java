@@ -30,7 +30,7 @@ import static io.ballerina.tools.diagnostics.DiagnosticSeverity.ERROR;
  * Compilation errors in the Ballerina AI package.
  */
 public enum CompilationDiagnostic {
-    UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION(DiagnosticMessage.ERROR_101, DiagnosticCode.AI_101, ERROR);
+    UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION(DiagnosticMessage.ERROR_101, DiagnosticCode.MCP_101, ERROR);
 
     private final String diagnostic;
     private final String diagnosticCode;
