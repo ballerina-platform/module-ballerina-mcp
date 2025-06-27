@@ -15,7 +15,7 @@
 // under the License.
 
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
-public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse|JsonRpcError;
+public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse;
 
 public const LATEST_PROTOCOL_VERSION = "2025-03-26";
 public const SUPPORTED_PROTOCOL_VERSIONS = [
@@ -26,15 +26,8 @@ public const SUPPORTED_PROTOCOL_VERSIONS = [
 
 public const JSONRPC_VERSION = "2.0";
 
-# Notification methods
+// # Notification methods
 public const NOTIFICATION_INITIALIZED = "notifications/initialized";
-public const NOTIFICATION_CANCELLED = "notifications/cancelled";
-public const NOTIFICATION_PROGRESS = "notifications/progress";
-public const NOTIFICATION_RESOURCES_LIST_CHANGED = "notifications/resources/list_changed";
-public const NOTIFICATION_RESOURCES_UPDATED = "notifications/resources/updated";
-public const NOTIFICATION_PROMPTS_LIST_CHANGED = "notifications/prompts/list_changed";
-public const NOTIFICATION_TOOLS_LIST_CHANGED = "notifications/tools/list_changed";
-public const NOTIFICATION_MESSAGE = "notifications/message";
 
 # A progress token, used to associate progress notifications with the original request.
 public type ProgressToken string|int;
@@ -42,18 +35,22 @@ public type ProgressToken string|int;
 # An opaque token used to represent a cursor for pagination.
 public type Cursor string;
 
+# Parameters for the request
+public type RequestParams record {
+    # Optional parameters for the request
+    record {
+        # If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress).
+        # The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+        ProgressToken progressToken?;
+    } _meta?;
+};
+
 # Represents a generic request in the protocol
 public type Request record {|
     # The method name for the request
     string method;
     # Optional parameters for the request
-    record {
-        record {|
-            # If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress).
-            # The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-            ProgressToken progressToken?;
-        |} _meta?;
-    } params?;
+    RequestParams params?;
 |};
 
 # Represents a notification.
@@ -77,20 +74,20 @@ public type Result record {
 public type RequestId string|int;
 
 # A request that expects a response.
-public type JsonRpcRequest record {
+public type JsonRpcRequest record {|
     *Request;
     # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
     # Identifier established by the client that should be returned in the response
     RequestId id;
-};
+|};
 
 # A notification which does not expect a response.
-public type JsonRpcNotification record {
+public type JsonRpcNotification record {|
     *Notification;
     # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
-};
+|};
 
 # A successful (non-error) response to a request.
 public type JsonRpcResponse record {|
@@ -102,55 +99,14 @@ public type JsonRpcResponse record {|
     ServerResult result;
 |};
 
-// Standard JSON-RPC error codes
-public const PARSE_ERROR = -32700;
-public const INVALID_REQUEST = -32600;
-public const METHOD_NOT_FOUND = -32601;
-public const INVALID_PARAMS = -32602;
-public const INTERNAL_ERROR = -32603;
-
-# A response to a request that indicates an error occurred.
-public type JsonRpcError record {
-    # The JSON-RPC protocol version
-    JSONRPC_VERSION jsonrpc;
-    # Identifier of the request
-    RequestId id;
-    # The error information
-    record {
-        # The error type that occurred
-        int code;
-        # A short description of the error. The message SHOULD be limited to a concise single sentence.
-        string message;
-        # Additional information about the error. The value of this member is defined by the sender (e.g. detailed error information, nested errors etc.).
-        anydata data?;
-    } 'error;
-};
-
-# A response that indicates success but carries no data.
-public type EmptyResult Result;
-
-# This notification can be sent by either side to indicate that it is cancelling a previously-issued request.
-public type CancelledNotification record {|
-    *Notification;
-    # The method name for this notification
-    NOTIFICATION_CANCELLED method;
-    # The parameters for the cancellation notification
-    record {|
-        # The ID of the request to cancel.
-        # This MUST correspond to the ID of a request previously issued in the same direction.
-        RequestId requestId;
-        # An optional string describing the reason for the cancellation. This MAY be logged or presented to the user.
-        string? reason = ();
-    |} params;
-|};
-
 # This request is sent from the client to the server when it first connects, asking it to begin initialization.
 type InitializeRequest record {|
     *Request;
     # Method name for the request
     "initialize" method;
     # Parameters for the initialize request
-    record {|
+    record {
+        *RequestParams;
         # The latest version of the Model Context Protocol that the client supports. 
         # The client MAY decide to support older versions as well.
         string protocolVersion;
@@ -158,11 +114,11 @@ type InitializeRequest record {|
         ClientCapabilities capabilities;
         # Information about the client implementation
         Implementation clientInfo;
-    |} params;
+    } params;
 |};
 
 # After receiving an initialize request from the client, the server sends this response.
-public type InitializeResult record {|
+public type InitializeResult record {
     *Result;
     # The version of the Model Context Protocol that the server wants to use.
     # This may not match the version that the client requested.
@@ -177,7 +133,7 @@ public type InitializeResult record {|
     # It can be thought of like a "hint" to the model.
     # For example, this information MAY be added to the system prompt.
     string instructions?;
-|};
+};
 
 # This notification is sent from the client to the server after initialization has finished.
 public type InitializedNotification record {|
@@ -190,10 +146,10 @@ public type InitializedNotification record {|
 # but this is not a closed set: any client can define its own, additional capabilities.
 public type ClientCapabilities record {
     # Present if the client supports listing roots.
-    record {|
+    record {
         # Whether the client supports notifications for changes to the roots list.
         boolean listChanged?;
-    |} roots?;
+    } roots?;
     # Present if the client supports sampling from an LLM. 
     record {} sampling?;
 };
@@ -204,147 +160,84 @@ public type ServerCapabilities record {
     # Experimental, non-standard capabilities that the server supports.
     record {|record {}...;|} experimental?;
     # Present if the server supports sending log messages to the client.
-    record {} logging?;
+    record {|record {}...;|} logging?;
     # Present if the server supports argument autocompletion suggestions.
-    record {} completions?;
+    record {|record {}...;|} completions?;
     # Present if the server offers any prompt templates.
-    record {|
+    record {
         # Whether this server supports notifications for changes to the prompt list.
         boolean listChanged?;
-    |} prompts?;
+    } prompts?;
     # Present if the server offers any resources to read.
-    record {|
+    record {
         # Whether this server supports subscribing to resource updates.
         boolean subscribe?;
         # Whether this server supports notifications for changes to the resource list.
         boolean listChanged?;
-    |} resources?;
+    } resources?;
     # Present if the server offers any tools to call.
-    record {|
+    record {
         # Whether this server supports notifications for changes to the tool list.
         boolean listChanged?;
-    |} tools?;
+    } tools?;
 };
 
 # Describes the name and version of an MCP implementation.
-public type Implementation record {|
+public type Implementation record {
     # The name of the implementation
     string name;
     # The version of the implementation
     string version;
-|};
-
-# A ping, issued by either the server or the client, to check that 
-# the other party is still alive. The receiver must promptly respond, 
-# or else may be disconnected.
-public type PingRequest record {|
-    *Request;
-    # The method name
-    "ping" method;
-|};
-
-# An out-of-band notification used to inform the receiver of a progress update for a long-running request.
-public type ProgressNotification record {|
-    *Notification;
-    # The method name for the notification
-    NOTIFICATION_PROGRESS method;
-    # The parameters for the progress notification
-    record {
-        # The progress token which was given in the initial request, 
-        # used to associate this notification with the request that is proceeding.
-        ProgressToken progressToken;
-        # The progress thus far. This should increase every time progress is made, 
-        # even if the total is unknown.
-        int progress;
-        # Total number of items to process (or total progress required), if known.
-        int total?;
-        # An optional message describing the current progress.
-        string message?;
-        record {} _meta?;
-    } params;
-|};
+};
 
 # Represents a paginated request with optional cursor-based pagination.
 public type PaginatedRequest record {|
     # Optional pagination parameters
-    record {|
-        # An opaque token representing the current pagination position.
-        # If provided, the server should return results starting after this cursor.
-        Cursor cursor?;
-    |} params?;
+    RequestParams params?;
 |};
 
 # Result that supports pagination
-public type PaginatedResult record {|
+public type PaginatedResult record {
     *Result;
     # An opaque token representing the pagination position after the last returned result.
     # If present, there may be more results available.
     Cursor nextCursor?;
-|};
-
-# An optional notification from the server to the client, informing it that the list of resources it can read from has changed. 
-public type ResourceListChangedNotification record {|
-    *Notification;
-    # The JSON-RPC method name for resource list changed notifications
-    NOTIFICATION_RESOURCES_LIST_CHANGED method;
-|};
-
-# A notification from the server to the client, informing it that a resource has changed and may need to be read again.
-public type ResourceUpdatedNotification record {|
-    *Notification;
-    # The JSON-RPC method name for resource updated notifications
-    NOTIFICATION_RESOURCES_UPDATED method;
-    # The parameters for the resource updated notification
-    record {
-        # The URI of the resource that has been updated. This might be a sub-resource of the one 
-        # that the client actually subscribed to.
-        string uri;
-        record {} _meta?;
-    } params;
-|};
+};
 
 # The contents of a specific resource or sub-resource.
-public type ResourceContents record {|
+public type ResourceContents record {
     # The URI of this resource.
     string uri;
     # The MIME type of this resource, if known.
     string mimeType?;
-|};
+};
 
 # Text resource contents
-public type TextResourceContents record {|
+public type TextResourceContents record {
     *ResourceContents;
     # The text of the item. This must only be set if the item can actually be represented as text (not binary data).
     string text;
-|};
+};
 
 # Binary resource contents
-public type BlobResourceContents record {|
+public type BlobResourceContents record {
     *ResourceContents;
     # A base64-encoded string representing the binary data of the item.
     string blob;
-|};
+};
 
 # The sender or recipient of messages and data in a conversation.
 public type Role "user"|"assistant";
 
 # The contents of a resource, embedded into a prompt or tool call result.
-public type EmbeddedResource record {|
+public type EmbeddedResource record {
     # The type of content
     "resource" 'type;
     # The resource content
     TextResourceContents|BlobResourceContents 'resource;
     # Optional annotations for the client
     Annotations annotations?;
-|};
-
-# An optional notification from the server to the client, informing it that
-# the list of prompts it offers has changed.
-public type PromptListChangedNotification record {|
-    *Notification;
-    # The JSON-RPC method name for prompt list changed notifications
-    NOTIFICATION_PROMPTS_LIST_CHANGED method;
-|};
+};
 
 # Sent from the client to request a list of tools the server has.
 public type ListToolsRequest record {|
@@ -354,20 +247,20 @@ public type ListToolsRequest record {|
 |};
 
 # The server's response to a tools/list request from the client.
-public type ListToolsResult record {|
+public type ListToolsResult record {
     *PaginatedResult;
     # A list of tools available on the server.
     Tool[] tools;
-|};
+};
 
 # The server's response to a tool call.
-public type CallToolResult record {|
+public type CallToolResult record {
     # The content of the tool call result
     (TextContent|ImageContent|AudioContent|EmbeddedResource)[] content;
     # Whether the tool call ended in an error.
     # If not set, this is assumed to be false (the call was successful).
     boolean isError?;
-|};
+};
 
 # Used by the client to invoke a tool provided by the server.
 public type CallToolRequest record {|
@@ -379,23 +272,16 @@ public type CallToolRequest record {|
 
 # Parameters for the tools/call request
 public type CallToolParams record {|
+    *RequestParams;
     # The name of the tool to invoke
     string name;
     # Optional arguments to pass to the tool
     record {} arguments?;
 |};
 
-# An optional notification from the server to the client, informing it that the list of tools 
-# it offers has changed.
-public type ToolListChangedNotification record {|
-    *Notification;
-    # The JSON-RPC method name for tool list changed notifications
-    NOTIFICATION_TOOLS_LIST_CHANGED method;
-|};
-
 # Additional properties describing a Tool to clients.
 # NOTE: all properties in ToolAnnotations are **hints**.
-public type ToolAnnotations record {|
+public type ToolAnnotations record {
     # A human-readable title for the tool.
     string title?;
     # If true, the tool does not modify its environment.
@@ -417,10 +303,10 @@ public type ToolAnnotations record {|
     # of a memory tool is not.
     # Default: true
     boolean openWorldHint?;
-|};
+};
 
 # Definition for a tool the client can call.
-public type Tool record {|
+public type Tool record {
     # The name of the tool
     string name;
     # A human-readable description of the tool
@@ -434,28 +320,7 @@ public type Tool record {|
     } inputSchema;
     # Optional additional tool information.
     ToolAnnotations annotations?;
-|};
-
-# Notification of a log message passed from server to client. If no logging/setLevel request has been 
-# sent from the client, the server MAY decide which messages to send automatically.
-public type LoggingMessageNotification record {|
-    *Notification;
-    # The method name for the notification
-    NOTIFICATION_MESSAGE method;
-    # The parameters for the logging message notification
-    record {
-        # The severity of this log message.
-        LoggingLevel level;
-        # An optional name of the logger issuing this message.
-        string logger?;
-        # The data to be logged, such as a string message or an object. Any JSON serializable type is allowed here.
-        anydata data;
-        record {} _meta?;
-    } params;
-|};
-
-# The severity of a log message.
-public type LoggingLevel "debug"|"info"|"notice"|"warning"|"error"|"critical"|"alert"|"emergency";
+};
 
 # Optional annotations for the client. The client can use annotations to inform how objects are used or displayed
 public type Annotations record {|
@@ -469,17 +334,17 @@ public type Annotations record {|
 |};
 
 # Text provided to or from an LLM.
-public type TextContent record {|
+public type TextContent record {
     # The type of content
     "text" 'type;
     # The text content of the message
     string text;
     # Optional annotations for the client
     Annotations annotations?;
-|};
+};
 
 # An image provided to or from an LLM.
-public type ImageContent record {|
+public type ImageContent record {
     # The type of content
     "image" 'type;
     # The base64-encoded image data
@@ -488,10 +353,10 @@ public type ImageContent record {|
     string mimeType;
     # Optional annotations for the client
     Annotations annotations?;
-|};
+};
 
 # Audio provided to or from an LLM.
-public type AudioContent record {|
+public type AudioContent record {
     # The type of content
     "audio" 'type;
     # The base64-encoded audio data
@@ -500,28 +365,7 @@ public type AudioContent record {|
     string mimeType;
     # Optional annotations for the client
     Annotations annotations?;
-|};
-
-# Represents a request sent from the client to the server.
-public type ClientRequest PingRequest|InitializeRequest|CallToolRequest|ListToolsRequest;
-
-# Represents a notification sent from the client to the server.
-public type ClientNotification CancelledNotification|ProgressNotification|InitializedNotification;
-
-# Represents a result sent from the client to the server.
-public type ClientResult EmptyResult;
-
-# Represents a response sent from the server to the client.
-public type ServerRequest PingRequest;
-
-# Represents a notification sent from the server to the client.
-public type ServerNotification CancelledNotification
-    |ProgressNotification
-    |LoggingMessageNotification
-    |ResourceUpdatedNotification
-    |ResourceListChangedNotification
-    |ToolListChangedNotification
-    |PromptListChangedNotification;
+};
 
 # Represents a result sent from the server to the client.
-public type ServerResult InitializeResult|CallToolResult|ListToolsResult|EmptyResult;
+public type ServerResult InitializeResult|CallToolResult|ListToolsResult;
