@@ -16,4 +16,4 @@ graalvmCompatible = true
 groupId = "io.ballerina.stdlib."
 artifactId = "mcp-native"
 version = "0.4.2"
-path = "../native/build/libs/mcp-native-0.4.2-SNAPSHOT.jar"
+path = "../native/build/libs/mcp-native-0.4.2.jar"
