@@ -127,24 +127,6 @@ public type JsonRpcError record {
     } 'error;
 };
 
-# A response that indicates success but carries no data.
-public type EmptyResult Result;
-
-# This notification can be sent by either side to indicate that it is cancelling a previously-issued request.
-public type CancelledNotification record {|
-    *Notification;
-    # The method name for this notification
-    NOTIFICATION_CANCELLED method;
-    # The parameters for the cancellation notification
-    record {|
-        # The ID of the request to cancel.
-        # This MUST correspond to the ID of a request previously issued in the same direction.
-        RequestId requestId;
-        # An optional string describing the reason for the cancellation. This MAY be logged or presented to the user.
-        string? reason = ();
-    |} params;
-|};
-
 # This request is sent from the client to the server when it first connects, asking it to begin initialization.
 type InitializeRequest record {|
     *Request;
@@ -414,7 +396,7 @@ public type AudioContent record {
 };
 
 # Represents a result sent from the server to the client.
-public type ServerResult InitializeResult|CallToolResult|ListToolsResult|EmptyResult;
+public type ServerResult InitializeResult|CallToolResult|ListToolsResult;
 
 # Represents a tool configuration that can be used to define tools available in the MCP service.
 public type McpToolConfig record {|
