@@ -249,7 +249,7 @@ DispatcherService dispatcherService = isolated service object {
         }
 
         // Extract and validate parameters
-        CallToolParams|error params = request.params.ensureType(CallToolParams);
+        CallToolParams|error params = request.params.cloneWithType();
         if params is error {
             JsonRpcError jsonRpcError = self.createJsonRpcError(INVALID_PARAMS,
                 string `Invalid parameters: ${params.message()}`, request.id);
