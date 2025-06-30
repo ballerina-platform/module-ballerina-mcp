@@ -19,7 +19,6 @@
 package io.ballerina.stdlib.mcp;
 
 import io.ballerina.runtime.api.Environment;
-import io.ballerina.runtime.api.creators.ErrorCreator;
 import io.ballerina.runtime.api.creators.ValueCreator;
 import io.ballerina.runtime.api.types.ArrayType;
 import io.ballerina.runtime.api.types.Parameter;
@@ -47,19 +46,19 @@ import static io.ballerina.runtime.api.utils.StringUtils.fromString;
  */
 public final class McpServiceMethodHelper {
 
-    private static final String FIELD_TOOLS = "tools";
-    private static final String FIELD_NAME = "name";
-    private static final String FIELD_DESCRIPTION = "description";
-    private static final String FIELD_SCHEMA = "schema";
-    private static final String FIELD_INPUT_SCHEMA = "inputSchema";
-    private static final String FIELD_ARGUMENTS = "arguments";
-    private static final String FIELD_CONTENT = "content";
-    private static final String FIELD_TYPE = "type";
-    private static final String FIELD_TEXT = "text";
+    private static final String TOOLS_FIELD_NAME = "tools";
+    private static final String NAME_FIELD_NAME = "name";
+    private static final String DESCRIPTION_FIELD_NAME = "description";
+    private static final String SCHEMA_FIELD_NAME = "schema";
+    private static final String INPUT_SCHEMA_FIELD_NAME = "inputSchema";
+    private static final String ARGUMENTS_FIELD_NAME = "arguments";
+    private static final String CONTENT_FIELD_NAME = "content";
+    private static final String TYPE_FIELD_NAME = "type";
+    private static final String TEXT_FIELD_NAME = "text";
 
     private static final String ANNOTATION_MCP_TOOL = "McpTool";
     private static final String TYPE_TEXT_CONTENT = "TextContent";
-    private static final String VALUE_TEXT = "text";
+    private static final String TEXT_VALUE_NAME = "text";
 
     private McpServiceMethodHelper() {}
 
@@ -97,7 +96,7 @@ public final class McpServiceMethodHelper {
         RecordType resultRecordType = (RecordType) typed.getDescribingType();
         BMap<BString, Object> result = ValueCreator.createRecordValue(resultRecordType);
 
-        ArrayType toolsArrayType = (ArrayType) resultRecordType.getFields().get(FIELD_TOOLS).getFieldType();
+        ArrayType toolsArrayType = (ArrayType) resultRecordType.getFields().get(TOOLS_FIELD_NAME).getFieldType();
         BArray tools = ValueCreator.createArrayValue(toolsArrayType);
 
         for (RemoteMethodType remoteMethod : getRemoteMethods(mcpService)) {
@@ -108,7 +107,7 @@ public final class McpServiceMethodHelper {
                             createToolRecord(toolsArrayType, remoteMethod, (BMap<?, ?>) annotation.getValue())
                     ));
         }
-        result.put(fromString(FIELD_TOOLS), tools);
+        result.put(fromString(TOOLS_FIELD_NAME), tools);
         return result;
     }
 
@@ -123,19 +122,18 @@ public final class McpServiceMethodHelper {
      */
     public static Object callToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
                                                     BTypedesc typed) {
-        BString toolName = (BString) params.get(fromString(FIELD_NAME));
+        BString toolName = (BString) params.get(fromString(NAME_FIELD_NAME));
 
-        RemoteMethodType method = getRemoteMethods(mcpService).stream()
+        Optional<RemoteMethodType> method = getRemoteMethods(mcpService).stream()
                 .filter(rmt -> rmt.getName().equals(toolName.getValue()))
-                .findFirst().orElse(null);
+                .findFirst();
 
-        if (method == null) {
-            BString errorMessage =
-                    fromString("RemoteMethodType with name '" + toolName.getValue() + "' not found");
-            return ErrorCreator.createError(errorMessage);
+        if (method.isEmpty()) {
+            return ModuleUtils
+                    .createError("RemoteMethodType with name '" + toolName.getValue() + "' not found");
         }
 
-        Object[] args = buildArgsForMethod(method, (BMap<?, ?>) params.get(fromString(FIELD_ARGUMENTS)));
+        Object[] args = buildArgsForMethod(method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)));
         Object result = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
 
         return createCallToolResult(typed, result);
@@ -151,9 +149,9 @@ public final class McpServiceMethodHelper {
         RecordType toolRecordType = (RecordType) ((ReferenceType) toolsArrayType.getElementType()).getReferredType();
         BMap<BString, Object> tool = ValueCreator.createRecordValue(toolRecordType);
 
-        tool.put(fromString(FIELD_NAME), fromString(remoteMethod.getName()));
-        tool.put(fromString(FIELD_DESCRIPTION), annotationValue.get(fromString(FIELD_DESCRIPTION)));
-        tool.put(fromString(FIELD_INPUT_SCHEMA), annotationValue.get(fromString(FIELD_SCHEMA)));
+        tool.put(fromString(NAME_FIELD_NAME), fromString(remoteMethod.getName()));
+        tool.put(fromString(DESCRIPTION_FIELD_NAME), annotationValue.get(fromString(DESCRIPTION_FIELD_NAME)));
+        tool.put(fromString(INPUT_SCHEMA_FIELD_NAME), annotationValue.get(fromString(SCHEMA_FIELD_NAME)));
         return tool;
     }
 
@@ -171,7 +169,7 @@ public final class McpServiceMethodHelper {
         RecordType resultRecordType = (RecordType) typed.getDescribingType();
         BMap<BString, Object> callToolResult = ValueCreator.createRecordValue(resultRecordType);
 
-        ArrayType contentArrayType = (ArrayType) resultRecordType.getFields().get(FIELD_CONTENT).getFieldType();
+        ArrayType contentArrayType = (ArrayType) resultRecordType.getFields().get(CONTENT_FIELD_NAME).getFieldType();
         BArray contentArray = ValueCreator.createArrayValue(contentArrayType);
 
         UnionType contentUnionType = (UnionType) contentArrayType.getElementType();
@@ -179,17 +177,16 @@ public final class McpServiceMethodHelper {
                 .filter(type -> TYPE_TEXT_CONTENT.equals(type.getName()))
                 .findFirst();
         if (textContentTypeOpt.isEmpty()) {
-            BString errorMessage =
-                    fromString("No member type named 'TextContent' found in content union type.");
-            return ErrorCreator.createError(errorMessage);
+            return ModuleUtils
+                    .createError("No member type named 'TextContent' found in content union type.");
         }
         RecordType textContentRecordType = (RecordType) ((ReferenceType) textContentTypeOpt.get()).getReferredType();
         BMap<BString, Object> textContent = ValueCreator.createRecordValue(textContentRecordType);
-        textContent.put(fromString(FIELD_TYPE), fromString(VALUE_TEXT));
-        textContent.put(fromString(FIELD_TEXT), fromString(result == null ? "" : result.toString()));
+        textContent.put(fromString(TYPE_FIELD_NAME), fromString(TEXT_VALUE_NAME));
+        textContent.put(fromString(TEXT_FIELD_NAME), fromString(result == null ? "" : result.toString()));
         contentArray.append(textContent);
 
-        callToolResult.put(fromString(FIELD_CONTENT), contentArray);
+        callToolResult.put(fromString(CONTENT_FIELD_NAME), contentArray);
         return callToolResult;
     }
 }

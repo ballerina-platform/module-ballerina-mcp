@@ -19,12 +19,8 @@
 package io.ballerina.stdlib.mcp;
 
 import io.ballerina.runtime.api.Environment;
-import io.ballerina.runtime.api.creators.ErrorCreator;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BStream;
-import io.ballerina.runtime.api.values.BString;
-
-import static io.ballerina.runtime.api.utils.StringUtils.fromString;
 
 /**
  * Utility class for handling Server-Sent Events (SSE) streams in Ballerina via Java interop.
@@ -68,8 +64,7 @@ public final class SseEventStreamHelper {
     public static Object getNextSseEvent(Environment env, BObject object) {
         BStream sseStream = (BStream) object.getNativeData(SSE_STREAM_NATIVE_KEY);
         if (sseStream == null) {
-            BString errorMessage = fromString("Unable to obtain elements from stream. SSE stream not found.");
-            return ErrorCreator.createError(errorMessage);
+            return ModuleUtils.createError("Unable to obtain elements from stream. SSE stream not found.");
         }
         BObject iteratorObject = sseStream.getIteratorObj();
         // Use the Ballerina runtime to call the "next" method on the iterator and fetch the next event.
@@ -88,8 +83,7 @@ public final class SseEventStreamHelper {
     public static Object closeSseEventStream(Environment env, BObject object) {
         BStream sseStream = (BStream) object.getNativeData(SSE_STREAM_NATIVE_KEY);
         if (sseStream == null) {
-            BString errorMessage = fromString("Unable to obtain elements from stream. SSE stream not found.");
-            return ErrorCreator.createError(errorMessage);
+            return ModuleUtils.createError("Unable to obtain elements from stream. SSE stream not found.");
         }
         BObject iteratorObject = sseStream.getIteratorObj();
         // Use the Ballerina runtime to call the "close" method on the iterator and release resources.

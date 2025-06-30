@@ -20,6 +20,10 @@ package io.ballerina.stdlib.mcp;
 
 import io.ballerina.runtime.api.Environment;
 import io.ballerina.runtime.api.Module;
+import io.ballerina.runtime.api.creators.ErrorCreator;
+import io.ballerina.runtime.api.values.BError;
+
+import static io.ballerina.runtime.api.utils.StringUtils.fromString;
 
 public final class ModuleUtils {
     private static Module module;
@@ -35,5 +39,9 @@ public final class ModuleUtils {
     @SuppressWarnings("unused")
     public static void setModule(Environment env) {
         module = env.getCurrentModule();
+    }
+
+    public static BError createError(String errorMessage) {
+        return ErrorCreator.createError(fromString(errorMessage));
     }
 }
