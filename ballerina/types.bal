@@ -26,8 +26,18 @@ public const SUPPORTED_PROTOCOL_VERSIONS = [
 
 public const JSONRPC_VERSION = "2.0";
 
-// # Notification methods
-public const NOTIFICATION_INITIALIZED = "notifications/initialized";
+# Request methods
+public enum RequestMethod {
+    REQUEST_INITIALIZE = "initialize",
+    REQUEST_LIST_TOOLS = "tools/list",
+    REQUEST_CALL_TOOL = "tools/call"
+};
+
+# Notification methods
+public enum NotificationMethod {
+    NOTIFICATION_INITIALIZED = "notifications/initialized",
+    NOTIFICATION_PROGRESS = "notifications/progress"
+};
 
 # A progress token, used to associate progress notifications with the original request.
 public type ProgressToken string|int;
@@ -131,7 +141,7 @@ public type JsonRpcError record {
 type InitializeRequest record {|
     *Request;
     # Method name for the request
-    "initialize" method;
+    REQUEST_INITIALIZE method;
     # Parameters for the initialize request
     record {
         *RequestParams;
@@ -271,7 +281,7 @@ public type EmbeddedResource record {
 public type ListToolsRequest record {|
     *PaginatedRequest;
     # The method identifier for this request
-    "tools/list" method;
+    REQUEST_LIST_TOOLS method;
 |};
 
 # The server's response to a tools/list request from the client.
@@ -293,7 +303,7 @@ public type CallToolResult record {
 # Used by the client to invoke a tool provided by the server.
 public type CallToolRequest record {|
     # The JSON-RPC method name
-    "tools/call" method;
+    REQUEST_CALL_TOOL method;
     # The parameters for the tool call
     CallToolParams params;
 |};
@@ -403,7 +413,7 @@ public type McpToolConfig record {|
     # The description of the tool.
     string description?;
     # The JSON schema for the tool's parameters.
-    json schema?;
+    map<json> schema?;
 |};
 
 # Annotation to mark a function as an MCP tool configuration.
@@ -411,8 +421,8 @@ public annotation McpToolConfig McpTool on object function;
 
 # Defines a mcp service interface that handles incoming mcp requests.
 public type AdvancedService distinct isolated service object {
-    remote isolated function onListTools() returns ListToolsResult|error;
-    remote isolated function onCallTool(CallToolParams params) returns CallToolResult|error;
+    remote isolated function onListTools() returns ListToolsResult|ServerError;
+    remote isolated function onCallTool(CallToolParams params) returns CallToolResult|ServerError;
 };
 
 public type Service distinct isolated service object {

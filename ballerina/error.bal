@@ -84,4 +84,4 @@ public type ToolCallError distinct ClientError;
 public type ServerError distinct Error;
 
 # Custom error type for dispatcher service operations.
-public type DispatcherError distinct ServerError;
+type DispatcherError distinct ServerError;
