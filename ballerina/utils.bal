@@ -73,3 +73,20 @@ isolated function extractResultFromMessage(JsonRpcMessage message) returns Serve
     return error InvalidMessageTypeError("Received message from server is not a valid JsonRpcResponse.");
 }
 
+# Retrieves the service configuration from an MCP service.
+#
+# + mcpService - The MCP service instance
+# + return - The service configuration
+isolated function getServiceConfiguration(Service|AdvancedService mcpService) returns ServiceConfiguration {
+    typedesc mcpServiceType = typeof mcpService;
+    ServiceConfiguration? serviceConfig = mcpServiceType.@ServiceConfig;
+    if serviceConfig is () {
+        return {
+            info: {
+                name: "MCP Service",
+                version: "1.0.0"
+            }
+        };
+    }
+    return serviceConfig;
+}

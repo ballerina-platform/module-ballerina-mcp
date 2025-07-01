@@ -23,11 +23,9 @@ type DispatcherService distinct service object {
 
     isolated function addServiceRef(Service|AdvancedService mcpService);
     isolated function removeServiceRef();
-    isolated function setServerConfigs(ServerConfiguration serverConfigs);
 };
 
 DispatcherService dispatcherService = isolated service object {
-    private ServerConfiguration? serverConfigs = ();
     private Service|AdvancedService? mcpService = ();
     private boolean isInitialized = false;
     private string? sessionId = ();
@@ -44,11 +42,6 @@ DispatcherService dispatcherService = isolated service object {
         }
     }
 
-    isolated function setServerConfigs(ServerConfiguration serverConfigs) {
-        lock {
-            self.serverConfigs = serverConfigs.cloneReadOnly();
-        }
-    }
 
     isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers)
             returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok|ServerError {
@@ -132,7 +125,7 @@ DispatcherService dispatcherService = isolated service object {
     }
 
     private isolated function processJsonRpcNotification(JsonRpcNotification notification) returns http:Accepted|http:BadRequest {
-        if notification.method == "notifications/initialized" {
+        if notification.method == NOTIFICATION_INITIALIZED {
             return http:ACCEPTED;
         }
 
@@ -169,14 +162,16 @@ DispatcherService dispatcherService = isolated service object {
                 };
             }
 
-            ServerConfiguration? serverConfigs = self.serverConfigs;
-            if serverConfigs is () {
+            Service|AdvancedService? mcpService = self.mcpService;
+            if mcpService is () {
                 JsonRpcError & readonly jsonRpcError = self.createJsonRpcError(INTERNAL_ERROR,
-                    "Internal Error: Server configuration is not set", id);
+                    "Internal Error: MCP Service is not attached", id);
                 return <http:BadRequest>{
                     body: jsonRpcError
                 };
             }
+
+            ServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
 
             self.isInitialized = true;
             self.sessionId = uuid:createRandomUuid();
@@ -193,8 +188,8 @@ DispatcherService dispatcherService = isolated service object {
                     id: id,
                     result: <InitializeResult>{
                         protocolVersion: protocolVersion,
-                        capabilities: (serverConfigs.options?.capabilities ?: {}).cloneReadOnly(),
-                        serverInfo: serverConfigs.serverInfo.cloneReadOnly()
+                        capabilities: (serviceConfig.options?.capabilities ?: {}).cloneReadOnly(),
+                        serverInfo: serviceConfig.info.cloneReadOnly()
                     }
                 }
             };
