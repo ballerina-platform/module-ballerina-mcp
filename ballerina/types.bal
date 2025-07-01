@@ -35,8 +35,7 @@ public enum RequestMethod {
 
 # Notification methods
 public enum NotificationMethod {
-    NOTIFICATION_INITIALIZED = "notifications/initialized",
-    NOTIFICATION_PROGRESS = "notifications/progress"
+    NOTIFICATION_INITIALIZED = "notifications/initialized"
 };
 
 # A progress token, used to associate progress notifications with the original request.
@@ -419,12 +418,34 @@ public type McpToolConfig record {|
 # Annotation to mark a function as an MCP tool configuration.
 public annotation McpToolConfig McpTool on object function;
 
+# Represents the options for configuring an MCP server.
+public type ServerOptions record {|
+    # Capabilities to advertise as being supported by this server.
+    ServerCapabilities capabilities?;
+    # Optional instructions describing how to use the server and its features.
+    string instructions?;
+    # Whether to enforce strict capabilities compliance.
+    boolean enforceStrictCapabilities?;
+|};
+
+# Configuration for MCP service that defines server capabilities and metadata.
+public type ServiceConfiguration record {|
+    # Server implementation information
+    Implementation info;
+    # Optional server configuration options
+    ServerOptions options?;
+|};
+
+# Annotation to provide service configuration to MCP services.
+public annotation ServiceConfiguration ServiceConfig on service;
+
 # Defines a mcp service interface that handles incoming mcp requests.
 public type AdvancedService distinct isolated service object {
     remote isolated function onListTools() returns ListToolsResult|ServerError;
     remote isolated function onCallTool(CallToolParams params) returns CallToolResult|ServerError;
 };
 
+# Defines a basic mcp service interface that handles incoming mcp requests.
 public type Service distinct isolated service object {
 
 };

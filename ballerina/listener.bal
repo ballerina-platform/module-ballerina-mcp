@@ -16,25 +16,9 @@
 
 import ballerina/http;
 
-# Represents the options for configuring an MCP server.
-public type ServerOptions record {|
-    # Capabilities to advertise as being supported by this server.
-    ServerCapabilities capabilities?;
-    # Optional instructions describing how to use the server and its features.
-    string instructions?;
-    # Whether to enforce strict capabilities compliance.
-    boolean enforceStrictCapabilities?;
-|};
-
 # Configuration options for initializing an MCP listener.
 public type ListenerConfiguration record {|
     *http:ListenerConfiguration;
-    *ServerConfiguration;
-|};
-
-type ServerConfiguration record {|
-    Implementation serverInfo;
-    ServerOptions options?;
 |};
 
 # A server listener for handling MCP service requests.
@@ -48,21 +32,16 @@ public class Listener {
     # + config - Listener configuration.
     # + return - error? if listener initialization fails.
     public function init(int|http:Listener listenTo, *ListenerConfiguration config) returns Error? {
-        ListenerConfiguration {serverInfo, options, ...listenerConfig} = config;
         if listenTo is http:Listener {
             self.httpListener = listenTo;
         } else {
-            http:Listener|error httpListener = new (listenTo, listenerConfig);
+            http:Listener|error httpListener = new (listenTo, config);
             if httpListener is error {
                 return error("Failed to initialize HTTP listener: " + httpListener.message());
             }
             self.httpListener = httpListener;
         }
         self.dispatcherService = dispatcherService;
-        self.dispatcherService.setServerConfigs({
-            serverInfo,
-            options
-        });
     }
 
     # Attaches an MCP service to the listener under the specified path(s).
