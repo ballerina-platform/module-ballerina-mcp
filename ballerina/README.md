@@ -23,48 +23,40 @@ import ballerina/mcp;
 Create an MCP listener to expose tools to AI applications:
 
 ```ballerina
-listener mcp:Listener mcpListener = check new (9090, 
-    serverInfo = {
-        name: "My MCP Server",
+listener mcp:Listener mcpListener = check new (9090);
+```
+
+#### Step 3: Create the MCP Service
+
+Create an MCP service using the Basic Service pattern with automatic tool discovery. Server information can be configured using the `@mcp:ServiceConfig` annotation. If not provided, default values are used:
+
+```ballerina
+@mcp:ServiceConfig {
+    info: {
+        name: "MCP Weather Server",
         version: "1.0.0"
     }
-);
-```
-
-#### Step 3: Define Tool Data Types
-
-Define the data structures that your tools will return:
-
-```ballerina
-public type Weather record {|
-    string location;
-    decimal temperature;
-    string condition;
-|};
-```
-
-#### Step 4: Create the MCP Service
-
-Create an MCP service using the Basic Service pattern with automatic tool discovery:
-
-```ballerina
+}
 isolated service mcp:Service /mcp on mcpListener {
     
     @mcp:McpTool {
         description: "Get current weather conditions for a location"
     }
-    remote function getCurrentWeather(string city, string? country) returns Weather|error {
+    remote function getCurrentWeather(string city) returns Weather|error {
         return {
-            location: city + (country is string ? ", " + country : ""),
+            location: city,
             temperature: 22.5,
             condition: "Sunny"
         };
     }
     
-    @mcp:McpTool {
-        description: "Get weather forecast for multiple days"
-    }
-    remote function getWeatherForecast(string location, int days = 7) returns Weather[]|error {
+    
+    # Get weather forecast for multiple days
+    #
+    # + location - The location for which to retrieve the weather forecast
+    # + days - Number of days to include in the forecast
+    # + return - Weather forecast data for the specified location and duration, or an error if the request fails
+    remote function getWeatherForecast(string location, int days) returns Weather|error {
         // Implementation logic
         return [];
     }
@@ -76,9 +68,9 @@ Constraints for defining MCP tools:
 1. The function must be marked `isolated`.
 2. Parameters should be a subtype of `anydata`.
 3. The tool should return a subtype of `anydata|error`.
-4. Tool documentation enhances AI model performance and is highly recommended.
+4. The `@mcp:McpTool` annotation is not required unless you want fine-grained control. If the annotation is not provided, the documentation string will be considered as the description.
 
-#### Step 5: Advanced Service Implementation (Optional)
+#### Step 4: Advanced Service Implementation (Optional)
 
 For more control over tool management, use the Advanced Service pattern:
 
