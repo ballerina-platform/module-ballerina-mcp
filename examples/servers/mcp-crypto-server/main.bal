@@ -19,11 +19,14 @@ import ballerina/crypto;
 import ballerina/log;
 import ballerina/lang.array;
 
-listener mcp:Listener mcpListener = check new (9091, serverInfo = {
-    name: "MCP Crypto Server",
-    version: "1.0.0"
-});
+listener mcp:Listener mcpListener = check new (9091);
 
+@mcp:ServiceConfig {
+    info: {
+        name: "MCP Crypto Server",
+        version: "1.0.0"
+    }
+}
 isolated service mcp:AdvancedService /mcp on mcpListener {
 
     remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {

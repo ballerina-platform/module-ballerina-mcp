@@ -19,11 +19,14 @@ import ballerina/log;
 import ballerina/random;
 import ballerina/time;
 
-listener mcp:Listener mcpListener = check new (9090, serverInfo = {
-    name: "MCP Weather Server",
-    version: "1.0.0"
-});
+listener mcp:Listener mcpListener = check new (9090);
 
+@mcp:ServiceConfig {
+    info: {
+        name: "MCP Weather Server",
+        version: "1.0.0"
+    }
+}
 isolated service mcp:Service /mcp on mcpListener {
     @mcp:McpTool {
         description: string `
