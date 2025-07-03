@@ -36,7 +36,7 @@ import java.util.Optional;
  */
 public class Utils {
     public static final String BALLERINA_ORG = "ballerina";
-    public static final String TOOL_ANNOTATION_NAME = "McpTool";
+    public static final String TOOL_ANNOTATION_NAME = "Tool";
     public static final String MCP_PACKAGE_NAME = "mcp";
 
     private Utils() {

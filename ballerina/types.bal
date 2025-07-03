@@ -298,7 +298,7 @@ public type ListToolsRequest record {|
 public type ListToolsResult record {
     *PaginatedResult;
     # A list of tools available on the server.
-    Tool[] tools;
+    McpTool[] tools;
 };
 
 # The server's response to a tool call.
@@ -354,7 +354,7 @@ public type ToolAnnotations record {
 };
 
 # Definition for a tool the client can call.
-public type Tool record {
+public type McpTool record {
     # The name of the tool
     string name;
     # A human-readable description of the tool
@@ -427,7 +427,7 @@ public type McpToolConfig record {|
 |};
 
 # Annotation to mark a function as an MCP tool configuration.
-public annotation McpToolConfig McpTool on object function;
+public annotation McpToolConfig Tool on object function;
 
 # Represents the options for configuring an MCP server.
 public type ServerOptions record {|
@@ -451,12 +451,12 @@ public type ServiceConfiguration record {|
 public annotation ServiceConfiguration ServiceConfig on service;
 
 # Defines a mcp service interface that handles incoming mcp requests.
-public type AdvancedService distinct isolated service object {
+public type AdvancedService distinct service object {
     remote isolated function onListTools() returns ListToolsResult|ServerError;
     remote isolated function onCallTool(CallToolParams params) returns CallToolResult|ServerError;
 };
 
 # Defines a basic mcp service interface that handles incoming mcp requests.
-public type Service distinct isolated service object {
+public type Service distinct service object {
 
 };

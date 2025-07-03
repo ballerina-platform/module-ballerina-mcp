@@ -17,28 +17,10 @@
 import ballerina/http;
 import ballerina/uuid;
 
-type DispatcherService distinct isolated service object {
+isolated service class DispatcherService {
     *http:Service;
 
-    isolated function addServiceRef(Service|AdvancedService mcpService);
-    isolated function removeServiceRef();
-};
-
-final DispatcherService dispatcherService = isolated service object {
-    private Service|AdvancedService? mcpService = ();
     private map<string> sessionMap = {};
-
-    isolated function addServiceRef(Service|AdvancedService mcpService) {
-        lock {
-            self.mcpService = mcpService;
-        }
-    }
-
-    isolated function removeServiceRef() {
-        lock {
-            self.mcpService = ();
-        }
-    }
 
     isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok {
         string? sessionId = self.getSessionIdFromHeaders(headers);
@@ -69,7 +51,7 @@ final DispatcherService dispatcherService = isolated service object {
     }
 
     isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers)
-            returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok {
+            returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok|Error {
         http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = self.validateHeaders(headers);
         if headerValidationError !is () {
             return headerValidationError;
@@ -124,7 +106,7 @@ final DispatcherService dispatcherService = isolated service object {
         return;
     }
 
-    private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Headers headers) returns http:BadRequest|http:Ok {
+    private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Headers headers) returns http:BadRequest|http:Ok|Error {
         match request.method {
             REQUEST_INITIALIZE => {
                 return self.handleInitializeRequest(request, headers);
@@ -164,7 +146,7 @@ final DispatcherService dispatcherService = isolated service object {
         return sessionHeader is string ? sessionHeader : ();
     }
 
-    private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers) returns http:BadRequest|http:Ok {
+    private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers) returns http:BadRequest|http:Ok|Error {
         JsonRpcRequest {jsonrpc: _, id, ...request} = jsonRpcRequest;
         InitializeRequest|error initRequest = request.cloneWithType();
         if initRequest is error {
@@ -186,14 +168,7 @@ final DispatcherService dispatcherService = isolated service object {
                 };
             }
 
-            Service|AdvancedService? mcpService = self.mcpService;
-            if mcpService is () {
-                return <http:BadRequest>{
-                    body: self.createJsonRpcError(INTERNAL_ERROR,
-                        "Internal Error: MCP Service is not attached", id)
-                };
-            }
-
+            Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
             ServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
 
             // Create new session ID
@@ -321,29 +296,25 @@ final DispatcherService dispatcherService = isolated service object {
         }
     };
 
-    private isolated function executeOnListTools() returns ListToolsResult|error {
-        lock {
-            Service|AdvancedService? mcpService = self.mcpService;
-            if mcpService is AdvancedService {
-                return invokeOnListTools(mcpService);
-            }
-            if mcpService is Service {
-                return listToolsForRemoteFunctions(mcpService);
-            }
-            return error DispatcherError("MCP Service is not attached");
+    private isolated function executeOnListTools() returns ListToolsResult|Error {
+        Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
+        if mcpService is AdvancedService {
+            return invokeOnListTools(mcpService);
         }
+        if mcpService is Service {
+            return listToolsForRemoteFunctions(mcpService);
+        }
+        return error DispatcherError("MCP Service is not attached");
     }
 
-    private isolated function executeOnCallTool(CallToolParams params) returns CallToolResult|error {
-        lock {
-            Service|AdvancedService? mcpService = self.mcpService;
-            if mcpService is AdvancedService {
-                return invokeOnCallTool(mcpService, params.cloneReadOnly());
-            }
-            if mcpService is Service {
-                return callToolForRemoteFunctions(mcpService, params.cloneReadOnly());
-            }
-            return error DispatcherError("MCP Service is not attached");
+    private isolated function executeOnCallTool(CallToolParams params) returns CallToolResult|Error {
+        Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
+        if mcpService is AdvancedService {
+            return invokeOnCallTool(mcpService, params.cloneReadOnly());
         }
+        if mcpService is Service {
+            return callToolForRemoteFunctions(mcpService, params.cloneReadOnly());
+        }
+        return error DispatcherError("MCP Service is not attached");
     }
 };

@@ -56,9 +56,10 @@ public final class McpServiceMethodHelper {
     private static final String TYPE_FIELD_NAME = "type";
     private static final String TEXT_FIELD_NAME = "text";
 
-    private static final String ANNOTATION_MCP_TOOL = "McpTool";
+    private static final String ANNOTATION_MCP_TOOL = "Tool";
     private static final String TYPE_TEXT_CONTENT = "TextContent";
     private static final String TEXT_VALUE_NAME = "text";
+    private static final String MCP_SERVICE_FIELD = "mcpService";
 
     private McpServiceMethodHelper() {}
 
@@ -137,6 +138,40 @@ public final class McpServiceMethodHelper {
         Object result = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
 
         return createCallToolResult(typed, result);
+    }
+
+    /**
+     * Adds an MCP service to the dispatcher service by storing it in a private field.
+     *
+     * @param dispatcherService The dispatcher service object.
+     * @param mcpService        The MCP service object to store.
+     * @return                  null if successful, error otherwise.
+     */
+    public static Object addMcpServiceToDispatcher(BObject dispatcherService, BObject mcpService) {
+        try {
+            dispatcherService.addNativeData(MCP_SERVICE_FIELD, mcpService);
+            return null;
+        } catch (Exception e) {
+            return ModuleUtils.createError("Failed to add MCP service to dispatcher: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves the MCP service from the dispatcher service.
+     *
+     * @param dispatcherService The dispatcher service object.
+     * @return                  The MCP service object or an error if not found.
+     */
+    public static Object getMcpServiceFromDispatcher(BObject dispatcherService) {
+        try {
+            Object mcpService = dispatcherService.getNativeData(MCP_SERVICE_FIELD);
+            if (mcpService == null) {
+                return ModuleUtils.createError("MCP service not found in dispatcher");
+            }
+            return mcpService;
+        } catch (Exception e) {
+            return ModuleUtils.createError("Failed to get MCP service from dispatcher: " + e.getMessage());
+        }
     }
 
     private static List<RemoteMethodType> getRemoteMethods(BObject mcpService) {
