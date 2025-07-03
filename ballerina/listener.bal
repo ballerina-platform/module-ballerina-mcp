@@ -22,9 +22,8 @@ public type ListenerConfiguration record {|
 |};
 
 # A server listener for handling MCP service requests.
-public class Listener {
+public isolated class Listener {
     private http:Listener httpListener;
-    private DispatcherService dispatcherService;
 
     # Initializes the Listener.
     #
@@ -41,7 +40,6 @@ public class Listener {
             }
             self.httpListener = httpListener;
         }
-        self.dispatcherService = dispatcherService;
     }
 
     # Attaches an MCP service to the listener under the specified path(s).
@@ -50,11 +48,13 @@ public class Listener {
     # + name - Path(s) to mount the service on (string or string array).
     # + return - error? if attachment fails.
     public isolated function attach(Service|AdvancedService mcpService, string[]|string? name = ()) returns Error? {
-        error? result = self.httpListener.attach(self.dispatcherService, name);
-        if result is error {
-            return error("Failed to attach MCP service: " + result.message());
+        lock {
+            error? result = self.httpListener.attach(dispatcherService, name.cloneReadOnly());
+            if result is error {
+                return error("Failed to attach MCP service: " + result.message());
+            }
+            dispatcherService.addServiceRef(mcpService);
         }
-        self.dispatcherService.addServiceRef(mcpService);
     }
 
     # Detaches the MCP service from the listener.
@@ -62,20 +62,24 @@ public class Listener {
     # + mcpService - Service to detach.
     # + return - error? if detachment fails.
     public isolated function detach(Service|AdvancedService mcpService) returns Error? {
-        error? result = self.httpListener.detach(self.dispatcherService);
-        if result is error {
-            return error("Failed to detach MCP service: " + result.message());
+        lock {
+            error? result = self.httpListener.detach(dispatcherService);
+            if result is error {
+                return error("Failed to detach MCP service: " + result.message());
+            }
+            dispatcherService.removeServiceRef();
         }
-        self.dispatcherService.removeServiceRef();
     }
 
     # Starts the listener (begin accepting connections).
     #
     # + return - error? if starting fails.
     public isolated function 'start() returns Error? {
-        error? result = self.httpListener.start();
-        if result is error {
-            return error("Failed to start MCP listener: " + result.message());
+        lock {
+            error? result = self.httpListener.start();
+            if result is error {
+                return error("Failed to start MCP listener: " + result.message());
+            }
         }
     }
 
@@ -83,9 +87,11 @@ public class Listener {
     #
     # + return - error? if graceful stop fails.
     public isolated function gracefulStop() returns Error? {
-        error? result = self.httpListener.gracefulStop();
-        if result is error {
-            return error("Failed to gracefully stop MCP listener: " + result.message());
+        lock {
+            error? result = self.httpListener.gracefulStop();
+            if result is error {
+                return error("Failed to gracefully stop MCP listener: " + result.message());
+            }
         }
     }
 
@@ -93,9 +99,11 @@ public class Listener {
     #
     # + return - error? if immediate stop fails.
     public isolated function immediateStop() returns Error? {
-        error? result = self.httpListener.immediateStop();
-        if result is error {
-            return error("Failed to immediately stop MCP listener: " + result.message());
+        lock {
+            error? result = self.httpListener.immediateStop();
+            if result is error {
+                return error("Failed to immediately stop MCP listener: " + result.message());
+            }
         }
     }
 }

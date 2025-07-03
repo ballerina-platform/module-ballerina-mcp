@@ -21,8 +21,6 @@ package io.ballerina.stdlib.mcp.plugin;
 import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
-import io.ballerina.compiler.syntax.tree.IdentifierToken;
-import io.ballerina.compiler.syntax.tree.MappingConstructorExpressionNode;
 import io.ballerina.compiler.syntax.tree.MetadataNode;
 import io.ballerina.compiler.syntax.tree.ModuleMemberDeclarationNode;
 import io.ballerina.compiler.syntax.tree.ModulePartNode;
@@ -30,10 +28,8 @@ import io.ballerina.compiler.syntax.tree.Node;
 import io.ballerina.compiler.syntax.tree.NodeFactory;
 import io.ballerina.compiler.syntax.tree.NodeList;
 import io.ballerina.compiler.syntax.tree.NodeParser;
-import io.ballerina.compiler.syntax.tree.QualifiedNameReferenceNode;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SyntaxTree;
-import io.ballerina.compiler.syntax.tree.Token;
 import io.ballerina.projects.DocumentId;
 import io.ballerina.projects.Module;
 import io.ballerina.projects.plugins.ModifierTask;
@@ -46,9 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static io.ballerina.compiler.syntax.tree.SyntaxKind.AT_TOKEN;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.CLOSE_BRACE_TOKEN;
-import static io.ballerina.compiler.syntax.tree.SyntaxKind.COLON_TOKEN;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.OBJECT_METHOD_DEFINITION;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.OPEN_BRACE_TOKEN;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.SERVICE_DECLARATION;
@@ -109,19 +103,9 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
     }
 
     private AnnotationNode getModifiedAnnotation(ToolAnnotationConfig config) {
-        Token atToken = NodeFactory.createToken(AT_TOKEN);
-
-        Token modulePrefix = NodeFactory.createIdentifierToken(MCP_PACKAGE_NAME);
-        Token colonToken = NodeFactory.createToken(COLON_TOKEN);
-        IdentifierToken identifier = NodeFactory.createIdentifierToken(TOOL_ANNOTATION_NAME);
-        QualifiedNameReferenceNode annotationReferenceNode =
-                NodeFactory.createQualifiedNameReferenceNode(modulePrefix, colonToken, identifier);
-
         String mappingConstructorExpression = generateConfigMappingConstructor(config);
-        MappingConstructorExpressionNode mappingConstructorNode = (MappingConstructorExpressionNode) NodeParser
-                .parseExpression(mappingConstructorExpression);
-
-        return NodeFactory.createAnnotationNode(atToken, annotationReferenceNode, mappingConstructorNode);
+        String annotationString = "@" + MCP_PACKAGE_NAME + ":" + TOOL_ANNOTATION_NAME + mappingConstructorExpression;
+        return NodeParser.parseAnnotation(annotationString);
     }
 
     private String generateConfigMappingConstructor(ToolAnnotationConfig config) {
@@ -160,32 +144,44 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
         ArrayList<Node> modifiedMembers = new ArrayList<>();
 
         for (Node member : members) {
-            if (member.kind() == OBJECT_METHOD_DEFINITION) {
-                FunctionDefinitionNode functionDefinitionNode = (FunctionDefinitionNode) member;
-                AnnotationNode modifiedAnnotationNode = modifiedAnnotations.get(functionDefinitionNode);
-                if (functionDefinitionNode.metadata().isPresent()) {
-                    MetadataNode functionMetadata = functionDefinitionNode.metadata().get();
-                    Optional<AnnotationNode> toolAnnotationNode =
-                            getToolAnnotationNode(semanticModel, functionDefinitionNode);
-                    if (toolAnnotationNode.isPresent()) {
-                        MetadataNode modifiedMetadata = modifyMetadata(functionMetadata, toolAnnotationNode.get(),
-                                modifiedAnnotationNode);
-                        functionDefinitionNode = functionDefinitionNode.modify().withMetadata(modifiedMetadata).apply();
-                    } else {
-                        functionDefinitionNode = functionDefinitionNode.modify()
-                                .withMetadata(modifyWithToolAnnotation(functionMetadata, modifiedAnnotationNode))
-                                .apply();
-                    }
-                } else {
-                    functionDefinitionNode = functionDefinitionNode.modify()
-                            .withMetadata(createMetadata(modifiedAnnotationNode)).apply();
-                }
-                modifiedMembers.add(functionDefinitionNode);
-            } else {
+            if (member.kind() != OBJECT_METHOD_DEFINITION) {
                 modifiedMembers.add(member);
+                continue;
             }
+
+            FunctionDefinitionNode functionDefinitionNode = (FunctionDefinitionNode) member;
+            AnnotationNode modifiedAnnotationNode = modifiedAnnotations.get(functionDefinitionNode);
+
+            MetadataNode newMetadata = createOrUpdateMetadata(
+                    semanticModel, functionDefinitionNode, modifiedAnnotationNode);
+
+            FunctionDefinitionNode updatedFunction = functionDefinitionNode.modify()
+                    .withMetadata(newMetadata)
+                    .apply();
+
+            modifiedMembers.add(updatedFunction);
         }
+
         return classDefinitionNode.modify().withMembers(NodeFactory.createNodeList(modifiedMembers)).apply();
+    }
+
+    private MetadataNode createOrUpdateMetadata(
+            SemanticModel semanticModel,
+            FunctionDefinitionNode functionDefinitionNode,
+            AnnotationNode modifiedAnnotationNode) {
+
+        if (functionDefinitionNode.metadata().isEmpty()) {
+            return createMetadata(modifiedAnnotationNode);
+        }
+
+        MetadataNode existingMetadata = functionDefinitionNode.metadata().get();
+        Optional<AnnotationNode> toolAnnotationNode = getToolAnnotationNode(semanticModel, functionDefinitionNode);
+
+        if (toolAnnotationNode.isPresent()) {
+            return modifyMetadata(existingMetadata, toolAnnotationNode.get(), modifiedAnnotationNode);
+        } else {
+            return modifyWithToolAnnotation(existingMetadata, modifiedAnnotationNode);
+        }
     }
 
     private MetadataNode modifyWithToolAnnotation(MetadataNode metadata, AnnotationNode annotationNode) {
