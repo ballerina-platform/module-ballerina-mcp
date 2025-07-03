@@ -49,7 +49,7 @@ public isolated class Listener {
     # + name - Path(s) to mount the service on (string or string array).
     # + return - error? if attachment fails.
     public isolated function attach(Service|AdvancedService mcpService, string[]|string? name = ()) returns Error? {
-        DispatcherService dispatcherService = check new ();
+        DispatcherService dispatcherService = new ();
         check addMcpServiceToDispatcher(dispatcherService, mcpService);
         lock {
             error? result = self.httpListener.attach(dispatcherService, name.cloneReadOnly());
