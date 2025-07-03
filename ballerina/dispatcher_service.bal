@@ -26,8 +26,7 @@ type DispatcherService distinct isolated service object {
 
 final DispatcherService dispatcherService = isolated service object {
     private Service|AdvancedService? mcpService = ();
-    private boolean isInitialized = false;
-    private string? sessionId = ();
+    private map<string> sessionMap = {};
 
     isolated function addServiceRef(Service|AdvancedService mcpService) {
         lock {
@@ -41,6 +40,34 @@ final DispatcherService dispatcherService = isolated service object {
         }
     }
 
+    isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok {
+        string? sessionId = self.getSessionIdFromHeaders(headers);
+        if sessionId is () {
+            return <http:BadRequest>{
+                body: self.createJsonRpcError(INVALID_REQUEST, "Missing session ID header")
+            };
+        }
+
+        lock {
+            if !self.sessionMap.hasKey(sessionId) {
+                return <http:BadRequest>{
+                    body: self.createJsonRpcError(INVALID_REQUEST, string `Invalid session ID: ${sessionId}`)
+                };
+            }
+
+            _ = self.sessionMap.remove(sessionId);
+        }
+
+        return <http:Ok>{
+            body: {
+                jsonrpc: JSONRPC_VERSION,
+                result: {
+                    message: string `Session ${sessionId} deleted successfully`
+                }
+            }
+        };
+    }
+
     isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers)
             returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok {
         http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = self.validateHeaders(headers);
@@ -49,7 +76,7 @@ final DispatcherService dispatcherService = isolated service object {
         }
 
         if request is JsonRpcRequest {
-            return self.processJsonRpcRequest(request);
+            return self.processJsonRpcRequest(request, headers);
         }
         if request is JsonRpcNotification {
             return self.processJsonRpcNotification(request);
@@ -97,16 +124,16 @@ final DispatcherService dispatcherService = isolated service object {
         return;
     }
 
-    private isolated function processJsonRpcRequest(JsonRpcRequest request) returns http:BadRequest|http:Ok {
+    private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Headers headers) returns http:BadRequest|http:Ok {
         match request.method {
             REQUEST_INITIALIZE => {
-                return self.handleInitializeRequest(request);
+                return self.handleInitializeRequest(request, headers);
             }
             REQUEST_LIST_TOOLS => {
-                return self.handleListToolsRequest(request);
+                return self.handleListToolsRequest(request, headers);
             }
             REQUEST_CALL_TOOL => {
-                return self.handleCallToolRequest(request);
+                return self.handleCallToolRequest(request, headers);
             }
             _ => {
                 return <http:BadRequest>{
@@ -132,7 +159,12 @@ final DispatcherService dispatcherService = isolated service object {
         };
     }
 
-    private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest) returns http:BadRequest|http:Ok {
+    private isolated function getSessionIdFromHeaders(http:Headers headers) returns string? {
+        string|http:HeaderNotFoundError sessionHeader = headers.getHeader(SESSION_ID_HEADER);
+        return sessionHeader is string ? sessionHeader : ();
+    }
+
+    private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers) returns http:BadRequest|http:Ok {
         JsonRpcRequest {jsonrpc: _, id, ...request} = jsonRpcRequest;
         InitializeRequest|error initRequest = request.cloneWithType();
         if initRequest is error {
@@ -142,13 +174,15 @@ final DispatcherService dispatcherService = isolated service object {
             };
         }
 
+        // Check if there's a session ID in the headers
+        string? existingSessionId = self.getSessionIdFromHeaders(headers);
+
         lock {
-            // If it's a server with session management and the session ID is already set we should reject the request
-            // to avoid re-initialization.
-            if self.isInitialized && self.sessionId != () {
+            // If there's an existing session ID and it's already in the map, return error
+            if existingSessionId is string && self.sessionMap.hasKey(existingSessionId) {
                 return <http:BadRequest>{
                     body: self.createJsonRpcError(INVALID_REQUEST,
-                        "Invalid Request: Only one initialization request is allowed", id)
+                        string `Session already initialized: ${existingSessionId}`, id)
                 };
             }
 
@@ -162,14 +196,15 @@ final DispatcherService dispatcherService = isolated service object {
 
             ServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
 
-            self.isInitialized = true;
-            self.sessionId = uuid:createRandomUuid();
+            // Create new session ID
+            string newSessionId = uuid:createRandomUuid();
+            self.sessionMap[newSessionId] = "initialized";
 
             string requestedVersion = initRequest.params.protocolVersion;
             string protocolVersion = self.selectProtocolVersion(requestedVersion);
 
             return <http:Ok>{
-                headers: self.prepareRequestHeaders(),
+                headers: {[SESSION_ID_HEADER]: newSessionId},
                 body: {
                     jsonrpc: JSONRPC_VERSION,
                     id: id,
@@ -183,13 +218,22 @@ final DispatcherService dispatcherService = isolated service object {
         }
     }
 
-    private isolated function handleListToolsRequest(JsonRpcRequest request) returns http:BadRequest|http:Ok {
+    private isolated function handleListToolsRequest(JsonRpcRequest request, http:Headers headers) returns http:BadRequest|http:Ok {
+        // Validate session ID
+        string? sessionId = self.getSessionIdFromHeaders(headers);
+        if sessionId is () {
+            return <http:BadRequest>{
+                body: self.createJsonRpcError(INVALID_REQUEST,
+                    "Missing session ID header", request.id)
+            };
+        }
+
         lock {
-            // Check if initialized
-            if !self.isInitialized {
+            // Check if session exists
+            if !self.sessionMap.hasKey(sessionId) {
                 return <http:BadRequest>{
                     body: self.createJsonRpcError(INVALID_REQUEST,
-                        "Client must be initialized before making requests", request.id)
+                        string `Invalid session ID: ${sessionId}`, request.id)
                 };
             }
         }
@@ -202,25 +246,32 @@ final DispatcherService dispatcherService = isolated service object {
             };
         }
 
-        lock {
-            return <http:Ok>{
-                headers: self.prepareRequestHeaders(),
-                body: {
-                    jsonrpc: JSONRPC_VERSION,
-                    id: request.id,
-                    result: listToolsResult.cloneReadOnly()
-                }
-            };
-        }
+        return <http:Ok>{
+            headers: {[SESSION_ID_HEADER]: sessionId},
+            body: {
+                jsonrpc: JSONRPC_VERSION,
+                id: request.id,
+                result: listToolsResult.cloneReadOnly()
+            }
+        };
     }
 
-    private isolated function handleCallToolRequest(JsonRpcRequest request) returns http:BadRequest|http:Ok {
+    private isolated function handleCallToolRequest(JsonRpcRequest request, http:Headers headers) returns http:BadRequest|http:Ok {
+        // Validate session ID
+        string? sessionId = self.getSessionIdFromHeaders(headers);
+        if sessionId is () {
+            return <http:BadRequest>{
+                body: self.createJsonRpcError(INVALID_REQUEST,
+                    "Missing session ID header", request.id)
+            };
+        }
+
         lock {
-            // Check if initialized
-            if !self.isInitialized {
+            // Check if session exists
+            if !self.sessionMap.hasKey(sessionId) {
                 return <http:BadRequest>{
                     body: self.createJsonRpcError(INVALID_REQUEST,
-                        "Client must be initialized before making requests", request.id)
+                        string `Invalid session ID: ${sessionId}`, request.id)
                 };
             }
         }
@@ -242,23 +293,14 @@ final DispatcherService dispatcherService = isolated service object {
             };
         }
 
-        lock {
-            return <http:Ok>{
-                headers: self.prepareRequestHeaders(),
-                body: {
-                    jsonrpc: JSONRPC_VERSION,
-                    id: request.id,
-                    result: callToolResult.cloneReadOnly()
-                }
-            };
-        }
-    }
-
-    private isolated function prepareRequestHeaders() returns map<string> {
-        lock {
-            string? currentSessionId = self.sessionId;
-            return currentSessionId is string ? {[SESSION_ID_HEADER]: currentSessionId} : {};
-        }
+        return <http:Ok>{
+            headers: {[SESSION_ID_HEADER]: sessionId},
+            body: {
+                jsonrpc: JSONRPC_VERSION,
+                id: request.id,
+                result: callToolResult.cloneReadOnly()
+            }
+        };
     }
 
     private isolated function selectProtocolVersion(string requestedVersion) returns string {
