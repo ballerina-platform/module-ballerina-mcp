@@ -24,6 +24,7 @@ public type ListenerConfiguration record {|
 # A server listener for handling MCP service requests.
 public isolated class Listener {
     private http:Listener httpListener;
+    private DispatcherService[] dispatcherServices = [];
 
     # Initializes the Listener.
     #
@@ -48,12 +49,13 @@ public isolated class Listener {
     # + name - Path(s) to mount the service on (string or string array).
     # + return - error? if attachment fails.
     public isolated function attach(Service|AdvancedService mcpService, string[]|string? name = ()) returns Error? {
+        DispatcherService dispatcherService = check new ();
+        check addMcpServiceToDispatcher(dispatcherService, mcpService);
         lock {
             error? result = self.httpListener.attach(dispatcherService, name.cloneReadOnly());
             if result is error {
                 return error("Failed to attach MCP service: " + result.message());
             }
-            dispatcherService.addServiceRef(mcpService);
         }
     }
 
@@ -63,11 +65,13 @@ public isolated class Listener {
     # + return - error? if detachment fails.
     public isolated function detach(Service|AdvancedService mcpService) returns Error? {
         lock {
-            error? result = self.httpListener.detach(dispatcherService);
-            if result is error {
-                return error("Failed to detach MCP service: " + result.message());
+            foreach DispatcherService dispatcherService in self.dispatcherServices {
+                error? result = self.httpListener.detach(dispatcherService);
+                if result is error {
+                    return error("Failed to detach MCP service: " + result.message());
+                }
             }
-            dispatcherService.removeServiceRef();
+            self.dispatcherServices = [];
         }
     }
 

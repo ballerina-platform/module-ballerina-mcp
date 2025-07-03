@@ -34,3 +34,13 @@ isolated function callToolForRemoteFunctions(Service 'service, CallToolParams pa
         returns t|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
+
+isolated function addMcpServiceToDispatcher(DispatcherService dispatcherService, Service|AdvancedService mcpService)
+        returns Error? = @java:Method {
+    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+} external;
+
+isolated function getMcpServiceFromDispatcher(DispatcherService dispatcherService)
+        returns Service|AdvancedService|Error = @java:Method {
+    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+} external;
