@@ -26,15 +26,19 @@ public const SUPPORTED_PROTOCOL_VERSIONS = [
 
 public const JSONRPC_VERSION = "2.0";
 
-# Request methods
+# Standard JSON-RPC request methods supported by the MCP protocol
 public enum RequestMethod {
+    # Initialize request to start a new MCP session
     REQUEST_INITIALIZE = "initialize",
+    # Request to list all available tools from the server
     REQUEST_LIST_TOOLS = "tools/list",
+    # Request to execute a specific tool with given parameters
     REQUEST_CALL_TOOL = "tools/call"
 };
 
-# Notification methods
+# JSON-RPC notification methods used for one-way communication in MCP
 public enum NotificationMethod {
+    # Notification sent by client to indicate successful initialization
     NOTIFICATION_INITIALIZED = "notifications/initialized"
 };
 
@@ -109,14 +113,21 @@ public type JsonRpcResponse record {|
 |};
 
 // Standard JSON-RPC error codes
+# Standard JSON-RPC 2.0 error code indicating that the JSON sent is not a valid JSON object.
 public const PARSE_ERROR = -32700;
+# Standard JSON-RPC 2.0 error code indicating that the JSON sent is not a valid request object.
 public const INVALID_REQUEST = -32600;
+# Standard JSON-RPC 2.0 error code indicating that the method does not exist or is not available.
 public const METHOD_NOT_FOUND = -32601;
+# Standard JSON-RPC 2.0 error code indicating that invalid method parameters were provided.
 public const INVALID_PARAMS = -32602;
+# Standard JSON-RPC 2.0 error code indicating that an internal error occurred on the server.
 public const INTERNAL_ERROR = -32603;
 
 // Library-defined error codes
+# MCP library-defined error code indicating that the request is not acceptable.
 public const NOT_ACCEPTABLE = -32001;
+# MCP library-defined error code indicating that the media type is not supported.
 public const UNSUPPORTED_MEDIA_TYPE = -32002;
 
 # A response to a request that indicates an error occurred.
