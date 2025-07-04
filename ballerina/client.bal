@@ -33,15 +33,8 @@ public type ClientCapabilityConfiguration record {|
 
 # Represents an MCP client built on top of the Streamable HTTP transport.
 public distinct isolated client class Client {
-    # MCP server URL.
-    private final string serverUrl;
-    # Client implementation details (e.g., name and version).
-    private final Implementation clientInfo;
-    # Capabilities supported by the client.
-    private final ClientCapabilities clientCapabilities;
-
     # Transport for communication with the MCP server.
-    private StreamableHttpClientTransport? transport = ();
+    private StreamableHttpClientTransport transport;
     # Server capabilities.
     private ServerCapabilities? serverCapabilities = ();
     # Server implementation information.
@@ -49,71 +42,61 @@ public distinct isolated client class Client {
     # Request ID generator for tracking requests.
     private int requestId = 0;
 
-    # Initializes a new MCP client with the provided server URL and client details.
+    # Initializes a new MCP client and establishes connection to the server.
+    # Performs protocol handshake and capability exchange. Client is ready for use after construction.
     #
-    # + serverUrl - MCP server URL.
-    # + clientInfo - Client details, such as name and version.
-    # + config - Optional configuration containing client capabilities.
-    public isolated function init(string serverUrl, *ClientConfiguration config) {
-        self.serverUrl = serverUrl;
-        self.clientInfo = config.info.cloneReadOnly();
-        self.clientCapabilities = (config.capabilityConfig?.capabilities).cloneReadOnly() ?: {};
-    }
+    # + serverUrl - MCP server URL
+    # + config - Client configuration including info and capabilities
+    # + return - ClientError if initialization fails, nil on success
+    public isolated function init(string serverUrl, *ClientConfiguration config) returns ClientError? {
+        // Create and initialize transport.
+        StreamableHttpClientTransport newTransport = check new StreamableHttpClientTransport(serverUrl);
+        self.transport = newTransport;
 
-    # Establishes a connection to the MCP server and performs protocol initialization.
-    #
-    # + return - A ClientError if initialization fails, or nil on success.
-    isolated remote function initialize() returns ClientError? {
-        lock {
-            // Create and initialize transport.
-            StreamableHttpClientTransport newTransport = check new StreamableHttpClientTransport(self.serverUrl);
-            self.transport = newTransport;
+        string? sessionId = newTransport.getSessionId();
 
-            string? sessionId = newTransport.getSessionId();
+        // If a session ID exists, assume reconnection and skip initialization.
+        if sessionId is string {
+            return;
+        }
 
-            // If a session ID exists, assume reconnection and skip initialization.
-            if sessionId is string {
-                return;
+        // Prepare and send the initialization request.
+        InitializeRequest initRequest = {
+            method: "initialize",
+            params: {
+                protocolVersion: LATEST_PROTOCOL_VERSION,
+                capabilities: config.capabilityConfig?.capabilities ?: {},
+                clientInfo: config.info
             }
+        };
 
-            // Prepare and send the initialization request.
-            InitializeRequest initRequest = {
-                method: "initialize",
-                params: {
-                    protocolVersion: LATEST_PROTOCOL_VERSION,
-                    capabilities: self.clientCapabilities,
-                    clientInfo: self.clientInfo
-                }
-            };
+        ServerResult response = check self.sendRequestMessage(initRequest);
 
-            ServerResult response = check self.sendRequestMessage(initRequest);
-
-            if response is InitializeResult {
-                final readonly & string protocolVersion = response.protocolVersion;
-                // Validate protocol compatibility.
-                if (!SUPPORTED_PROTOCOL_VERSIONS.some(v => v == protocolVersion)) {
-                    return error ProtocolVersionError(
-                        string `Server protocol version '${
-                            protocolVersion}' is not supported. Supported versions: ${
-                            SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
-                    );
-                }
-
-                // Store server capabilities and info.
-                self.serverCapabilities = response.capabilities;
-                self.serverInfo = response.serverInfo;
-
-                // Send notification to complete initialization.
-                InitializedNotification initNotification = {
-                    method: "notifications/initialized"
-                };
-                check self.sendNotificationMessage(initNotification);
-            } else {
-                return error ClientInitializationError(
-                    string `Initialization failed: unexpected response type '${
-                        (typeof response).toString()}' received from server.`
+        if response is InitializeResult {
+            final readonly & string protocolVersion = response.protocolVersion;
+            // Validate protocol compatibility.
+            if (!SUPPORTED_PROTOCOL_VERSIONS.some(v => v == protocolVersion)) {
+                return error ProtocolVersionError(
+                    string `Server protocol version '${
+                        protocolVersion}' is not supported. Supported versions: ${
+                        SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
                 );
             }
+
+            // Store server capabilities and info.
+            self.serverCapabilities = response.capabilities.cloneReadOnly();
+            self.serverInfo = response.serverInfo.cloneReadOnly();
+
+            // Send notification to complete initialization.
+            InitializedNotification initNotification = {
+                method: "notifications/initialized"
+            };
+            check self.sendNotificationMessage(initNotification);
+        } else {
+            return error ClientInitializationError(
+                string `Initialization failed: unexpected response type '${
+                    (typeof response).toString()}' received from server.`
+            );
         }
     }
 
@@ -122,13 +105,7 @@ public distinct isolated client class Client {
     # + return - Stream of JsonRpcMessages or a ClientError.
     isolated remote function subscribeToServerMessages() returns stream<JsonRpcMessage, StreamError?>|ClientError {
         lock {
-            StreamableHttpClientTransport? currentTransport = self.transport;
-            if currentTransport is () {
-                return error UninitializedTransportError(
-                    "Subscription failed: client transport is not initialized."
-                );
-            }
-            return currentTransport.establishEventStream();
+            return self.transport.establishEventStream();
         }
     }
 
@@ -175,20 +152,10 @@ public distinct isolated client class Client {
     # + return - A ClientError if closure fails, or nil on success.
     isolated remote function close() returns ClientError? {
         lock {
-            StreamableHttpClientTransport? currentTransport = self.transport;
-            if currentTransport is () {
-                return error UninitializedTransportError(
-                    "Closure failed: client transport is not initialized."
-                );
-            }
-
             do {
-                check currentTransport.terminateSession();
-                lock {
-                    self.transport = ();
-                    self.serverCapabilities = ();
-                    self.serverInfo = ();
-                }
+                check self.transport.terminateSession();
+                self.serverCapabilities = ();
+                self.serverInfo = ();
                 return;
             } on fail error e {
                 return error ClientError(string `Failed to disconnect from server: ${e.message()}`, e);
@@ -202,26 +169,17 @@ public distinct isolated client class Client {
     # + return - ServerResult, a stream of results, or a ClientError.
     private isolated function sendRequestMessage(Request request) returns ServerResult|ClientError {
         lock {
-            StreamableHttpClientTransport? currentTransport = self.transport;
-            if currentTransport is () {
-                return error UninitializedTransportError(
-                    "Cannot send request: client transport is not initialized."
-                );
-            }
+            self.requestId += 1;
 
-            lock {
-                self.requestId += 1;
+            JsonRpcRequest jsonRpcRequest = {
+                ...request.cloneReadOnly(),
+                jsonrpc: JSONRPC_VERSION,
+                id: self.requestId
+            };
 
-                JsonRpcRequest jsonRpcRequest = {
-                    ...request.cloneReadOnly(),
-                    jsonrpc: JSONRPC_VERSION,
-                    id: self.requestId
-                };
-
-                JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? response =
-                    currentTransport.sendMessage(jsonRpcRequest);
-                return processServerResponse(response).cloneReadOnly();
-            }
+            JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? response =
+                self.transport.sendMessage(jsonRpcRequest);
+            return processServerResponse(response).cloneReadOnly();
         }
     }
 
@@ -231,19 +189,12 @@ public distinct isolated client class Client {
     # + return - A ClientError if sending fails, or nil on success.
     private isolated function sendNotificationMessage(Notification notification) returns ClientError? {
         lock {
-            StreamableHttpClientTransport? currentTransport = self.transport;
-            if currentTransport is () {
-                return error UninitializedTransportError(
-                "Cannot send notification: client transport is not initialized."
-                );
-            }
-
             JsonRpcNotification jsonRpcNotification = {
                 ...notification.cloneReadOnly(),
                 jsonrpc: JSONRPC_VERSION
             };
 
-            _ = check currentTransport.sendMessage(jsonRpcNotification);
+            _ = check self.transport.sendMessage(jsonRpcNotification);
         }
     }
 }
