@@ -298,7 +298,7 @@ public type ListToolsRequest record {|
 public type ListToolsResult record {
     *PaginatedResult;
     # A list of tools available on the server.
-    McpTool[] tools;
+    ToolDefinition[] tools;
 };
 
 # The server's response to a tool call.
@@ -354,7 +354,7 @@ public type ToolAnnotations record {
 };
 
 # Definition for a tool the client can call.
-public type McpTool record {
+public type ToolDefinition record {
     # The name of the tool
     string name;
     # A human-readable description of the tool
