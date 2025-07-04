@@ -23,7 +23,7 @@ public type ClientConfiguration record {|
     ClientCapabilityConfiguration capabilityConfig?;
 |};
 
-# Configuration options for initializing an MCP client.
+# Configuration for MCP client capabilities.
 public type ClientCapabilityConfiguration record {|
     # Capabilities to be advertised by this client.
     ClientCapabilities capabilities?;
