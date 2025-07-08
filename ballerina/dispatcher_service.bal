@@ -60,6 +60,7 @@ isolated service class DispatcherService {
         if request is JsonRpcRequest {
             return self.processJsonRpcRequest(request, headers);
         }
+
         if request is JsonRpcNotification {
             return self.processJsonRpcNotification(request);
         }
@@ -71,7 +72,6 @@ isolated service class DispatcherService {
 
     private isolated function validateHeaders(http:Headers headers)
             returns http:NotAcceptable|http:UnsupportedMediaType? {
-        // Validate Accept header
         string|http:HeaderNotFoundError acceptHeader = headers.getHeader(ACCEPT_HEADER);
         if acceptHeader is http:HeaderNotFoundError {
             return <http:NotAcceptable>{
@@ -87,7 +87,6 @@ isolated service class DispatcherService {
             };
         }
 
-        // Validate Content-Type header
         string|http:HeaderNotFoundError contentTypeHeader = headers.getHeader(CONTENT_TYPE_HEADER);
         if contentTypeHeader is http:HeaderNotFoundError {
             return <http:UnsupportedMediaType>{
@@ -106,7 +105,8 @@ isolated service class DispatcherService {
         return;
     }
 
-    private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Headers headers) returns http:BadRequest|http:Ok|Error {
+    private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Headers headers)
+            returns http:BadRequest|http:Ok|Error {
         match request.method {
             REQUEST_INITIALIZE => {
                 return self.handleInitializeRequest(request, headers);

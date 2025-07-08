@@ -27,6 +27,12 @@ import java.util.Map;
 
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.OBJECT_METHOD_DEFINITION;
 
+/**
+ * Code modifier for processing MCP tool annotations on remote functions.
+ * 
+ * <p>This modifier analyzes object method definitions and automatically generates
+ * or updates MCP tool annotations with schema information during compilation.</p>
+ */
 public class McpCodeModifier extends CodeModifier {
     private final Map<DocumentId, ModifierContext> modifierContextMap = new HashMap<>();
 

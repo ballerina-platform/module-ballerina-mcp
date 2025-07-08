@@ -66,14 +66,14 @@ public isolated class Listener {
     # + return - Error? if detachment fails.
     public isolated function detach(Service|AdvancedService mcpService) returns Error? {
         lock {
-            foreach [int, DispatcherService] dispatcherService in self.dispatcherServices.enumerate() {
-                Service|AdvancedService|Error attachedService = getMcpServiceFromDispatcher(dispatcherService[1]);
+            foreach [int, DispatcherService] [index, dispatcherService] in self.dispatcherServices.enumerate() {
+                Service|AdvancedService|Error attachedService = getMcpServiceFromDispatcher(dispatcherService);
                 if attachedService === mcpService {
-                    error? result = self.httpListener.detach(dispatcherService[1]);
+                    error? result = self.httpListener.detach(dispatcherService);
                     if result is error {
                         return error("Failed to detach MCP service: " + result.message());
                     }
-                    _ = self.dispatcherServices.remove(dispatcherService[0]);
+                    _ = self.dispatcherServices.remove(index);
                     break;
                 }
             }

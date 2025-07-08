@@ -50,7 +50,7 @@ public distinct isolated client class Client {
     # + return - ClientError if initialization fails, nil on success
     public isolated function init(string serverUrl, *ClientConfiguration config) returns ClientError? {
         // Create and initialize transport.
-        StreamableHttpClientTransport newTransport = check new StreamableHttpClientTransport(serverUrl);
+        StreamableHttpClientTransport newTransport = check new (serverUrl);
         self.transport = newTransport;
 
         string? sessionId = newTransport.getSessionId();
@@ -62,7 +62,6 @@ public distinct isolated client class Client {
 
         // Prepare and send the initialization request.
         InitializeRequest initRequest = {
-            method: "initialize",
             params: {
                 protocolVersion: LATEST_PROTOCOL_VERSION,
                 capabilities: config.capabilityConfig?.capabilities ?: {},
@@ -72,32 +71,30 @@ public distinct isolated client class Client {
 
         ServerResult response = check self.sendRequestMessage(initRequest);
 
-        if response is InitializeResult {
-            final readonly & string protocolVersion = response.protocolVersion;
-            // Validate protocol compatibility.
-            if (!SUPPORTED_PROTOCOL_VERSIONS.some(v => v == protocolVersion)) {
-                return error ProtocolVersionError(
-                    string `Server protocol version '${
-                        protocolVersion}' is not supported. Supported versions: ${
-                        SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
-                );
-            }
-
-            // Store server capabilities and info.
-            self.serverCapabilities = response.capabilities.cloneReadOnly();
-            self.serverInfo = response.serverInfo.cloneReadOnly();
-
-            // Send notification to complete initialization.
-            InitializedNotification initNotification = {
-                method: "notifications/initialized"
-            };
-            check self.sendNotificationMessage(initNotification);
-        } else {
+        if !(response is InitializeResult) {
             return error ClientInitializationError(
                 string `Initialization failed: unexpected response type '${
                     (typeof response).toString()}' received from server.`
             );
         }
+
+        final string protocolVersion = response.protocolVersion;
+        // Validate protocol compatibility.
+        if (!SUPPORTED_PROTOCOL_VERSIONS.some(v => v == protocolVersion)) {
+            return error ProtocolVersionError(
+                string `Server protocol version '${
+                    protocolVersion}' is not supported. Supported versions: ${
+                    SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
+            );
+        }
+
+        // Store server capabilities and info.
+        self.serverCapabilities = response.capabilities.cloneReadOnly();
+        self.serverInfo = response.serverInfo.cloneReadOnly();
+
+        // Send notification to complete initialization.
+        InitializedNotification initNotification = {};
+        check self.sendNotificationMessage(initNotification);
     }
 
     # Opens a server-sent events (SSE) stream for asynchronous server-to-client communication.
@@ -113,9 +110,7 @@ public distinct isolated client class Client {
     #
     # + return - List of available tools or a ClientError.
     isolated remote function listTools() returns ListToolsResult|ClientError {
-        ListToolsRequest listToolsRequest = {
-            method: "tools/list"
-        };
+        ListToolsRequest listToolsRequest = {};
 
         ServerResult result = check self.sendRequestMessage(listToolsRequest);
         if result is ListToolsResult {
@@ -133,7 +128,6 @@ public distinct isolated client class Client {
     # + return - Result of the tool execution or a ClientError.
     isolated remote function callTool(CallToolParams params) returns CallToolResult|ClientError {
         CallToolRequest toolCallRequest = {
-            method: "tools/call",
             params: params
         };
 

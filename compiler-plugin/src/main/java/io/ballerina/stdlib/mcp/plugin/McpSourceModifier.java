@@ -50,13 +50,29 @@ import static io.ballerina.stdlib.mcp.plugin.Utils.MCP_PACKAGE_NAME;
 import static io.ballerina.stdlib.mcp.plugin.Utils.TOOL_ANNOTATION_NAME;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
 
+/**
+ * Source modifier task that updates MCP tool annotations in Ballerina source files.
+ * 
+ * <p>This modifier takes the analysis results from {@link RemoteFunctionAnalysisTask}
+ * and applies the generated tool annotations to the source code by modifying function metadata.</p>
+ */
 public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
     private final Map<DocumentId, ModifierContext> modifierContextMap;
 
+    /**
+     * Creates a new source modifier with the given modifier context map.
+     * 
+     * @param modifierContextMap map containing analysis results for each document
+     */
     McpSourceModifier(Map<DocumentId, ModifierContext> modifierContextMap) {
         this.modifierContextMap = modifierContextMap;
     }
 
+    /**
+     * Modifies source files by updating MCP tool annotations based on analysis results.
+     * 
+     * @param context the source modifier context
+     */
     @Override
     public void modify(SourceModifierContext context) {
         for (Map.Entry<DocumentId, ModifierContext> entry : modifierContextMap.entrySet()) {

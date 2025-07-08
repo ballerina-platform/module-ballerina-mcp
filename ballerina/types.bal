@@ -151,7 +151,7 @@ public type JsonRpcError record {
 type InitializeRequest record {|
     *Request;
     # Method name for the request
-    REQUEST_INITIALIZE method;
+    REQUEST_INITIALIZE method = REQUEST_INITIALIZE;
     # Parameters for the initialize request
     record {
         *RequestParams;
@@ -187,7 +187,7 @@ public type InitializeResult record {
 public type InitializedNotification record {|
     *Notification;
     # The method identifier for the notification, must be "notifications/initialized"
-    NOTIFICATION_INITIALIZED method;
+    NOTIFICATION_INITIALIZED method = NOTIFICATION_INITIALIZED;
 |};
 
 # Capabilities a client may support. Known capabilities are defined here, in this schema,
@@ -291,7 +291,7 @@ public type EmbeddedResource record {
 public type ListToolsRequest record {|
     *PaginatedRequest;
     # The method identifier for this request
-    REQUEST_LIST_TOOLS method;
+    REQUEST_LIST_TOOLS method = REQUEST_LIST_TOOLS;
 |};
 
 # The server's response to a tools/list request from the client.
@@ -313,7 +313,7 @@ public type CallToolResult record {
 # Used by the client to invoke a tool provided by the server.
 public type CallToolRequest record {|
     # The JSON-RPC method name
-    REQUEST_CALL_TOOL method;
+    REQUEST_CALL_TOOL method = REQUEST_CALL_TOOL;
     # The parameters for the tool call
     CallToolParams params;
 |};
@@ -450,7 +450,7 @@ public type ServiceConfiguration record {|
 # Annotation to provide service configuration to MCP services.
 public annotation ServiceConfiguration ServiceConfig on service;
 
-# Defines a mcp service interface that handles incoming mcp requests.
+# Defines an MCP service interface that handles incoming MCP requests.
 public type AdvancedService distinct service object {
     remote isolated function onListTools() returns ListToolsResult|ServerError;
     remote isolated function onCallTool(CallToolParams params) returns CallToolResult|ServerError;

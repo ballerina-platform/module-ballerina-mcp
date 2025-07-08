@@ -48,6 +48,12 @@ import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCHEMA_FIELD_N
 import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
 import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION;
 
+/**
+ * Analysis task that processes remote function definitions to generate MCP tool annotation configurations.
+ * 
+ * <p>This task analyzes function signatures, extracts parameter schemas, and creates tool annotation
+ * configurations that will be used by {@link McpSourceModifier} to update source code.</p>
+ */
 public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
     public static final String EMPTY_STRING = "";
     public static final String NIL_EXPRESSION = "()";
@@ -55,10 +61,20 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
     private final Map<DocumentId, ModifierContext> modifierContextMap;
     private SyntaxNodeAnalysisContext context;
 
+    /**
+     * Creates a new analysis task with the given modifier context map.
+     * 
+     * @param modifierContextMap map to store analysis results for each document
+     */
     RemoteFunctionAnalysisTask(Map<DocumentId, ModifierContext> modifierContextMap) {
         this.modifierContextMap = modifierContextMap;
     }
 
+    /**
+     * Performs analysis on a function definition node to extract tool annotation information.
+     * 
+     * @param context the syntax node analysis context containing the function definition
+     */
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
         this.context = context;
