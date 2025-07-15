@@ -71,7 +71,7 @@ public distinct isolated client class Client {
 
         ServerResult response = check self.sendRequestMessage(initRequest);
 
-        if !(response is InitializeResult) {
+        if response !is InitializeResult {
             return error ClientInitializationError(
                 string `Initialization failed: unexpected response type '${
                     (typeof response).toString()}' received from server.`
@@ -93,8 +93,7 @@ public distinct isolated client class Client {
         self.serverInfo = response.serverInfo.cloneReadOnly();
 
         // Send notification to complete initialization.
-        InitializedNotification initNotification = {};
-        check self.sendNotificationMessage(initNotification);
+        check self.sendNotificationMessage(<InitializedNotification> {});
     }
 
     # Opens a server-sent events (SSE) stream for asynchronous server-to-client communication.
