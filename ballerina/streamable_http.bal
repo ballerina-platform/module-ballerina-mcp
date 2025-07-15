@@ -57,7 +57,7 @@ isolated class StreamableHttpClientTransport {
         headers[ACCEPT_HEADER] = string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`;
 
         do {
-            http:Response response = check self.httpClient->/.post(message, headers = headers);
+            http:Response response = check self.httpClient->post("", message, headers = headers);
 
             // Handle session ID in the initialization response.
             string|error sessionIdHeader = response.getHeader(SESSION_ID_HEADER);
@@ -96,7 +96,7 @@ isolated class StreamableHttpClientTransport {
         headers[ACCEPT_HEADER] = CONTENT_TYPE_SSE;
 
         do {
-            stream<http:SseEvent, error?> sseEventStream = check self.httpClient->get("/", headers = headers);
+            stream<http:SseEvent, error?> sseEventStream = check self.httpClient->get("", headers = headers);
 
             JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
             return new stream<JsonRpcMessage, StreamError?>(streamTransformer);
@@ -120,7 +120,7 @@ isolated class StreamableHttpClientTransport {
             headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
 
             do {
-                http:Response response = check self.httpClient->delete("/", headers = headers);
+                http:Response response = check self.httpClient->delete("", headers = headers);
 
                 if response.statusCode == 405 {
                     return error SessionOperationError("Server does not support session termination.");
