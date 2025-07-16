@@ -26,8 +26,21 @@ public const SUPPORTED_PROTOCOL_VERSIONS = [
 
 public const JSONRPC_VERSION = "2.0";
 
-// # Notification methods
-public const NOTIFICATION_INITIALIZED = "notifications/initialized";
+# Standard JSON-RPC request methods supported by the MCP protocol
+public enum RequestMethod {
+    # Initialize request to start a new MCP session
+    REQUEST_INITIALIZE = "initialize",
+    # Request to list all available tools from the server
+    REQUEST_LIST_TOOLS = "tools/list",
+    # Request to execute a specific tool with given parameters
+    REQUEST_CALL_TOOL = "tools/call"
+};
+
+# JSON-RPC notification methods used for one-way communication in MCP
+public enum NotificationMethod {
+    # Notification sent by client to indicate successful initialization
+    NOTIFICATION_INITIALIZED = "notifications/initialized"
+};
 
 # A progress token, used to associate progress notifications with the original request.
 public type ProgressToken string|int;
@@ -99,11 +112,46 @@ public type JsonRpcResponse record {|
     ServerResult result;
 |};
 
+// Standard JSON-RPC error codes
+# Standard JSON-RPC 2.0 error code indicating that the JSON sent is not a valid JSON object.
+public const PARSE_ERROR = -32700;
+# Standard JSON-RPC 2.0 error code indicating that the JSON sent is not a valid request object.
+public const INVALID_REQUEST = -32600;
+# Standard JSON-RPC 2.0 error code indicating that the method does not exist or is not available.
+public const METHOD_NOT_FOUND = -32601;
+# Standard JSON-RPC 2.0 error code indicating that invalid method parameters were provided.
+public const INVALID_PARAMS = -32602;
+# Standard JSON-RPC 2.0 error code indicating that an internal error occurred on the server.
+public const INTERNAL_ERROR = -32603;
+
+// Library-defined error codes
+# MCP library-defined error code indicating that the request is not acceptable.
+public const NOT_ACCEPTABLE = -32001;
+# MCP library-defined error code indicating that the media type is not supported.
+public const UNSUPPORTED_MEDIA_TYPE = -32002;
+
+# A response to a request that indicates an error occurred.
+public type JsonRpcError record {
+    # The JSON-RPC protocol version
+    JSONRPC_VERSION jsonrpc;
+    # Identifier of the request
+    RequestId? id;
+    # The error information
+    record {
+        # The error type that occurred
+        int code;
+        # A short description of the error. The message SHOULD be limited to a concise single sentence.
+        string message;
+        # Additional information about the error. The value of this member is defined by the sender (e.g. detailed error information, nested errors etc.).
+        anydata data?;
+    } 'error;
+};
+
 # This request is sent from the client to the server when it first connects, asking it to begin initialization.
 type InitializeRequest record {|
     *Request;
     # Method name for the request
-    "initialize" method;
+    REQUEST_INITIALIZE method = REQUEST_INITIALIZE;
     # Parameters for the initialize request
     record {
         *RequestParams;
@@ -139,7 +187,7 @@ public type InitializeResult record {
 public type InitializedNotification record {|
     *Notification;
     # The method identifier for the notification, must be "notifications/initialized"
-    NOTIFICATION_INITIALIZED method;
+    NOTIFICATION_INITIALIZED method = NOTIFICATION_INITIALIZED;
 |};
 
 # Capabilities a client may support. Known capabilities are defined here, in this schema,
@@ -243,14 +291,14 @@ public type EmbeddedResource record {
 public type ListToolsRequest record {|
     *PaginatedRequest;
     # The method identifier for this request
-    "tools/list" method;
+    REQUEST_LIST_TOOLS method = REQUEST_LIST_TOOLS;
 |};
 
 # The server's response to a tools/list request from the client.
 public type ListToolsResult record {
     *PaginatedResult;
     # A list of tools available on the server.
-    Tool[] tools;
+    ToolDefinition[] tools;
 };
 
 # The server's response to a tool call.
@@ -265,7 +313,7 @@ public type CallToolResult record {
 # Used by the client to invoke a tool provided by the server.
 public type CallToolRequest record {|
     # The JSON-RPC method name
-    "tools/call" method;
+    REQUEST_CALL_TOOL method = REQUEST_CALL_TOOL;
     # The parameters for the tool call
     CallToolParams params;
 |};
@@ -306,7 +354,7 @@ public type ToolAnnotations record {
 };
 
 # Definition for a tool the client can call.
-public type Tool record {
+public type ToolDefinition record {
     # The name of the tool
     string name;
     # A human-readable description of the tool
@@ -369,3 +417,46 @@ public type AudioContent record {
 
 # Represents a result sent from the server to the client.
 public type ServerResult InitializeResult|CallToolResult|ListToolsResult;
+
+# Represents a tool configuration that can be used to define tools available in the MCP service.
+public type McpToolConfig record {|
+    # The description of the tool.
+    string description?;
+    # The JSON schema for the tool's parameters.
+    map<json> schema?;
+|};
+
+# Annotation to mark a function as an MCP tool configuration.
+public annotation McpToolConfig Tool on object function;
+
+# Represents the options for configuring an MCP server.
+public type ServerOptions record {|
+    # Capabilities to advertise as being supported by this server.
+    ServerCapabilities capabilities?;
+    # Optional instructions describing how to use the server and its features.
+    string instructions?;
+    # Whether to enforce strict capabilities compliance.
+    boolean enforceStrictCapabilities?;
+|};
+
+# Configuration for MCP service that defines server capabilities and metadata.
+public type ServiceConfiguration record {|
+    # Server implementation information
+    Implementation info;
+    # Optional server configuration options
+    ServerOptions options?;
+|};
+
+# Annotation to provide service configuration to MCP services.
+public annotation ServiceConfiguration ServiceConfig on service;
+
+# Defines an MCP service interface that handles incoming MCP requests.
+public type AdvancedService distinct service object {
+    remote isolated function onListTools() returns ListToolsResult|ServerError;
+    remote isolated function onCallTool(CallToolParams params) returns CallToolResult|ServerError;
+};
+
+# Defines a basic mcp service interface that handles incoming mcp requests.
+public type Service distinct service object {
+
+};
