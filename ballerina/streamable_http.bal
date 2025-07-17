@@ -35,10 +35,14 @@ isolated class StreamableHttpClientTransport {
     # + serverUrl - The URL of the server endpoint.
     # + config - Optional configuration, such as session ID.
     # + return - A StreamableHttpTransportError if initialization fails; otherwise, nil.
-    isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config) returns StreamableHttpTransportError? {
+    isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config)
+            returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
 
         StreamableHttpClientTransportConfig {sessionId, ...clientConfig} = config;
+        clientConfig.followRedirects = clientConfig.followRedirects ?: {
+            enabled: true
+        };
         do {
             self.httpClient = check new (serverUrl, clientConfig);
         } on fail error e {
@@ -51,7 +55,8 @@ isolated class StreamableHttpClientTransport {
     #
     # + message - The JSON-RPC message to send.
     # + return - A JSON-RPC response message, a stream of messages, or a transport error.
-    isolated function sendMessage(JsonRpcMessage message) returns JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? {
+    isolated function sendMessage(JsonRpcMessage message)
+            returns JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? {
         map<string> headers = self.prepareRequestHeaders();
         headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
         headers[ACCEPT_HEADER] = string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`;
@@ -159,7 +164,8 @@ isolated class StreamableHttpClientTransport {
     #
     # + response - The HTTP response containing SSE data.
     # + return - A stream of JsonRpcMessages, or a StreamableHttpTransportError.
-    private isolated function processServerSentEvents(http:Response response) returns stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError {
+    private isolated function processServerSentEvents(http:Response response)
+            returns stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError {
         do {
             stream<http:SseEvent, error?> sseEventStream = check response.getSseEventStream();
             JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
@@ -175,7 +181,8 @@ isolated class StreamableHttpClientTransport {
     #
     # + response - The HTTP response containing JSON data.
     # + return - A JsonRpcMessage, or a StreamableHttpTransportError.
-    private isolated function processJsonResponse(http:Response response) returns JsonRpcMessage|StreamableHttpTransportError {
+    private isolated function processJsonResponse(http:Response response)
+            returns JsonRpcMessage|StreamableHttpTransportError {
         do {
             json payload = check response.getJsonPayload();
             return check payload.cloneWithType();
