@@ -50,7 +50,8 @@ public distinct isolated client class Client {
     # + return - ClientError if initialization fails, nil on success
     public isolated function init(string serverUrl, *ClientConfiguration config) returns ClientError? {
         // Create and initialize transport.
-        StreamableHttpClientTransport newTransport = check new (serverUrl);
+        ClientConfiguration {info: _, capabilityConfig: _, ...transportConfig} = config;
+        StreamableHttpClientTransport newTransport = check new (serverUrl, transportConfig);
         self.transport = newTransport;
 
         string? sessionId = newTransport.getSessionId();
@@ -93,7 +94,7 @@ public distinct isolated client class Client {
         self.serverInfo = response.serverInfo.cloneReadOnly();
 
         // Send notification to complete initialization.
-        check self.sendNotificationMessage(<InitializedNotification> {});
+        check self.sendNotificationMessage(<InitializedNotification>{});
     }
 
     # Opens a server-sent events (SSE) stream for asynchronous server-to-client communication.
