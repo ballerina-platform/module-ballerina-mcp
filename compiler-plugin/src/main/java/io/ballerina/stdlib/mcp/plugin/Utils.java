@@ -22,8 +22,10 @@ import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.api.symbols.AnnotationSymbol;
 import io.ballerina.compiler.api.symbols.Documentable;
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
+import io.ballerina.compiler.api.symbols.ServiceDeclarationSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
 import io.ballerina.compiler.api.symbols.SymbolKind;
+import io.ballerina.compiler.api.symbols.TypeSymbol;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
 import io.ballerina.compiler.syntax.tree.MetadataNode;
@@ -38,6 +40,7 @@ public class Utils {
     public static final String BALLERINA_ORG = "ballerina";
     public static final String TOOL_ANNOTATION_NAME = "Tool";
     public static final String MCP_PACKAGE_NAME = "mcp";
+    public static final String MCP_BASIC_SERVICE_NAME = "Service";
 
     private Utils() {
     }
@@ -96,5 +99,28 @@ public class Utils {
                                 .isPresent()
                 )
                 .findFirst();
+    }
+
+    public static boolean isMcpServiceFunction(SemanticModel semanticModel,
+                                               FunctionDefinitionNode functionDefinitionNode) {
+        Optional<Symbol> parentSymbol = semanticModel.symbol(functionDefinitionNode.parent());
+
+        if (parentSymbol.isEmpty() || parentSymbol.get().kind() != SymbolKind.SERVICE_DECLARATION) {
+            return false;
+        }
+
+        ServiceDeclarationSymbol serviceSymbol = (ServiceDeclarationSymbol) parentSymbol.get();
+        Optional<TypeSymbol> firstListenerType = serviceSymbol.listenerTypes().stream().findFirst();
+
+        boolean isFromMcpModule = firstListenerType
+                .flatMap(TypeSymbol::getModule)
+                .flatMap(module -> module.getName().map(MCP_PACKAGE_NAME::equals))
+                .orElse(false);
+
+        boolean isServiceType = serviceSymbol.typeDescriptor()
+                .flatMap(type -> type.getName().map(MCP_BASIC_SERVICE_NAME::equals))
+                .orElse(false);
+
+        return isFromMcpModule && isServiceType;
     }
 }
