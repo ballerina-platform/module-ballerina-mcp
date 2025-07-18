@@ -110,11 +110,12 @@ public class Utils {
         }
 
         ServiceDeclarationSymbol serviceSymbol = (ServiceDeclarationSymbol) parentSymbol.get();
-        TypeSymbol firstListenerType = serviceSymbol.listenerTypes().stream().findFirst().orElse(null);
+        Optional<TypeSymbol> firstListenerType = serviceSymbol.listenerTypes().stream().findFirst();
 
-        boolean isFromMcpModule = firstListenerType != null &&
-                firstListenerType.getModule()
-                        .flatMap(module -> module.getName().map(MCP_PACKAGE_NAME::equals)).orElse(false);
+        boolean isFromMcpModule = firstListenerType
+                .flatMap(type -> type.getModule()
+                        .flatMap(module -> module.getName().map(MCP_PACKAGE_NAME::equals)))
+                .orElse(false);
 
         boolean isServiceType = serviceSymbol.typeDescriptor()
                 .flatMap(type -> type.getName().map(MCP_BASIC_SERVICE_NAME::equals)).orElse(false);
