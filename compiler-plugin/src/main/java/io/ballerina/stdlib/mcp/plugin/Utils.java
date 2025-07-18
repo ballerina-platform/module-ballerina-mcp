@@ -40,6 +40,7 @@ public class Utils {
     public static final String BALLERINA_ORG = "ballerina";
     public static final String TOOL_ANNOTATION_NAME = "Tool";
     public static final String MCP_PACKAGE_NAME = "mcp";
+    public static final String MCP_BASIC_SERVICE_NAME = "Service";
 
     private Utils() {
     }
@@ -111,8 +112,13 @@ public class Utils {
         ServiceDeclarationSymbol serviceSymbol = (ServiceDeclarationSymbol) parentSymbol.get();
         TypeSymbol firstListenerType = serviceSymbol.listenerTypes().stream().findFirst().orElse(null);
 
-        return firstListenerType != null
-                && firstListenerType.getModule()
-                .flatMap(module -> module.getName().map(MCP_PACKAGE_NAME::equals)).orElse(false);
+        boolean isFromMcpModule = firstListenerType != null &&
+                firstListenerType.getModule()
+                        .flatMap(module -> module.getName().map(MCP_PACKAGE_NAME::equals)).orElse(false);
+
+        boolean isServiceType = serviceSymbol.typeDescriptor()
+                .flatMap(type -> type.getName().map(MCP_BASIC_SERVICE_NAME::equals)).orElse(false);
+
+        return isFromMcpModule && isServiceType;
     }
 }
