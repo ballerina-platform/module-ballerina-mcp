@@ -46,6 +46,7 @@ import java.util.stream.Collectors;
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.DESCRIPTION_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCHEMA_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
+import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpServiceFunction;
 import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION;
 
 /**
@@ -80,6 +81,11 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         this.context = context;
 
         FunctionDefinitionNode functionDefinitionNode = (FunctionDefinitionNode) context.node();
+        
+        if (!isMcpServiceFunction(context.semanticModel(), functionDefinitionNode)) {
+            return;
+        }
+
         AnnotationNode toolAnnotationNode = getToolAnnotationNode(
                 context.semanticModel(), functionDefinitionNode
         ).orElse(null);
