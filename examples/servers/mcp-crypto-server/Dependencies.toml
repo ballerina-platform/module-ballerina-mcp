@@ -46,6 +46,9 @@ dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "time"}
 ]
+modules = [
+	{org = "ballerina", packageName = "crypto", moduleName = "crypto"}
+]
 
 [[package]]
 org = "ballerina"
@@ -142,6 +145,9 @@ dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "lang.__internal"}
 ]
+modules = [
+	{org = "ballerina", packageName = "lang.array", moduleName = "lang.array"}
+]
 
 [[package]]
 org = "ballerina"
@@ -228,17 +234,17 @@ modules = [
 
 [[package]]
 org = "ballerina"
-name = "mcp_weather_server"
+name = "mcp_crypto_server"
 version = "0.1.0"
 dependencies = [
+	{org = "ballerina", name = "crypto"},
+	{org = "ballerina", name = "lang.array"},
 	{org = "ballerina", name = "log"},
 	{org = "ballerina", name = "mcp"},
-	{org = "ballerina", name = "random"},
-	{org = "ballerina", name = "time"},
 	{org = "ballerinai", name = "observe"}
 ]
 modules = [
-	{org = "ballerina", packageName = "mcp_weather_server", moduleName = "mcp_weather_server"}
+	{org = "ballerina", packageName = "mcp_crypto_server", moduleName = "mcp_crypto_server"}
 ]
 
 [[package]]
@@ -284,18 +290,6 @@ dependencies = [
 
 [[package]]
 org = "ballerina"
-name = "random"
-version = "1.7.0"
-dependencies = [
-	{org = "ballerina", name = "jballerina.java"},
-	{org = "ballerina", name = "time"}
-]
-modules = [
-	{org = "ballerina", packageName = "random", moduleName = "random"}
-]
-
-[[package]]
-org = "ballerina"
 name = "task"
 version = "2.10.0"
 dependencies = [
@@ -310,9 +304,6 @@ name = "time"
 version = "2.7.0"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"}
-]
-modules = [
-	{org = "ballerina", packageName = "time", moduleName = "time"}
 ]
 
 [[package]]

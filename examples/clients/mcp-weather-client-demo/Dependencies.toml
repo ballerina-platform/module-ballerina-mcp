@@ -219,7 +219,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "0.4.2"
+version = "0.9.1"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},

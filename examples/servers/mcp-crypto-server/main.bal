@@ -14,10 +14,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp;
 import ballerina/crypto;
-import ballerina/log;
 import ballerina/lang.array;
+import ballerina/log;
+import ballerina/mcp;
 
 listener mcp:Listener mcpListener = check new (9091);
 

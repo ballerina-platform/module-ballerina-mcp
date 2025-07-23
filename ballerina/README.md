@@ -39,7 +39,7 @@ Create an MCP service using the Basic Service pattern with automatic tool discov
 }
 isolated service mcp:Service /mcp on mcpListener {
     
-    @mcp:McpTool {
+    @mcp:Tool {
         description: "Get current weather conditions for a location"
     }
     remote function getCurrentWeather(string city) returns Weather|error {
@@ -68,7 +68,7 @@ Constraints for defining MCP tools:
 1. The function must be marked `isolated`.
 2. Parameters should be a subtype of `anydata`.
 3. The tool should return a subtype of `anydata|error`.
-4. The `@mcp:McpTool` annotation is not required unless you want fine-grained control. If the annotation is not provided, the documentation string will be considered as the description.
+4. The `@mcp:Tool` annotation is not required unless you want fine-grained control. If the annotation is not provided, the documentation string will be considered as the description.
 
 #### Step 4: Advanced Service Implementation (Optional)
 
@@ -131,10 +131,10 @@ import ballerina/mcp;
 Create an MCP client to connect to an external MCP server:
 
 ```ballerina
-mcp:Client mcpClient = new ("http://localhost:3000/mcp",
+mcp:Client mcpClient = check new ("http://localhost:3000/mcp",
     info = {
-        "name": "My MCP Client",
-        "version": "1.0.0"
+        name: "My MCP Client",
+        version: "1.0.0"
     }
 );
 ```
@@ -145,9 +145,6 @@ Initialize the connection and discover available tools:
 
 ```ballerina
 public function main() returns error? {
-    // Initialize connection
-    check mcpClient->initialize();
-    
     // List available tools
     mcp:ListToolsResult toolsResult = check mcpClient->listTools();
     foreach mcp:Tool tool in toolsResult.tools {
@@ -162,14 +159,12 @@ Call specific tools with parameters:
 
 ```ballerina
 public function main() returns error? {
-    check mcpClient->initialize();
-    
     // Call a specific tool
     mcp:CallToolResult result = check mcpClient->callTool({
         name: "getCurrentWeather",
         arguments: {
-            "city": "London",
-            "country": "UK"
+            city: "London",
+            country: "UK"
         }
     });
     
@@ -185,10 +180,10 @@ public function main() returns error? {
 Configure the client with additional capabilities:
 
 ```ballerina
-mcp:Client mcpClient = new ("http://localhost:3000/mcp",
+mcp:Client mcpClient = check new ("http://localhost:3000/mcp",
     info = {
-        "name": "Advanced MCP Client",
-        "version": "1.0.0"
+        name: "Advanced MCP Client",
+        version: "1.0.0"
     },
     capabilityConfig = {
         capabilities: {
@@ -204,5 +199,10 @@ mcp:Client mcpClient = new ("http://localhost:3000/mcp",
 
 The `mcp` module provides practical examples illustrating usage in various scenarios. Explore these examples in the [examples directory](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/), covering the following use cases:
 
-1. [Weather MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-weather-server) - Demonstrates how to implement an MCP server that exposes weather-related tools
-2. [Weather Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-weather-client-demo) - Shows how to build an MCP client that discovers and invokes tools from MCP servers
+### Server Examples
+1. [Weather MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-weather-server) - Demonstrates the Basic Service pattern with automatic tool discovery for weather-related tools
+2. [Crypto MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-crypto-server) - Shows the Advanced Service pattern with manual tool management for cryptographic operations
+
+### Client Examples
+1. [Weather Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-weather-client-demo) - Shows how to build an MCP client that discovers and invokes weather tools
+2. [Crypto Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-crypto-client-demo) - Demonstrates client interaction with cryptographic MCP services
