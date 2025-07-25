@@ -18,7 +18,7 @@
 public type ClientConfiguration record {|
     *StreamableHttpClientTransportConfig;
     # Client information such as name and version.
-    Implementation info;
+    Implementation info?;
     # Client capabilities configuration.
     ClientCapabilityConfiguration capabilityConfig?;
 |};
@@ -66,7 +66,10 @@ public distinct isolated client class Client {
             params: {
                 protocolVersion: LATEST_PROTOCOL_VERSION,
                 capabilities: config.capabilityConfig?.capabilities ?: {},
-                clientInfo: config.info
+                clientInfo: config.info ?: {
+                    name: "MCP Client",
+                    version: "1.0.0"
+                }
             }
         };
 
