@@ -39,7 +39,7 @@ public distinct isolated client class StreamableHttpClient {
     # + clientInfo - Client implementation information
     # + capabilities - Client capabilities to advertise
     # + return - `ClientError` if initialization fails, `()` on success
-    isolated remote function initialize(Implementation clientInfo, ClientCapabilities capabilities = {})
+    isolated remote function initialize(Implementation? clientInfo, ClientCapabilities capabilities = {})
             returns ClientError? {
         lock {
             string? sessionId = self.transport.getSessionId();
@@ -55,7 +55,10 @@ public distinct isolated client class StreamableHttpClient {
             params: {
                 protocolVersion: LATEST_PROTOCOL_VERSION,
                 capabilities: capabilities,
-                clientInfo: clientInfo
+                clientInfo: clientInfo ?: {
+                    name: "MCP Client",
+                    version: "1.0.0"
+                }
             }
         };
 
