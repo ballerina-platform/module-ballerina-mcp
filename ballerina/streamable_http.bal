@@ -64,6 +64,9 @@ isolated class StreamableHttpClientTransport {
 
         // Merge additional headers, with additional headers overriding defaults
         foreach var [key, value] in additionalHeaders.entries() {
+            foreach string headerName in headers.keys().filter(k => k.toLowerAscii() == key.toLowerAscii()) {
+                _ = headers.remove(headerName);
+            }
             headers[key] = value;
         }
 
