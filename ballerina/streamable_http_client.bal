@@ -97,11 +97,12 @@ public distinct isolated client class StreamableHttpClient {
 
     # Retrieves the list of available tools from the server.
     #
+    # + headers - Optional headers to include with the request
     # + return - List of available tools or a ClientError.
-    isolated remote function listTools() returns ListToolsResult|ClientError {
+    isolated remote function listTools(map<string> headers = {}) returns ListToolsResult|ClientError {
         ListToolsRequest listToolsRequest = {};
 
-        ServerResult result = check self.sendRequestMessage(listToolsRequest);
+        ServerResult result = check self.sendRequestMessage(listToolsRequest, headers);
         if result is ListToolsResult {
             return result;
         } else {
@@ -113,14 +114,16 @@ public distinct isolated client class StreamableHttpClient {
 
     # Executes a tool on the server with the given parameters.
     #
-    # + params - Tool execution parameters, including name and arguments.
+    # + params - Tool execution parameters, including name and arguments
+    # + headers - Optional headers to include with the request
     # + return - Result of the tool execution or a ClientError.
-    isolated remote function callTool(CallToolParams params) returns CallToolResult|ClientError {
+    isolated remote function callTool(CallToolParams params, map<string> headers = {})
+            returns CallToolResult|ClientError {
         CallToolRequest toolCallRequest = {
             params: params
         };
 
-        ServerResult result = check self.sendRequestMessage(toolCallRequest);
+        ServerResult result = check self.sendRequestMessage(toolCallRequest, headers);
         if result is CallToolResult {
             return result;
         } else {
@@ -148,9 +151,11 @@ public distinct isolated client class StreamableHttpClient {
 
     # Sends a request message to the server and returns the server's response.
     #
-    # + request - The request object to send.
+    # + request - The request object to send
+    # + headers - Optional headers to include with the request
     # + return - ServerResult, a stream of results, or a ClientError.
-    private isolated function sendRequestMessage(Request request) returns ServerResult|ClientError {
+    private isolated function sendRequestMessage(Request request, map<string> headers = {})
+            returns ServerResult|ClientError {
         lock {
             self.requestId += 1;
 
@@ -161,7 +166,7 @@ public distinct isolated client class StreamableHttpClient {
             };
 
             JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? response =
-                self.transport.sendMessage(jsonRpcRequest);
+                self.transport.sendMessage(jsonRpcRequest, headers.cloneReadOnly());
             return processServerResponse(response).cloneReadOnly();
         }
     }

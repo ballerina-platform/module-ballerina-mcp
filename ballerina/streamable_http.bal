@@ -53,13 +53,22 @@ isolated class StreamableHttpClientTransport {
 
     # Sends a JSON-RPC message to the server and returns the response.
     #
-    # + message - The JSON-RPC message to send.
+    # + message - The JSON-RPC message to send
+    # + additionalHeaders - Optional additional headers to include with the request
     # + return - A JSON-RPC response message, a stream of messages, or a transport error.
-    isolated function sendMessage(JsonRpcMessage message)
+    isolated function sendMessage(JsonRpcMessage message, map<string> additionalHeaders = {})
             returns JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? {
         map<string> headers = self.prepareRequestHeaders();
         headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
         headers[ACCEPT_HEADER] = string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`;
+
+        // Merge additional headers, with additional headers overriding defaults
+        foreach var [key, value] in additionalHeaders.entries() {
+            foreach string headerName in headers.keys().filter(k => k.toLowerAscii() == key.toLowerAscii()) {
+                _ = headers.remove(headerName);
+            }
+            headers[key] = value;
+        }
 
         do {
             http:Response response = check self.httpClient->post("", message, headers = headers);
