@@ -23,21 +23,29 @@ const string TEST_CLIENT_NAME = "test-client";
 const string TEST_CLIENT_NAME_2 = "test-client-2";
 const string TEST_CLIENT_VERSION = "1.0.0";
 
+final Implementation clientInfo = {
+    name: TEST_CLIENT_NAME,
+    version: TEST_CLIENT_VERSION
+};
+
 @test:Config {}
 function testClientConstructionWithValidUrl() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
+
     test:assertTrue('client is StreamableHttpClient);
 }
 
 @test:Config {}
 function testClientConstructionWithInvalidUrlFormat() returns error? {
     StreamableHttpClient 'client = check new (INVALID_URL);
+
     test:assertTrue('client is StreamableHttpClient);
 }
 
 @test:Config {}
 function testClientConstructionWithUnreachableServer() returns error? {
     StreamableHttpClient 'client = check new (UNREACHABLE_MCP_URL);
+
     test:assertTrue('client is StreamableHttpClient);
 }
 
@@ -47,183 +55,127 @@ function testClientConstructionWithConfig() returns error? {
         timeout: 30,
         followRedirects: {enabled: true}
     };
-
     StreamableHttpClient 'client = check new (VALID_MCP_URL, config);
+
     test:assertTrue('client is StreamableHttpClient);
 }
 
 @test:Config {}
 function testClientInitializationWithValidUrl() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
-
-    Implementation clientInfo = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
     ClientCapabilities capabilities = {};
-
     error? result = 'client->initialize(clientInfo, capabilities);
+
     test:assertFalse(result is error);
 }
 
 @test:Config {}
 function testClientInitializationWithInvalidUrl() returns error? {
     StreamableHttpClient 'client = check new (INVALID_URL);
-
-    Implementation clientInfo = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
     error? result = 'client->initialize(clientInfo);
+
     test:assertTrue(result is error);
 }
 
 @test:Config {}
 function testClientInitializationWithUnreachableUrl() returns error? {
     StreamableHttpClient 'client = check new (UNREACHABLE_MCP_URL);
-
-    Implementation clientInfo = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
     error? result = 'client->initialize(clientInfo);
+
     test:assertTrue(result is error);
 }
 
 @test:Config {}
 function testClientInitializationProtocolVersionNegotiation() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
-
-    Implementation clientInfo = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
     check 'client->initialize(clientInfo);
+
     test:assertTrue(true);
 }
 
 @test:Config {}
 function testClientInitializationStoresServerCapabilities() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
-
-    Implementation clientInfo = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
     check 'client->initialize(clientInfo);
+
     test:assertTrue(true);
 }
 
 @test:Config {}
 function testDoubleInitializationHandling() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
-
-    Implementation clientInfo = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
     check 'client->initialize(clientInfo);
     error? result = 'client->initialize(clientInfo);
+
     test:assertFalse(result is error);
 }
 
 @test:Config {}
 function testInitializationWithEmptyClientName() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
-
     Implementation clientInfo = {
         name: "",
         version: TEST_CLIENT_VERSION
     };
-
     error? result = 'client->initialize(clientInfo);
+
     test:assertFalse(result is error);
 }
 
 @test:Config {}
 function testInitializationWithEmptyVersion() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
-
     Implementation clientInfo = {
         name: TEST_CLIENT_NAME,
         version: ""
     };
-
     error? result = 'client->initialize(clientInfo);
+
     test:assertFalse(result is error);
 }
 
 @test:Config {}
 function testInitializationWithClientCapabilities() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
-
-    Implementation clientInfo = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
     ClientCapabilities capabilities = {
         roots: {
             listChanged: true
         },
         sampling: {}
     };
-
     error? result = 'client->initialize(clientInfo, capabilities);
+
     test:assertFalse(result is error);
 }
 
 @test:Config {}
 function testInitializationWithEmptyCapabilities() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
-
-    Implementation clientInfo = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
     ClientCapabilities capabilities = {};
-
     error? result = 'client->initialize(clientInfo, capabilities);
+
     test:assertFalse(result is error);
 }
 
 @test:Config {}
 function testInitializationWithoutCapabilities() returns error? {
     StreamableHttpClient 'client = check new (VALID_MCP_URL);
-
-    Implementation clientInfo = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
     error? result = 'client->initialize(clientInfo);
+
     test:assertFalse(result is error);
 }
 
 @test:Config {}
 function testMultipleClientsInitialization() returns error? {
-    StreamableHttpClient client1 = check new (VALID_MCP_URL);
-    StreamableHttpClient client2 = check new (VALID_MCP_URL);
-
-    Implementation clientInfo1 = {
-        name: TEST_CLIENT_NAME,
-        version: TEST_CLIENT_VERSION
-    };
-
+    StreamableHttpClient firstClient = check new (VALID_MCP_URL);
+    StreamableHttpClient secondClient = check new (VALID_MCP_URL);
     Implementation clientInfo2 = {
         name: TEST_CLIENT_NAME_2,
         version: TEST_CLIENT_VERSION
     };
+    error? firstInitializeResult = firstClient->initialize(clientInfo);
+    error? secondInitializeResult = secondClient->initialize(clientInfo2);
 
-    check client1->initialize(clientInfo1);
-    check client2->initialize(clientInfo2);
-
-    test:assertTrue(true);
+    test:assertFalse(firstInitializeResult is error);
+    test:assertFalse(secondInitializeResult is error);
 }

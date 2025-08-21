@@ -45,3 +45,19 @@ velocity.log*
 
 # AI Tools
 CLAUDE.md
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# OS files
+.DS_Store
