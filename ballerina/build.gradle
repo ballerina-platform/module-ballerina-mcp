@@ -78,6 +78,45 @@ task commitTomlFiles {
     }
 }
 
+task startMcpServer() {
+    doLast {
+        if (!Os.isFamily(Os.FAMILY_WINDOWS)) {
+            def stdOut = new ByteArrayOutputStream()
+            exec {
+                commandLine 'sh', '-c', "docker ps --filter name=weather-info-server"
+                standardOutput = stdOut
+            }
+            if (!stdOut.toString().contains("weather-info-server")) {
+                println "Starting MCP Weather Info Server..."
+                exec {
+                    commandLine 'sh', '-c', "docker compose -f $project.projectDir/tests/resources/weather-info-server/compose.yml up -d"
+                    standardOutput = stdOut
+                }
+                sleep(5 * 1000)
+            }
+        }
+    }
+}
+
+task stopMcpServer() {
+    doLast {
+        if (!Os.isFamily(Os.FAMILY_WINDOWS)) {
+            def stdOut = new ByteArrayOutputStream()
+            exec {
+                commandLine 'sh', '-c', "docker ps --filter name=weather-info-server"
+                standardOutput = stdOut
+            }
+            if (stdOut.toString().contains("weather-info-server")) {
+                println "Stopping MCP Weather Info Server..."
+                exec {
+                    commandLine 'sh', '-c', "docker compose -f $project.projectDir/tests/resources/weather-info-server/compose.yml down"
+                    standardOutput = stdOut
+                }
+            }
+        }
+    }
+}
+
 publishing {
     publications {
         maven(MavenPublication) {
@@ -102,8 +141,13 @@ updateTomlFiles.dependsOn copyStdlibs
 build.dependsOn "generatePomFileForMavenPublication"
 build.dependsOn ":${packageName}-native:build"
 build.dependsOn ":${packageName}-compiler-plugin:build"
+build.dependsOn startMcpServer
+build.finalizedBy stopMcpServer
+
 test.dependsOn ":${packageName}-native:build"
 test.dependsOn ":${packageName}-compiler-plugin:build"
+test.dependsOn startMcpServer
+test.finalizedBy stopMcpServer
 
 publishToMavenLocal.dependsOn build
 publish.dependsOn build
