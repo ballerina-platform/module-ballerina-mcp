@@ -29,7 +29,7 @@ public distinct isolated client class StreamableHttpClient {
     #
     # + serverUrl - MCP server URL
     # + config - Client transport configuration
-    # + return - ClientError if transport creation fails, nil on success
+    # + return - `ClientError` if transport creation fails, `()` on success
     public isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config) returns ClientError? {
         self.transport = check new (serverUrl, config);
     }
@@ -38,7 +38,7 @@ public distinct isolated client class StreamableHttpClient {
     #
     # + clientInfo - Client implementation information
     # + capabilities - Client capabilities to advertise
-    # + return - ClientError if initialization fails, nil on success
+    # + return - `ClientError` if initialization fails, `()` on success
     isolated remote function initialize(Implementation clientInfo, ClientCapabilities capabilities = {})
             returns ClientError? {
         lock {
@@ -132,7 +132,7 @@ public distinct isolated client class StreamableHttpClient {
 
     # Closes the session and disconnects from the server.
     #
-    # + return - A ClientError if closure fails, or nil on success.
+    # + return - A `ClientError` if closure fails, or `()` on success.
     isolated remote function close() returns ClientError? {
         lock {
             do {
@@ -169,7 +169,7 @@ public distinct isolated client class StreamableHttpClient {
     # Sends a notification message to the server.
     #
     # + notification - The notification object to send.
-    # + return - A ClientError if sending fails, or nil on success.
+    # + return - A `ClientError` if sending fails, or `()` on success.
     private isolated function sendNotificationMessage(Notification notification) returns ClientError? {
         lock {
             JsonRpcNotification jsonRpcNotification = {
