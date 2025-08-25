@@ -19,7 +19,7 @@ import ballerina/http;
 # Configuration options for the Streamable HTTP client transport.
 #
 # + sessionId - Optional session identifier for continued interactions.
-type StreamableHttpClientTransportConfig record {|
+public type StreamableHttpClientTransportConfig record {|
     *http:ClientConfiguration;
     string sessionId?;
 |};

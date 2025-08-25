@@ -14,25 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-# Configuration options for initializing an MCP client.
-public type ClientConfiguration record {|
-    *StreamableHttpClientTransportConfig;
-    # Client information such as name and version.
-    Implementation info;
-    # Client capabilities configuration.
-    ClientCapabilityConfiguration capabilityConfig?;
-|};
-
-# Configuration for MCP client capabilities.
-public type ClientCapabilityConfiguration record {|
-    # Capabilities to be advertised by this client.
-    ClientCapabilities capabilities?;
-    # Whether to enforce strict capabilities compliance.
-    boolean enforceStrictCapabilities?;
-|};
-
 # Represents an MCP client built on top of the Streamable HTTP transport.
-public distinct isolated client class Client {
+public distinct isolated client class StreamableHttpClient {
     # Transport for communication with the MCP server.
     private StreamableHttpClientTransport transport;
     # Server capabilities.
@@ -42,31 +25,37 @@ public distinct isolated client class Client {
     # Request ID generator for tracking requests.
     private int requestId = 0;
 
-    # Initializes a new MCP client and establishes connection to the server.
-    # Performs protocol handshake and capability exchange. Client is ready for use after construction.
+    # Creates a new MCP client with the specified transport configuration.
     #
     # + serverUrl - MCP server URL
-    # + config - Client configuration including info and capabilities
-    # + return - ClientError if initialization fails, nil on success
-    public isolated function init(string serverUrl, *ClientConfiguration config) returns ClientError? {
-        // Create and initialize transport.
-        ClientConfiguration {info: _, capabilityConfig: _, ...transportConfig} = config;
-        StreamableHttpClientTransport newTransport = check new (serverUrl, transportConfig);
-        self.transport = newTransport;
+    # + config - Client transport configuration
+    # + return - `ClientError` if transport creation fails, `()` on success
+    public isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config) returns ClientError? {
+        self.transport = check new (serverUrl, config);
+    }
 
-        string? sessionId = newTransport.getSessionId();
+    # Initializes the MCP connection by performing protocol handshake and capability exchange.
+    #
+    # + clientInfo - Client implementation information
+    # + capabilities - Client capabilities to advertise
+    # + return - `ClientError` if initialization fails, `()` on success
+    isolated remote function initialize(Implementation clientInfo, ClientCapabilities capabilities = {})
+            returns ClientError? {
+        lock {
+            string? sessionId = self.transport.getSessionId();
 
-        // If a session ID exists, assume reconnection and skip initialization.
-        if sessionId is string {
-            return;
+            // If a session ID exists, assume reconnection and skip initialization.
+            if sessionId is string {
+                return;
+            }
         }
 
         // Prepare and send the initialization request.
         InitializeRequest initRequest = {
             params: {
                 protocolVersion: LATEST_PROTOCOL_VERSION,
-                capabilities: config.capabilityConfig?.capabilities ?: {},
-                clientInfo: config.info
+                capabilities: capabilities,
+                clientInfo: clientInfo
             }
         };
 
@@ -74,26 +63,26 @@ public distinct isolated client class Client {
 
         if response !is InitializeResult {
             return error ClientInitializationError(
-                string `Initialization failed: unexpected response type '${
-                    (typeof response).toString()}' received from server.`
-            );
+                    string `Initialization failed: unexpected response type '${
+                        (typeof response).toString()}' received from server.`
+                );
         }
 
-        final string protocolVersion = response.protocolVersion;
         // Validate protocol compatibility.
+        final string protocolVersion = response.protocolVersion;
         if (!SUPPORTED_PROTOCOL_VERSIONS.some(v => v == protocolVersion)) {
             return error ProtocolVersionError(
-                string `Server protocol version '${
-                    protocolVersion}' is not supported. Supported versions: ${
-                    SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
-            );
+                    string `Server protocol version '${
+                        protocolVersion}' is not supported. Supported versions: ${
+                        SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
+                );
         }
 
-        // Store server capabilities and info.
-        self.serverCapabilities = response.capabilities.cloneReadOnly();
-        self.serverInfo = response.serverInfo.cloneReadOnly();
+        lock {
+            self.serverCapabilities = response.capabilities.cloneReadOnly();
+            self.serverInfo = response.serverInfo.cloneReadOnly();
+        }
 
-        // Send notification to complete initialization.
         check self.sendNotificationMessage(<InitializedNotification>{});
     }
 
@@ -143,7 +132,7 @@ public distinct isolated client class Client {
 
     # Closes the session and disconnects from the server.
     #
-    # + return - A ClientError if closure fails, or nil on success.
+    # + return - A `ClientError` if closure fails, or `()` on success.
     isolated remote function close() returns ClientError? {
         lock {
             do {
@@ -180,7 +169,7 @@ public distinct isolated client class Client {
     # Sends a notification message to the server.
     #
     # + notification - The notification object to send.
-    # + return - A ClientError if sending fails, or nil on success.
+    # + return - A `ClientError` if sending fails, or `()` on success.
     private isolated function sendNotificationMessage(Notification notification) returns ClientError? {
         lock {
             JsonRpcNotification jsonRpcNotification = {
