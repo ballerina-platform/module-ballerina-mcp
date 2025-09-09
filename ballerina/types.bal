@@ -36,6 +36,16 @@ public enum RequestMethod {
     REQUEST_CALL_TOOL = "tools/call"
 };
 
+# Session management modes for MCP server transport
+public enum SessionMode {
+    # Stateful mode - sessions are managed by the transport
+    STATEFUL = "stateful",
+    # Stateless mode - no session management
+    STATELESS = "stateless",
+    # Automatic mode - determined based on client initialization
+    AUTO = "auto"
+};
+
 # JSON-RPC notification methods used for one-way communication in MCP
 public enum NotificationMethod {
     # Notification sent by client to indicate successful initialization
@@ -439,12 +449,23 @@ public type ServerOptions record {|
     boolean enforceStrictCapabilities?;
 |};
 
+# Options for configuring MCP server transport behavior.
+public type ServerTransportOptions record {|
+    # Controls the session management mode for the transport.
+    # - STATEFUL → Sessions are managed by the transport
+    # - STATELESS → No session management
+    # - AUTO → Determined automatically based on client initialization
+    SessionMode sessionMode = AUTO;
+|};
+
 # Configuration for MCP service that defines server capabilities and metadata.
 public type ServiceConfiguration record {|
     # Server implementation information
     Implementation info;
     # Optional server configuration options
     ServerOptions options?;
+    # Optional transport configuration options
+    ServerTransportOptions transport?;
 |};
 
 # Annotation to provide service configuration to MCP services.
