@@ -27,7 +27,7 @@ listener mcp:Listener mcpListener = check new (9091);
         version: "1.0.0"
     }
 }
-isolated service mcp:AdvancedService /mcp on mcpListener {
+service mcp:AdvancedService /mcp on mcpListener {
 
     remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {
@@ -144,8 +144,8 @@ isolated service mcp:AdvancedService /mcp on mcpListener {
         return {
             content: [
                 {
-                    "type": "text",
-                    "text": result.toJsonString()
+                    'type: "text",
+                    text: result.toJsonString()
                 }
             ]
         };
@@ -194,8 +194,8 @@ isolated service mcp:AdvancedService /mcp on mcpListener {
         return {
             content: [
                 {
-                    "type": "text",
-                    "text": result.toJsonString()
+                    'type: "text",
+                    text: result.toJsonString()
                 }
             ]
         };

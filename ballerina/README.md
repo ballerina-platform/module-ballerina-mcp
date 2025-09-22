@@ -37,7 +37,7 @@ Create an MCP service using the Basic Service pattern with automatic tool discov
         version: "1.0.0"
     }
 }
-isolated service mcp:Service /mcp on mcpListener {
+service mcp:Service /mcp on mcpListener {
     
     @mcp:Tool {
         description: "Get current weather conditions for a location"
@@ -49,33 +49,34 @@ isolated service mcp:Service /mcp on mcpListener {
             condition: "Sunny"
         };
     }
-    
-    
+
     # Get weather forecast for multiple days
     #
     # + location - The location for which to retrieve the weather forecast
     # + days - Number of days to include in the forecast
     # + return - Weather forecast data for the specified location and duration, or an error if the request fails
-    remote function getWeatherForecast(string location, int days) returns Weather|error {
+    remote function getWeatherForecast(string location, int days) returns WeatherForecast|error {
         // Implementation logic
-        return [];
+        return {
+            location: location,
+            forecast: []
+        };
     }
 }
 ```
 
 Constraints for defining MCP tools:
 
-1. The function must be marked `isolated`.
-2. Parameters should be a subtype of `anydata`.
-3. The tool should return a subtype of `anydata|error`.
-4. The `@mcp:Tool` annotation is not required unless you want fine-grained control. If the annotation is not provided, the documentation string will be considered as the description.
+1. Parameters should be a subtype of `anydata`.
+2. The tool should return a subtype of `anydata|error`.
+3. The `@mcp:Tool` annotation is not required unless you want fine-grained control. If the annotation is not provided, the documentation string will be considered as the description.
 
 #### Step 4: Advanced Service Implementation (Optional)
 
 For more control over tool management, use the Advanced Service pattern:
 
 ```ballerina
-isolated service mcp:AdvancedService /mcp on mcpListener {
+service mcp:AdvancedService /mcp on mcpListener {
     
     remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {
@@ -102,8 +103,8 @@ isolated service mcp:AdvancedService /mcp on mcpListener {
                 return {
                     content: [
                         {
-                            "type": "text",
-                            "text": "Weather data here"
+                            'type: "text",
+                            text: "Weather data here"
                         }
                     ]
                 };
@@ -131,23 +132,24 @@ import ballerina/mcp;
 Create an MCP client to connect to an external MCP server:
 
 ```ballerina
-mcp:Client mcpClient = check new ("http://localhost:3000/mcp",
-    info = {
-        name: "My MCP Client",
-        version: "1.0.0"
-    }
-);
+final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:3000/mcp");
 ```
 
 #### Step 3: Initialize Connection and Discover Tools
 
-Initialize the connection and discover available tools:
+Initialize the connection with client information and discover available tools:
 
 ```ballerina
 public function main() returns error? {
+    // Initialize the client with implementation info
+    check mcpClient->initialize({
+        name: "My MCP Client",
+        version: "1.0.0"
+    });
+
     // List available tools
     mcp:ListToolsResult toolsResult = check mcpClient->listTools();
-    foreach mcp:Tool tool in toolsResult.tools {
+    foreach mcp:ToolDefinition tool in toolsResult.tools {
         io:println(string `Available tool: ${tool.name} - ${tool.description ?: ""}`);
     }
 }
@@ -167,9 +169,9 @@ public function main() returns error? {
             country: "UK"
         }
     });
-    
+
     io:println("Tool result: " + result.toString());
-    
+
     // Close connection
     check mcpClient->close();
 }
@@ -180,16 +182,22 @@ public function main() returns error? {
 Configure the client with additional capabilities:
 
 ```ballerina
-mcp:Client mcpClient = check new ("http://localhost:3000/mcp",
-    info = {
+// Create client with custom configuration
+mcp:StreamableHttpClientTransportConfig config = {
+    timeout: 30,
+    followRedirects: {enabled: true}
+};
+mcp:StreamableHttpClient mcpClient = check new ("http://localhost:3000/mcp", config);
+
+// Initialize with client info and capabilities
+check mcpClient->initialize(
+    {
         name: "Advanced MCP Client",
         version: "1.0.0"
     },
-    capabilityConfig = {
-        capabilities: {
-            roots: {
-                listChanged: true
-            }
+    {
+        roots: {
+            listChanged: true
         }
     }
 );
