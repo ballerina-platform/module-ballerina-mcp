@@ -38,6 +38,7 @@ public distinct isolated client class StreamableHttpClient {
     #
     # + clientInfo - Client implementation information
     # + capabilities - Client capabilities to advertise
+    # + headers - Optional headers to include with the request
     # + return - `ClientError` if initialization fails, `()` on success
     isolated remote function initialize(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}, map<string|string[]> headers = {}) returns ClientError? {
