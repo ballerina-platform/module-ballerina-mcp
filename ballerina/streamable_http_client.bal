@@ -40,7 +40,7 @@ public distinct isolated client class StreamableHttpClient {
     # + capabilities - Client capabilities to advertise
     # + return - `ClientError` if initialization fails, `()` on success
     isolated remote function initialize(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
-            ClientCapabilities capabilities = {}) returns ClientError? {
+            ClientCapabilities capabilities = {}, map<string|string[]> headers = {}) returns ClientError? {
         lock {
             string? sessionId = self.transport.getSessionId();
 
@@ -59,7 +59,7 @@ public distinct isolated client class StreamableHttpClient {
             }
         };
 
-        ServerResult response = check self.sendRequestMessage(initRequest);
+        ServerResult response = check self.sendRequestMessage(initRequest, headers);
 
         if response !is InitializeResult {
             return error ClientInitializationError(
@@ -99,7 +99,7 @@ public distinct isolated client class StreamableHttpClient {
     #
     # + headers - Optional headers to include with the request
     # + return - List of available tools or a ClientError.
-    isolated remote function listTools(map<string> headers = {}) returns ListToolsResult|ClientError {
+    isolated remote function listTools(map<string|string[]> headers = {}) returns ListToolsResult|ClientError {
         ListToolsRequest listToolsRequest = {};
 
         ServerResult result = check self.sendRequestMessage(listToolsRequest, headers);
@@ -117,7 +117,7 @@ public distinct isolated client class StreamableHttpClient {
     # + params - Tool execution parameters, including name and arguments
     # + headers - Optional headers to include with the request
     # + return - Result of the tool execution or a ClientError.
-    isolated remote function callTool(CallToolParams params, map<string> headers = {})
+    isolated remote function callTool(CallToolParams params, map<string|string[]> headers = {})
             returns CallToolResult|ClientError {
         CallToolRequest toolCallRequest = {
             params: params
@@ -154,7 +154,7 @@ public distinct isolated client class StreamableHttpClient {
     # + request - The request object to send
     # + headers - Optional headers to include with the request
     # + return - ServerResult, a stream of results, or a ClientError.
-    private isolated function sendRequestMessage(Request request, map<string> headers = {})
+    private isolated function sendRequestMessage(Request request, map<string|string[]> headers = {})
             returns ServerResult|ClientError {
         lock {
             self.requestId += 1;

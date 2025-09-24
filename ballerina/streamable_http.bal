@@ -56,9 +56,9 @@ isolated class StreamableHttpClientTransport {
     # + message - The JSON-RPC message to send
     # + additionalHeaders - Optional additional headers to include with the request
     # + return - A JSON-RPC response message, a stream of messages, or a transport error.
-    isolated function sendMessage(JsonRpcMessage message, map<string> additionalHeaders = {})
+    isolated function sendMessage(JsonRpcMessage message, map<string|string[]> additionalHeaders = {})
             returns JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? {
-        map<string> headers = self.prepareRequestHeaders();
+        map<string|string[]> headers = self.prepareRequestHeaders();
         headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
         headers[ACCEPT_HEADER] = string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`;
 
