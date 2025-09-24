@@ -18,13 +18,16 @@ import ballerina/io;
 import ballerina/log;
 import ballerina/mcp;
 
-mcp:Client mcpClient = check new ("http://localhost:9091/mcp", info = {
-    name: "MCP Crypto Client Demo",
-    version: "1.0.0"
-});
+final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9091/mcp");
 
 public function main() returns mcp:ClientError? {
     log:printInfo("Starting MCP Crypto Client Demo");
+
+    // Initialize the client with client information
+    check mcpClient->initialize({
+        name: "MCP Crypto Client Demo",
+        version: "1.0.0"
+    });
 
     // List all available tools from the crypto server
     check listTools();

@@ -36,7 +36,8 @@ Server starts at `http://localhost:9090/mcp`
 A sample MCP client that connects to the weather server, discovers tools, and calls them.
 
 **Features:**
-- Connects to MCP server
+- Connects to MCP server using StreamableHttpClient
+- Demonstrates client initialization with server info
 - Lists available tools
 - Calls tools with sample parameters
 - Demonstrates proper client cleanup
@@ -83,7 +84,8 @@ Server starts at `http://localhost:9091/mcp`
 A sample MCP client that connects to the crypto server, discovers tools, and calls them.
 
 **Features:**
-- Connects to MCP crypto server
+- Connects to MCP crypto server using StreamableHttpClient
+- Demonstrates client initialization with server info
 - Lists available tools
 - Tests hash generation with different algorithms
 - Tests Base64 encoding and decoding operations

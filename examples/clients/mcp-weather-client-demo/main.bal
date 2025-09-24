@@ -18,13 +18,16 @@ import ballerina/io;
 import ballerina/log;
 import ballerina/mcp;
 
-mcp:Client mcpClient = check new ("http://localhost:9090/mcp", info = {
-    name: "MCP Weather Client Demo",
-    version: "1.0.0"
-});
+final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp");
 
 public function main() returns mcp:ClientError? {
     log:printInfo("Starting MCP Weather Client Demo");
+
+    // Initialize the client with client information
+    check mcpClient->initialize({
+        name: "MCP Weather Client Demo",
+        version: "1.0.0"
+    });
 
     // List all available tools from the weather server
     check listTools();

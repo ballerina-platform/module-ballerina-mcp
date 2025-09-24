@@ -27,7 +27,7 @@ listener mcp:Listener mcpListener = check new (9090);
         version: "1.0.0"
     }
 }
-isolated service mcp:Service /mcp on mcpListener {
+service mcp:Service /mcp on mcpListener {
     @mcp:Tool {
         description: string `
             **Description**: Get current weather conditions for a location
@@ -64,7 +64,7 @@ isolated service mcp:Service /mcp on mcpListener {
 
     # Get weather forecast for upcoming days
     #
-    # + location - City name or coordinates (e.g., "London", "40.7128,-74.0060") 
+    # + location - City name or coordinates (e.g., "London", "40.7128,-74.0060")
     # + days - Number of days to forecast (1-7)
     # + return - Weather forecast for the specified location and days
     remote function getWeatherForecast(string location, int days) returns WeatherForecast|error {
