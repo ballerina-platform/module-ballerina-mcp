@@ -39,8 +39,8 @@ public distinct isolated client class StreamableHttpClient {
     # + clientInfo - Client implementation information
     # + capabilities - Client capabilities to advertise
     # + return - `ClientError` if initialization fails, `()` on success
-    isolated remote function initialize(Implementation clientInfo, ClientCapabilities capabilities = {})
-            returns ClientError? {
+    isolated remote function initialize(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
+            ClientCapabilities capabilities = {}) returns ClientError? {
         lock {
             string? sessionId = self.transport.getSessionId();
 
