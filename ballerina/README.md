@@ -157,17 +157,20 @@ public function main() returns error? {
 
 #### Step 4: Invoke Tools
 
-Call specific tools with parameters:
+Call specific tools with parameters and optional custom headers:
 
 ```ballerina
 public function main() returns error? {
-    // Call a specific tool
+    // Call a specific tool with optional custom headers
     mcp:CallToolResult result = check mcpClient->callTool({
         name: "getCurrentWeather",
         arguments: {
             city: "London",
             country: "UK"
         }
+    }, {
+        "X-Request-ID": "req-12345",
+        "Authorization": "Bearer token123"
     });
 
     io:println("Tool result: " + result.toString());
@@ -179,7 +182,7 @@ public function main() returns error? {
 
 #### Step 5: Handle Client Configuration (Optional)
 
-Configure the client with additional capabilities:
+Configure the client with additional capabilities and custom headers:
 
 ```ballerina
 // Create client with custom configuration
@@ -187,20 +190,25 @@ mcp:StreamableHttpClientTransportConfig config = {
     timeout: 30,
     followRedirects: {enabled: true}
 };
-mcp:StreamableHttpClient mcpClient = check new ("http://localhost:3000/mcp", config);
+final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:3000/mcp", config);
 
-// Initialize with client info and capabilities
-check mcpClient->initialize(
-    {
-        name: "Advanced MCP Client",
-        version: "1.0.0"
-    },
-    {
-        roots: {
-            listChanged: true
+public function main() returns error? {
+    // Initialize with client info, capabilities, and optional custom headers
+    check mcpClient->initialize(
+        {
+            name: "Advanced MCP Client",
+            version: "1.0.0"
+        },
+        {
+            roots: {
+                listChanged: true
+            }
+        },
+        {
+            "X-Custom-Header": "custom-value"
         }
-    }
-);
+    );
+}
 ```
 
 ## Examples
