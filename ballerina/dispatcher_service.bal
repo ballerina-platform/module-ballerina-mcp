@@ -21,19 +21,29 @@ isolated service class DispatcherService {
     *http:Service;
 
     private map<string> sessionMap = {};
+    private ServiceConfiguration? cachedServiceConfig = ();
 
-    isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok {
-        string? sessionId = self.getSessionIdFromHeaders(headers);
+    isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
+        ServiceConfiguration config = check self.getCachedServiceConfiguration();
+        SessionMode sessionMode = config.transport?.sessionMode ?: AUTO;
+
+        if sessionMode == STATELESS {
+            return <http:BadRequest>{
+                body: createJsonRpcError(INVALID_REQUEST, "Session deletion not supported in stateless mode")
+            };
+        }
+
+        string? sessionId = getSessionIdFromHeaders(headers);
         if sessionId is () {
             return <http:BadRequest>{
-                body: self.createJsonRpcError(INVALID_REQUEST, "Missing session ID header")
+                body: createJsonRpcError(INVALID_REQUEST, "Missing session ID header")
             };
         }
 
         lock {
             if !self.sessionMap.hasKey(sessionId) {
                 return <http:BadRequest>{
-                    body: self.createJsonRpcError(INVALID_REQUEST, string `Invalid session ID: ${sessionId}`)
+                    body: createJsonRpcError(INVALID_REQUEST, string `Invalid session ID: ${sessionId}`)
                 };
             }
 
@@ -52,7 +62,7 @@ isolated service class DispatcherService {
 
     isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers)
             returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok|Error {
-        http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = self.validateHeaders(headers);
+        http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = validateRequiredHeaders(headers);
         if headerValidationError !is () {
             return headerValidationError;
         }
@@ -66,43 +76,18 @@ isolated service class DispatcherService {
         }
 
         return <http:BadRequest>{
-            body: self.createJsonRpcError(INVALID_REQUEST, "Unsupported request type")
+            body: createJsonRpcError(INVALID_REQUEST, "Unsupported request type")
         };
     }
 
-    private isolated function validateHeaders(http:Headers headers)
-            returns http:NotAcceptable|http:UnsupportedMediaType? {
-        string|http:HeaderNotFoundError acceptHeader = headers.getHeader(ACCEPT_HEADER);
-        if acceptHeader is http:HeaderNotFoundError {
-            return <http:NotAcceptable>{
-                body: self.createJsonRpcError(NOT_ACCEPTABLE,
-                    "Not Acceptable: Client must accept both application/json and text/event-stream")
-            };
+    private isolated function getCachedServiceConfiguration() returns ServiceConfiguration|Error {
+        lock {
+            if self.cachedServiceConfig is () {
+                Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
+                self.cachedServiceConfig = getServiceConfiguration(mcpService);
+            }
+            return <ServiceConfiguration>self.cachedServiceConfig.clone();
         }
-
-        if !acceptHeader.includes(CONTENT_TYPE_JSON) || !acceptHeader.includes(CONTENT_TYPE_SSE) {
-            return <http:NotAcceptable>{
-                body: self.createJsonRpcError(NOT_ACCEPTABLE,
-                    "Not Acceptable: Client must accept both application/json and text/event-stream")
-            };
-        }
-
-        string|http:HeaderNotFoundError contentTypeHeader = headers.getHeader(CONTENT_TYPE_HEADER);
-        if contentTypeHeader is http:HeaderNotFoundError {
-            return <http:UnsupportedMediaType>{
-                body: self.createJsonRpcError(UNSUPPORTED_MEDIA_TYPE,
-                    "Unsupported Media Type: Content-Type must be application/json")
-            };
-        }
-
-        if !contentTypeHeader.includes(CONTENT_TYPE_JSON) {
-            return <http:UnsupportedMediaType>{
-                body: self.createJsonRpcError(UNSUPPORTED_MEDIA_TYPE,
-                    "Unsupported Media Type: Content-Type must be application/json")
-            };
-        }
-
-        return;
     }
 
     private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Headers headers)
@@ -119,13 +104,14 @@ isolated service class DispatcherService {
             }
             _ => {
                 return <http:BadRequest>{
-                    body: self.createJsonRpcError(METHOD_NOT_FOUND, "Method not found", request.id)
+                    body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", request.id)
                 };
             }
         }
     }
 
-    private isolated function processJsonRpcNotification(JsonRpcNotification notification) returns http:Accepted|http:BadRequest {
+    private isolated function processJsonRpcNotification(JsonRpcNotification notification)
+            returns http:Accepted|http:BadRequest {
         if notification.method == NOTIFICATION_INITIALIZED {
             return http:ACCEPTED;
         }
@@ -141,140 +127,161 @@ isolated service class DispatcherService {
         };
     }
 
-    private isolated function getSessionIdFromHeaders(http:Headers headers) returns string? {
-        string|http:HeaderNotFoundError sessionHeader = headers.getHeader(SESSION_ID_HEADER);
-        return sessionHeader is string ? sessionHeader : ();
-    }
-
-    private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers) returns http:BadRequest|http:Ok|Error {
+    private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers)
+            returns http:BadRequest|http:Ok|Error {
         JsonRpcRequest {jsonrpc: _, id, ...request} = jsonRpcRequest;
         InitializeRequest|error initRequest = request.cloneWithType();
         if initRequest is error {
             return <http:BadRequest>{
-                body: self.createJsonRpcError(INVALID_REQUEST,
-                    string `Invalid request: ${initRequest.message()}`, id)
+                body: createJsonRpcError(INVALID_REQUEST,
+                        string `Invalid request: ${initRequest.message()}`, id)
             };
         }
 
-        // Check if there's a session ID in the headers
-        string? existingSessionId = self.getSessionIdFromHeaders(headers);
+        ServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+        SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_INITIALIZE);
+
+        string requestedVersion = initRequest.params.protocolVersion;
+        string protocolVersion = self.selectProtocolVersion(requestedVersion);
+
+        InitializeResult initResult = {
+            protocolVersion: protocolVersion,
+            capabilities: (serviceConfig.options?.capabilities ?: {}).cloneReadOnly(),
+            serverInfo: serviceConfig.info.cloneReadOnly()
+        };
+
+        if effectiveSessionMode == STATELESS {
+            return <http:Ok>{
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: id,
+                    result: initResult
+                }
+            };
+        }
+
+        string? existingSessionId = getSessionIdFromHeaders(headers);
 
         lock {
             // If there's an existing session ID and it's already in the map, return error
             if existingSessionId is string && self.sessionMap.hasKey(existingSessionId) {
                 return <http:BadRequest>{
-                    body: self.createJsonRpcError(INVALID_REQUEST,
-                        string `Session already initialized: ${existingSessionId}`, id)
+                    body: createJsonRpcError(INVALID_REQUEST,
+                            string `Session already initialized: ${existingSessionId}`, id)
                 };
             }
 
-            Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
-            ServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
-
-            // Create new session ID
             string newSessionId = uuid:createRandomUuid();
             self.sessionMap[newSessionId] = "initialized";
-
-            string requestedVersion = initRequest.params.protocolVersion;
-            string protocolVersion = self.selectProtocolVersion(requestedVersion);
 
             return <http:Ok>{
                 headers: {[SESSION_ID_HEADER]: newSessionId},
                 body: {
                     jsonrpc: JSONRPC_VERSION,
                     id: id,
-                    result: <InitializeResult>{
-                        protocolVersion: protocolVersion,
-                        capabilities: (serviceConfig.options?.capabilities ?: {}).cloneReadOnly(),
-                        serverInfo: serviceConfig.info.cloneReadOnly()
-                    }
+                    result: initResult.clone()
                 }
             };
         }
     }
 
-    private isolated function handleListToolsRequest(JsonRpcRequest request, http:Headers headers) returns http:BadRequest|http:Ok {
-        // Validate session ID
-        string? sessionId = self.getSessionIdFromHeaders(headers);
-        if sessionId is () {
-            return <http:BadRequest>{
-                body: self.createJsonRpcError(INVALID_REQUEST,
-                    "Missing session ID header", request.id)
-            };
-        }
+    private isolated function handleListToolsRequest(JsonRpcRequest request, http:Headers headers)
+            returns http:BadRequest|http:Ok|Error {
+        ServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+        SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_LIST_TOOLS);
 
-        lock {
-            // Check if session exists
-            if !self.sessionMap.hasKey(sessionId) {
+        string? sessionId = ();
+
+        if effectiveSessionMode == STATEFUL {
+            sessionId = getSessionIdFromHeaders(headers);
+            if sessionId is () {
                 return <http:BadRequest>{
-                    body: self.createJsonRpcError(INVALID_REQUEST,
-                        string `Invalid session ID: ${sessionId}`, request.id)
+                    body: createJsonRpcError(INVALID_REQUEST,
+                            "Missing session ID header", request.id)
                 };
+            }
+
+            lock {
+                if !self.sessionMap.hasKey(sessionId) {
+                    return <http:BadRequest>{
+                        body: createJsonRpcError(INVALID_REQUEST,
+                                string `Invalid session ID: ${sessionId}`, request.id)
+                    };
+                }
             }
         }
 
         ListToolsResult|error listToolsResult = self.executeOnListTools();
         if listToolsResult is error {
             return <http:BadRequest>{
-                body: self.createJsonRpcError(INTERNAL_ERROR,
-                    string `Failed to list tools: ${listToolsResult.message()}`, request.id)
+                body: createJsonRpcError(INTERNAL_ERROR,
+                        string `Failed to list tools: ${listToolsResult.message()}`, request.id)
             };
         }
 
+        JsonRpcResponse responseBody = {
+            jsonrpc: JSONRPC_VERSION,
+            id: request.id,
+            result: listToolsResult.cloneReadOnly()
+        };
+
         return <http:Ok>{
-            headers: {[SESSION_ID_HEADER]: sessionId},
-            body: {
-                jsonrpc: JSONRPC_VERSION,
-                id: request.id,
-                result: listToolsResult.cloneReadOnly()
-            }
+            headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
+            body: responseBody
         };
     }
 
-    private isolated function handleCallToolRequest(JsonRpcRequest request, http:Headers headers) returns http:BadRequest|http:Ok {
-        // Validate session ID
-        string? sessionId = self.getSessionIdFromHeaders(headers);
-        if sessionId is () {
-            return <http:BadRequest>{
-                body: self.createJsonRpcError(INVALID_REQUEST,
-                    "Missing session ID header", request.id)
-            };
-        }
+    private isolated function handleCallToolRequest(JsonRpcRequest request, http:Headers headers)
+            returns http:BadRequest|http:Ok|Error {
+        ServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+        SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_CALL_TOOL);
 
-        lock {
-            // Check if session exists
-            if !self.sessionMap.hasKey(sessionId) {
+        string? sessionId = ();
+
+        if effectiveSessionMode == STATEFUL {
+            sessionId = getSessionIdFromHeaders(headers);
+            if sessionId is () {
                 return <http:BadRequest>{
-                    body: self.createJsonRpcError(INVALID_REQUEST,
-                        string `Invalid session ID: ${sessionId}`, request.id)
+                    body: createJsonRpcError(INVALID_REQUEST,
+                            "Missing session ID header", request.id)
                 };
+            }
+
+            lock {
+                if !self.sessionMap.hasKey(sessionId) {
+                    return <http:BadRequest>{
+                        body: createJsonRpcError(INVALID_REQUEST,
+                                string `Invalid session ID: ${sessionId}`, request.id)
+                    };
+                }
             }
         }
 
-        // Extract and validate parameters
         CallToolParams|error params = request.params.cloneWithType();
         if params is error {
             return <http:BadRequest>{
-                body: self.createJsonRpcError(INVALID_PARAMS,
-                    string `Invalid parameters: ${params.message()}`, request.id)
+                body: createJsonRpcError(INVALID_PARAMS,
+                        string `Invalid parameters: ${params.message()}`, request.id)
             };
         }
 
         CallToolResult|error callToolResult = self.executeOnCallTool(params);
         if callToolResult is error {
             return <http:BadRequest>{
-                body: self.createJsonRpcError(INTERNAL_ERROR,
-                    string `Failed to call tool '${params.name}': ${callToolResult.message()}`, request.id)
+                body: createJsonRpcError(INTERNAL_ERROR,
+                        string `Failed to call tool '${params.name}': ${callToolResult.message()}`, request.id)
             };
         }
 
+        JsonRpcResponse responseBody = {
+            jsonrpc: JSONRPC_VERSION,
+            id: request.id,
+            result: callToolResult.cloneReadOnly()
+        };
+
         return <http:Ok>{
-            headers: {[SESSION_ID_HEADER]: sessionId},
-            body: {
-                jsonrpc: JSONRPC_VERSION,
-                id: request.id,
-                result: callToolResult.cloneReadOnly()
-            }
+            headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
+            body: responseBody
         };
     }
 
@@ -286,15 +293,6 @@ isolated service class DispatcherService {
         }
         return LATEST_PROTOCOL_VERSION;
     }
-
-    private isolated function createJsonRpcError(int code, string message, RequestId? id = ()) returns JsonRpcError & readonly => {
-        jsonrpc: JSONRPC_VERSION,
-        id: id,
-        'error: {
-            code: code,
-            message: message
-        }
-    };
 
     private isolated function executeOnListTools() returns ListToolsResult|Error {
         Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
