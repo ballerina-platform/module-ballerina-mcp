@@ -86,16 +86,21 @@ isolated class StreamableHttpClientTransport {
                 return;
             }
 
-            // Dispatch response based on content type.
-            string contentType = response.getContentType();
-            if contentType.includes(CONTENT_TYPE_SSE) {
-                return self.processServerSentEvents(response);
-            } else if contentType.includes(CONTENT_TYPE_JSON) {
-                return self.processJsonResponse(response);
+            boolean hasRequest = message is JsonRpcRequest;
+
+            if hasRequest {
+                string contentType = response.getContentType();
+                if contentType.includes(CONTENT_TYPE_SSE) {
+                    return self.processServerSentEvents(response);
+                } else if contentType.includes(CONTENT_TYPE_JSON) {
+                    return self.processJsonResponse(response);
+                } else {
+                    return error UnsupportedContentTypeError(
+                        string `Server returned unsupported content type '${contentType}'.`
+                    );
+                }
             } else {
-                return error UnsupportedContentTypeError(
-                    string `Server returned unsupported content type '${contentType}'.`
-                );
+                return;
             }
         } on fail error e {
             return error HttpClientError(string `Failed to send message to server: ${e.message()}`);
