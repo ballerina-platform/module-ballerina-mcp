@@ -229,7 +229,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "0.9.4"
+version = "1.0.0"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},
