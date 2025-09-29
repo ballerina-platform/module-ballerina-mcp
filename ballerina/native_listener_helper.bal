@@ -20,7 +20,7 @@ isolated function invokeOnListTools(AdvancedService 'service) returns ListToolsR
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
-isolated function invokeOnCallTool(AdvancedService 'service, CallToolParams params)
+isolated function invokeOnCallTool(AdvancedService 'service, CallToolParams params, Session? session)
         returns CallToolResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
@@ -30,8 +30,8 @@ isolated function listToolsForRemoteFunctions(Service 'service, typedesc<ListToo
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
-isolated function callToolForRemoteFunctions(Service 'service, CallToolParams params, typedesc<CallToolResult> t = <>)
-        returns t|Error = @java:Method {
+isolated function callToolForRemoteFunctions(Service 'service, CallToolParams params, Session? session,
+        typedesc<CallToolResult> t = <>) returns t|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 

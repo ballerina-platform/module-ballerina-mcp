@@ -5,7 +5,7 @@
 
 [ballerina]
 dependencies-toml-version = "2"
-distribution-version = "2201.12.9"
+distribution-version = "2201.12.6"
 
 [[package]]
 org = "ballerina"
@@ -222,7 +222,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "0.9.2"
+version = "0.9.4"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},

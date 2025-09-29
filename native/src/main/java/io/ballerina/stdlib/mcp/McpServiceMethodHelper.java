@@ -61,6 +61,10 @@ public final class McpServiceMethodHelper {
     private static final String TEXT_VALUE_NAME = "text";
     private static final String MCP_SERVICE_FIELD = "mcpService";
 
+    // MCP Session-related constants
+    private static final String MCP_PACKAGE_NAME = "mcp";
+    private static final String SESSION_TYPE_NAME = "Session";
+
     private McpServiceMethodHelper() {}
 
     /**
@@ -82,8 +86,8 @@ public final class McpServiceMethodHelper {
      * @param params     Parameters for the tool invocation.
      * @return           Result of remote method invocation.
      */
-    public static Object invokeOnCallTool(Environment env, BObject mcpService, BMap<?, ?> params) {
-        return env.getRuntime().callMethod(mcpService, "onCallTool", null, params);
+    public static Object invokeOnCallTool(Environment env, BObject mcpService, BMap<?, ?> params, Object session) {
+        return env.getRuntime().callMethod(mcpService, "onCallTool", null, params, session);
     }
 
     /**
@@ -122,7 +126,7 @@ public final class McpServiceMethodHelper {
      * @return           Record containing the invocation result or an error.
      */
     public static Object callToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
-                                                    BTypedesc typed) {
+                                                    Object session, BTypedesc typed) {
         BString toolName = (BString) params.get(fromString(NAME_FIELD_NAME));
 
         Optional<RemoteMethodType> method = getRemoteMethods(mcpService).stream()
@@ -134,7 +138,8 @@ public final class McpServiceMethodHelper {
                     .createError("RemoteMethodType with name '" + toolName.getValue() + "' not found");
         }
 
-        Object[] args = buildArgsForMethod(method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)));
+        Object[] args =
+                buildArgsForMethod(method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)), session);
         Object result = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
 
         return createCallToolResult(typed, result);
@@ -190,14 +195,26 @@ public final class McpServiceMethodHelper {
         return tool;
     }
 
-    private static Object[] buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments) {
+    private static Object[] buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments, Object session) {
         List<Parameter> params = List.of(method.getParameters());
         Object[] args = new Object[params.size()];
         for (int i = 0; i < params.size(); i++) {
-            String paramName = params.get(i).name;
-            args[i] = arguments == null ? null : arguments.get(fromString(paramName));
+            Parameter param = params.get(i);
+
+            if (isSessionParameter(param)) {
+                args[i] = session;
+            } else {
+                String paramName = param.name;
+                args[i] = arguments == null ? null : arguments.get(fromString(paramName));
+            }
         }
         return args;
+    }
+
+    private static boolean isSessionParameter(Parameter param) {
+        Type paramType = param.type;
+        return MCP_PACKAGE_NAME.equals(paramType.getPackage().getName())
+                && SESSION_TYPE_NAME.equals(paramType.getName());
     }
 
     private static Object createCallToolResult(BTypedesc typed, Object result) {

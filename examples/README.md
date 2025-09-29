@@ -101,3 +101,42 @@ bal run
 cd clients/mcp-crypto-client-demo
 bal run
 ```
+
+### MCP Session Management Demo
+
+**Location:** `servers/mcp-session-demo/` and `clients/mcp-session-client-demo/`
+
+A comprehensive example demonstrating the different session management modes in MCP.
+
+**Server Features:**
+- **Stateful Service** (Port 9090): Maintains session state with key-value storage
+- **Stateless Service** (Port 9091): Independent request processing without sessions
+- Demonstrates when to use each mode
+
+**Client Features:**
+- Shows proper stateful client initialization and session management
+- Demonstrates stateless client usage without initialization
+- Error handling and edge cases for both modes
+
+**Available Tools:**
+
+*Stateful Service:*
+- `storeValue(key: string, value: anydata)` - Store data in session
+- `getValue(key: string)` - Retrieve data from session
+- `listKeys()` - List all session keys
+
+*Stateless Service:*
+- `calculate(operation: string, a: decimal, b: decimal)` - Math operations
+- `getCurrentTime()` - Get server time
+- `getRandomQuote()` - Get motivational quotes
+
+**How to run:**
+```bash
+# Start the session demo server
+cd servers/mcp-session-demo
+bal run
+
+# In another terminal, run the session client demo
+cd clients/mcp-session-client-demo
+bal run
+```

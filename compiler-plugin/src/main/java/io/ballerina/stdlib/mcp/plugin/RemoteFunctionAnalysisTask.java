@@ -47,6 +47,7 @@ import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.DESCRIPTION_FI
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCHEMA_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpServiceFunction;
+import static io.ballerina.stdlib.mcp.plugin.Utils.validateParameterTypes;
 import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION;
 
 /**
@@ -81,8 +82,17 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         this.context = context;
 
         FunctionDefinitionNode functionDefinitionNode = (FunctionDefinitionNode) context.node();
-        
+
         if (!isMcpServiceFunction(context.semanticModel(), functionDefinitionNode)) {
+            return;
+        }
+
+        Optional<FunctionSymbol> functionSymbol = getFunctionSymbol(functionDefinitionNode);
+        if (functionSymbol.isEmpty()) {
+            return;
+        }
+
+        if (!validateParameterTypes(functionSymbol.get(), functionDefinitionNode, context)) {
             return;
         }
 
@@ -91,10 +101,6 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         ).orElse(null);
 
         NodeLocation functionNodeLocation = functionDefinitionNode.location();
-        Optional<FunctionSymbol> functionSymbol = getFunctionSymbol(functionDefinitionNode);
-        if (functionSymbol.isEmpty()) {
-            return;
-        }
         ToolAnnotationConfig config = createAnnotationConfig(functionSymbol.get(), functionNodeLocation,
                 toolAnnotationNode);
         addToModifierContext(context, functionDefinitionNode, config);
@@ -103,7 +109,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
     private ToolAnnotationConfig createAnnotationConfig(FunctionSymbol functionSymbol,
                                                         NodeLocation functionNodeLocation,
                                                         AnnotationNode annotationNode) {
-        String functionName = functionSymbol.getName().orElse("unknownFunction");
+        String functionName = functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function");
         String description = Utils.addDoubleQuotes(
                 Utils.escapeDoubleQuotes(
                         Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
@@ -146,7 +152,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         } catch (Exception e) {
             Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION,
                     functionSymbol.getLocation().orElse(alternativeFunctionLocation),
-                    functionSymbol.getName().orElse("unknownFunction"));
+                    functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function"));
             reportDiagnostic(diagnostic);
             return NIL_EXPRESSION;
         }

@@ -47,7 +47,7 @@ isolated function getSessionIdFromHeaders(http:Headers headers) returns string? 
 # + requestMethod - The MCP request method (optional, used for AUTO mode logic)
 # + return - Effective session mode to use
 isolated function determineEffectiveSessionMode(ServiceConfiguration config, http:Headers headers, RequestMethod? requestMethod = ()) returns SessionMode {
-    SessionMode configuredMode = config.transport?.sessionMode ?: AUTO;
+    SessionMode configuredMode = config.sessionMode;
 
     if configuredMode == STATEFUL || configuredMode == STATELESS {
         return configuredMode;

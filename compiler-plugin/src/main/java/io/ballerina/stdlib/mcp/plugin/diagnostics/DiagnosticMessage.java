@@ -22,8 +22,12 @@ package io.ballerina.stdlib.mcp.plugin.diagnostics;
  * Compilation error messages used in Ballerina mcp package compiler plugin.
  */
 public enum DiagnosticMessage {
-    ERROR_101("failed to generate the parameter schema definition for the function ''{0}''." +
-            " Specify the parameter schema manually using the `@mcp:McpTool` annotation's parameter field.");
+    ERROR_101("Failed to generate the parameter schema definition for the function ''{0}''." +
+            " Specify the parameter schema manually using the `@mcp:McpTool` annotation's parameter field."),
+    ERROR_102("Parameter ''{1}'' in function ''{0}'' must be of type 'anydata'. " +
+            "Only the first parameter can be of type 'mcp:Session'."),
+    ERROR_103("Session parameter ''{1}'' in function ''{0}'' must be the first parameter."),
+    ERROR_104("Session parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'.");
 
     private final String message;
 

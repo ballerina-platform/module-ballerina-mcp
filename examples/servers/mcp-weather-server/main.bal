@@ -25,7 +25,8 @@ listener mcp:Listener mcpListener = check new (9090);
     info: {
         name: "MCP Weather Server",
         version: "1.0.0"
-    }
+    },
+    sessionMode: mcp:AUTO
 }
 service mcp:Service /mcp on mcpListener {
     @mcp:Tool {

@@ -19,5 +19,6 @@
 module io.ballerina.stdlib.mcp {
     requires io.ballerina.runtime;
     requires io.ballerina.lang;
+    requires io.ballerina.lang.value;
     exports io.ballerina.stdlib.mcp;
 }

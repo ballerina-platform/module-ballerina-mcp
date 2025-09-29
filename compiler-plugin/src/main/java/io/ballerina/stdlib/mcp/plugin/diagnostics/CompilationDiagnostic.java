@@ -30,7 +30,10 @@ import static io.ballerina.tools.diagnostics.DiagnosticSeverity.ERROR;
  * Compilation errors in the Ballerina mcp package.
  */
 public enum CompilationDiagnostic {
-    UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION(DiagnosticMessage.ERROR_101, DiagnosticCode.MCP_101, ERROR);
+    UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION(DiagnosticMessage.ERROR_101, DiagnosticCode.MCP_101, ERROR),
+    INVALID_PARAMETER_TYPE(DiagnosticMessage.ERROR_102, DiagnosticCode.MCP_102, ERROR),
+    SESSION_PARAM_MUST_BE_FIRST(DiagnosticMessage.ERROR_103, DiagnosticCode.MCP_103, ERROR),
+    SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE(DiagnosticMessage.ERROR_104, DiagnosticCode.MCP_104, ERROR);
 
     private final String diagnostic;
     private final String diagnosticCode;

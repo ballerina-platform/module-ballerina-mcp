@@ -20,12 +20,12 @@ import ballerina/uuid;
 isolated service class DispatcherService {
     *http:Service;
 
-    private map<string> sessionMap = {};
+    private map<Session> sessionMap = {};
     private ServiceConfiguration? cachedServiceConfig = ();
 
     isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
         ServiceConfiguration config = check self.getCachedServiceConfiguration();
-        SessionMode sessionMode = config.transport?.sessionMode ?: AUTO;
+        SessionMode sessionMode = config.sessionMode;
 
         if sessionMode == STATELESS {
             return <http:BadRequest>{
@@ -172,7 +172,8 @@ isolated service class DispatcherService {
             }
 
             string newSessionId = uuid:createRandomUuid();
-            self.sessionMap[newSessionId] = "initialized";
+            Session session = new (newSessionId);
+            self.sessionMap[newSessionId] = session;
 
             return <http:Ok>{
                 headers: {[SESSION_ID_HEADER]: newSessionId},
@@ -265,7 +266,12 @@ isolated service class DispatcherService {
             };
         }
 
-        CallToolResult|error callToolResult = self.executeOnCallTool(params);
+        Session? session;
+        lock {
+            session = sessionId is string ? self.sessionMap[sessionId] : ();
+        }
+
+        CallToolResult|error callToolResult = self.executeOnCallTool(params, session);
         if callToolResult is error {
             return <http:BadRequest>{
                 body: createJsonRpcError(INTERNAL_ERROR,
@@ -305,13 +311,13 @@ isolated service class DispatcherService {
         return error DispatcherError("MCP Service is not attached");
     }
 
-    private isolated function executeOnCallTool(CallToolParams params) returns CallToolResult|Error {
+    private isolated function executeOnCallTool(CallToolParams params, Session? session) returns CallToolResult|Error {
         Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
         if mcpService is AdvancedService {
-            return invokeOnCallTool(mcpService, params.cloneReadOnly());
+            return invokeOnCallTool(mcpService, params.cloneReadOnly(), session);
         }
         if mcpService is Service {
-            return callToolForRemoteFunctions(mcpService, params.cloneReadOnly());
+            return callToolForRemoteFunctions(mcpService, params.cloneReadOnly(), session);
         }
         return error DispatcherError("MCP Service is not attached");
     }
