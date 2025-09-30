@@ -118,9 +118,10 @@ service mcp:Service /mcp on mcpListener {
 
 **Constraints for defining MCP tools:**
 
-1. Parameters should be a subtype of `anydata`.
+1. Parameters should be a subtype of `anydata` (exception: first parameter can be `mcp:Session` for stateful services).
 2. The tool should return a subtype of `anydata|error`.
 3. The `@mcp:Tool` annotation is not required unless you want fine-grained control. If the annotation is not provided, the documentation string will be considered as the description.
+4. For session-enabled tools, the `mcp:Session` parameter must be the first parameter if present.
 
 #### Step 4: Advanced Service Implementation (Optional)
 
@@ -267,11 +268,11 @@ public function main() returns error? {
 The `mcp` module provides practical examples illustrating usage in various scenarios. Explore these examples in the [examples directory](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/), covering the following use cases:
 
 ### Server Examples
-1. [Weather MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-weather-server) - Demonstrates the Basic Service pattern with automatic tool discovery for weather-related tools
-2. [Crypto MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-crypto-server) - Shows the Advanced Service pattern with manual tool management for cryptographic operations
-3. [Session Management Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-session-demo) - Comprehensive example showcasing STATEFUL vs STATELESS session modes
+1. [Weather MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-weather-server) - Demonstrates the Basic Service pattern with AUTO session mode for weather-related tools
+2. [Crypto MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-crypto-server) - Shows the Advanced Service pattern with STATELESS session mode for cryptographic operations
+3. [Shopping Cart Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-shopping-server) - Demonstrates STATEFUL session mode with persistent shopping cart functionality across session interactions
 
 ### Client Examples
 1. [Weather Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-weather-client-demo) - Shows how to build an MCP client that discovers and invokes weather tools
 2. [Crypto Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-crypto-client-demo) - Demonstrates client interaction with cryptographic MCP services
-3. [Session Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-session-client-demo) - Shows proper client usage for both stateful and stateless services
+3. [Shopping Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-shopping-client-demo) - Shows session-based client usage with parallel session execution for stateful services
