@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/http;
 import ballerina/jballerina.java;
 
 isolated function invokeOnListTools(AdvancedService 'service) returns ListToolsResult|Error = @java:Method {
@@ -35,12 +36,12 @@ isolated function callToolForRemoteFunctions(Service 'service, CallToolParams pa
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
-isolated function addMcpServiceToDispatcher(DispatcherService dispatcherService, Service|AdvancedService mcpService)
+isolated function addMcpServiceToDispatcher(http:Service dispatcherService, Service|AdvancedService mcpService)
         returns Error? = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
-isolated function getMcpServiceFromDispatcher(DispatcherService dispatcherService)
+isolated function getMcpServiceFromDispatcher(http:Service dispatcherService)
         returns Service|AdvancedService|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;

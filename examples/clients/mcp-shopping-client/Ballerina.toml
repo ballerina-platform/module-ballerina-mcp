@@ -10,5 +10,5 @@ observabilityIncluded = true
 [[dependency]]
 org = "ballerina"
 name = "mcp"
-version = "0.9.4"
+version = "1.0.0"
 repository = "local"

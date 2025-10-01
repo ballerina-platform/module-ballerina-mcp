@@ -25,7 +25,21 @@ listener mcp:Listener mcpListener = check new (9092);
         name: "MCP Shopping Cart Server",
         version: "1.0.0"
     },
-    sessionMode: mcp:STATEFUL
+    sessionMode: mcp:STATEFUL,
+    httpConfig: {
+        auth: [
+            {
+                jwtValidatorConfig: {
+                    issuer: "wso2",
+                    audience: "vEwzbcasJVQm1jVYHUHCjhxZ4tYa",
+                    clockSkew: 60,
+                    signatureConfig: {
+                        certFile: "./resources/public.crt"
+                    }
+                }
+            }
+        ]
+    }
 }
 service mcp:Service /mcp on mcpListener {
 
