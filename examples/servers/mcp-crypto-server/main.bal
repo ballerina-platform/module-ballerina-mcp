@@ -25,7 +25,8 @@ listener mcp:Listener mcpListener = check new (9091);
     info: {
         name: "MCP Crypto Server",
         version: "1.0.0"
-    }
+    },
+    sessionMode: mcp:STATELESS
 }
 service mcp:AdvancedService /mcp on mcpListener {
 
@@ -76,7 +77,7 @@ service mcp:AdvancedService /mcp on mcpListener {
         };
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params) returns mcp:CallToolResult|mcp:ServerError {
+    remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session) returns mcp:CallToolResult|mcp:ServerError {
         record {} arguments = params.arguments ?: {};
         match params.name {
             "hashText" => {

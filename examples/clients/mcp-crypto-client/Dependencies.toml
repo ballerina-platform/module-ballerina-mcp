@@ -46,9 +46,6 @@ dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "time"}
 ]
-modules = [
-	{org = "ballerina", packageName = "crypto", moduleName = "crypto"}
-]
 
 [[package]]
 org = "ballerina"
@@ -107,6 +104,9 @@ dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "lang.value"}
 ]
+modules = [
+	{org = "ballerina", packageName = "io", moduleName = "io"}
+]
 
 [[package]]
 org = "ballerina"
@@ -144,9 +144,6 @@ version = "0.0.0"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "lang.__internal"}
-]
-modules = [
-	{org = "ballerina", packageName = "lang.array", moduleName = "lang.array"}
 ]
 
 [[package]]
@@ -234,17 +231,16 @@ modules = [
 
 [[package]]
 org = "ballerina"
-name = "mcp_crypto_server"
+name = "mcp_crypto_client"
 version = "0.1.0"
 dependencies = [
-	{org = "ballerina", name = "crypto"},
-	{org = "ballerina", name = "lang.array"},
+	{org = "ballerina", name = "io"},
 	{org = "ballerina", name = "log"},
 	{org = "ballerina", name = "mcp"},
 	{org = "ballerinai", name = "observe"}
 ]
 modules = [
-	{org = "ballerina", packageName = "mcp_crypto_server", moduleName = "mcp_crypto_server"}
+	{org = "ballerina", packageName = "mcp_crypto_client", moduleName = "mcp_crypto_client"}
 ]
 
 [[package]]

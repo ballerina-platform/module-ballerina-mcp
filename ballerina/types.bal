@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/http;
+
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse;
 
@@ -34,6 +36,16 @@ public enum RequestMethod {
     REQUEST_LIST_TOOLS = "tools/list",
     # Request to execute a specific tool with given parameters
     REQUEST_CALL_TOOL = "tools/call"
+};
+
+# Session management modes for MCP server transport
+public enum SessionMode {
+    # Stateful mode - sessions are managed by the transport
+    STATEFUL = "stateful",
+    # Stateless mode - no session management
+    STATELESS = "stateless",
+    # Automatic mode - determined based on client initialization
+    AUTO = "auto"
 };
 
 # JSON-RPC notification methods used for one-way communication in MCP
@@ -439,12 +451,19 @@ public type ServerOptions record {|
     boolean enforceStrictCapabilities?;
 |};
 
-# Configuration for MCP service that defines server capabilities and metadata.
+# Configuration for MCP service that defines server capabilities, metadata, and transport options.
 public type ServiceConfiguration record {|
+    # HTTP service configuration for the underlying transport
+    http:HttpServiceConfig httpConfig = {};
     # Server implementation information
     Implementation info;
     # Optional server configuration options
     ServerOptions options?;
+    # Controls the session management mode for the transport.
+    # - STATEFUL → Sessions are managed by the transport with session IDs
+    # - STATELESS → No session management, each request is independent
+    # - AUTO → Automatically determined based on client initialization behavior (default)
+    SessionMode sessionMode = AUTO;
 |};
 
 # Annotation to provide service configuration to MCP services.
@@ -453,7 +472,7 @@ public annotation ServiceConfiguration ServiceConfig on service;
 # Defines an MCP service interface that handles incoming MCP requests.
 public type AdvancedService distinct service object {
     remote isolated function onListTools() returns ListToolsResult|ServerError;
-    remote isolated function onCallTool(CallToolParams params) returns CallToolResult|ServerError;
+    remote isolated function onCallTool(CallToolParams params, Session? session = ()) returns CallToolResult|ServerError;
 };
 
 # Defines a basic mcp service interface that handles incoming mcp requests.

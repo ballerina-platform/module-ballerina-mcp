@@ -167,6 +167,9 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
 
             FunctionDefinitionNode functionDefinitionNode = (FunctionDefinitionNode) member;
             AnnotationNode modifiedAnnotationNode = modifiedAnnotations.get(functionDefinitionNode);
+            if (modifiedAnnotationNode == null) {
+                continue;
+            }
 
             MetadataNode newMetadata = createOrUpdateMetadata(
                     semanticModel, functionDefinitionNode, modifiedAnnotationNode);

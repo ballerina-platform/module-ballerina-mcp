@@ -28,17 +28,19 @@ listener mcp:Listener mcpListener = check new (9090);
 
 #### Step 3: Create the MCP Service
 
-Create an MCP service using the Basic Service pattern with automatic tool discovery. Server information can be configured using the `@mcp:ServiceConfig` annotation. If not provided, default values are used:
+Create an MCP service using the Basic Service pattern with automatic tool discovery. Server information and session management can be configured using the `@mcp:ServiceConfig` annotation. If not provided, default values are used:
 
 ```ballerina
 @mcp:ServiceConfig {
     info: {
         name: "MCP Weather Server",
         version: "1.0.0"
-    }
+    },
+    // Optional: Configure session management mode
+    sessionMode: mcp:AUTO  // STATEFUL, STATELESS, or AUTO (default)
 }
 service mcp:Service /mcp on mcpListener {
-    
+
     @mcp:Tool {
         description: "Get current weather conditions for a location"
     }
@@ -65,11 +67,61 @@ service mcp:Service /mcp on mcpListener {
 }
 ```
 
-Constraints for defining MCP tools:
+**Session Management Modes:**
 
-1. Parameters should be a subtype of `anydata`.
+MCP services support three session management modes:
+
+- **`STATEFUL`**: Sessions are managed by the transport. Clients must initialize and maintain session IDs. Use this for services that need to track client state.
+- **`STATELESS`**: No session management. Each request is independent. Ideal for simple, stateless services.
+- **`AUTO`** (default): Automatically determined based on client initialization behavior. Recommended for most use cases.
+
+**Stateless Example:**
+```ballerina
+@mcp:ServiceConfig {
+    info: {
+        name: "Calculator Service",
+        version: "1.0.0"
+    },
+    sessionMode: mcp:STATELESS
+}
+service mcp:Service /mcp on mcpListener {
+    @mcp:Tool
+    remote function add(int a, int b) returns int {
+        return a + b;
+    }
+}
+```
+
+**Advanced Configuration Example:**
+```ballerina
+@mcp:ServiceConfig {
+    info: {
+        name: "Advanced MCP Server",
+        version: "1.0.0"
+    },
+    sessionMode: mcp:STATEFUL,
+    // Optional HTTP configuration
+    httpConfig: {
+        cors: {
+            allowOrigins: ["http://localhost:3000"],
+            allowCredentials: true
+        }
+    },
+    options: {
+        instructions: "This server provides advanced mathematical operations with session support."
+    }
+}
+service mcp:Service /mcp on mcpListener {
+    // Service implementation...
+}
+```
+
+**Constraints for defining MCP tools:**
+
+1. Parameters should be a subtype of `anydata` (exception: first parameter can be `mcp:Session` for stateful services).
 2. The tool should return a subtype of `anydata|error`.
 3. The `@mcp:Tool` annotation is not required unless you want fine-grained control. If the annotation is not provided, the documentation string will be considered as the description.
+4. For session-enabled tools, the `mcp:Session` parameter must be the first parameter if present.
 
 #### Step 4: Advanced Service Implementation (Optional)
 
@@ -216,9 +268,11 @@ public function main() returns error? {
 The `mcp` module provides practical examples illustrating usage in various scenarios. Explore these examples in the [examples directory](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/), covering the following use cases:
 
 ### Server Examples
-1. [Weather MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-weather-server) - Demonstrates the Basic Service pattern with automatic tool discovery for weather-related tools
-2. [Crypto MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-crypto-server) - Shows the Advanced Service pattern with manual tool management for cryptographic operations
+1. [Weather MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-weather-server) - Demonstrates the Basic Service pattern with AUTO session mode for weather-related tools
+2. [Crypto MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-crypto-server) - Shows the Advanced Service pattern with STATELESS session mode for cryptographic operations
+3. [Shopping Cart Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-shopping-server) - Demonstrates STATEFUL session mode with persistent shopping cart functionality across session interactions
 
 ### Client Examples
 1. [Weather Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-weather-client-demo) - Shows how to build an MCP client that discovers and invokes weather tools
 2. [Crypto Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-crypto-client-demo) - Demonstrates client interaction with cryptographic MCP services
+3. [Shopping Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-shopping-client-demo) - Shows session-based client usage with parallel session execution for stateful services

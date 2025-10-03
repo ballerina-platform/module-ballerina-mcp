@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 
 import static io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask.EMPTY_STRING;
 import static io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask.NIL_EXPRESSION;
+import static io.ballerina.stdlib.mcp.plugin.Utils.isSessionType;
 
 /**
  * Utility class for generating and manipulating function tool parameter schemas.
@@ -62,6 +63,10 @@ public class SchemaUtils {
         TypeMapper typeMapper = new TypeMapperImpl(context);
         for (ParameterSymbol parameterSymbol : parameterSymbolList) {
             try {
+                if (isSessionType(parameterSymbol.typeDescriptor())) {
+                    continue;
+                }
+
                 String parameterName = parameterSymbol.getName().orElseThrow();
                 if (parameterSymbol.paramKind() != ParameterKind.DEFAULTABLE) {
                     requiredParams.add(parameterName);

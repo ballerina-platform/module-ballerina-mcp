@@ -1,8 +1,8 @@
 [package]
 org = "ballerina"
-name = "mcp_crypto_server"
+name = "mcp_shopping_server"
 version = "0.1.0"
-distribution = "2201.12.3"
+distribution = "2201.12.0"
 
 [build-options]
 observabilityIncluded = true
