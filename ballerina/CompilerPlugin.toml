@@ -3,7 +3,7 @@ id = "mcp-compiler-plugin"
 class = "io.ballerina.stdlib.mcp.plugin.McpCompilerPlugin"
 
 [[dependency]]
-path = "../compiler-plugin/build/libs/mcp-compiler-plugin-1.0.0-SNAPSHOT.jar"
+path = "../compiler-plugin/build/libs/mcp-compiler-plugin-1.0.0.jar"
 
 [[dependency]]
 path = "../compiler-plugin/build/libs/ballerina-to-openapi-2.3.0.jar"
