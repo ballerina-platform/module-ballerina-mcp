@@ -151,7 +151,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
             InitializeResult initResult = {
                 protocolVersion: protocolVersion,
-                capabilities: (serviceConfig.options?.capabilities ?: {}).cloneReadOnly(),
+                capabilities: (serviceConfig.options?.capabilities ?: {
+                    tools: {}
+                }).cloneReadOnly(),
                 serverInfo: serviceConfig.info.cloneReadOnly()
             };
 
