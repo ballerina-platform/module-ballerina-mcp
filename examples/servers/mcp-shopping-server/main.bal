@@ -31,10 +31,9 @@ listener mcp:Listener mcpListener = check new (9092);
             {
                 jwtValidatorConfig: {
                     issuer: "wso2",
-                    audience: "vEwzbcasJVQm1jVYHUHCjhxZ4tYa",
-                    clockSkew: 60,
+                    audience: "ballerina",
                     signatureConfig: {
-                        certFile: "./resources/public.crt"
+                        certFile: "./resource/public.crt"
                     }
                 }
             }

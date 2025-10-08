@@ -29,6 +29,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         private ServiceConfiguration? cachedServiceConfig = ();
 
         isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
+            http:authenticateResource(self, "delete", []);
             ServiceConfiguration config = check self.getCachedServiceConfiguration();
             SessionMode sessionMode = config.sessionMode;
 
@@ -66,7 +67,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers)
-            returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok|Error {
+                returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok|Error {
+            http:authenticateResource(self, "post", []);
             http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = validateRequiredHeaders(headers);
             if headerValidationError !is () {
                 return headerValidationError;

@@ -66,7 +66,22 @@ function runClientSession(string customerName, record {|string name; decimal pri
     log:printInfo(string `\n=== ${customerName}'s Shopping Session ===`);
 
     // Create a new client (each client gets its own session)
-    mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9092/mcp");
+    mcp:StreamableHttpClientTransportConfig config = {
+        auth: {
+            username: "ballerina",
+            issuer: "wso2",
+            audience: ["ballerina", "ballerina.org", "ballerina.io"],
+            keyId: "5a0b754-895f-4279-8843-b745e11a57e9",
+            jwtId: "JlbmMiOiJBMTI4Q0JDLUhTMjU2In",
+            expTime: 3600,
+            signatureConfig: {
+                config: {
+                    keyFile: "./resource/private.key"
+                }
+            }
+        }
+    };
+    mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9092/mcp", config);
 
     // Initialize client
     check mcpClient->initialize({

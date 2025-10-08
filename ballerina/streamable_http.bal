@@ -81,27 +81,31 @@ isolated class StreamableHttpClientTransport {
                 }
             }
 
+            if response.statusCode < 200 || response.statusCode >= 300 {
+                return error HttpClientError(
+                    string `Server returned error status ${response.statusCode}: ${response.reasonPhrase}`
+                );
+            }
+
             // If response is 202 Accepted, there is no content to process.
             if response.statusCode == http:STATUS_ACCEPTED {
                 return;
             }
 
-            boolean hasRequest = message is JsonRpcRequest;
-
-            if hasRequest {
-                string contentType = response.getContentType();
-                if contentType.includes(CONTENT_TYPE_SSE) {
-                    return self.processServerSentEvents(response);
-                } else if contentType.includes(CONTENT_TYPE_JSON) {
-                    return self.processJsonResponse(response);
-                } else {
-                    return error UnsupportedContentTypeError(
-                        string `Server returned unsupported content type '${contentType}'.`
-                    );
-                }
-            } else {
+            if message !is JsonRpcRequest {
                 return;
             }
+
+            string contentType = response.getContentType();
+            if contentType.includes(CONTENT_TYPE_SSE) {
+                return self.processServerSentEvents(response);
+            }
+            if contentType.includes(CONTENT_TYPE_JSON) {
+                return self.processJsonResponse(response);
+            }
+            return error UnsupportedContentTypeError(
+                string `Server returned unsupported content type '${contentType}'.`
+            );
         } on fail error e {
             return error HttpClientError(string `Failed to send message to server: ${e.message()}`);
         }
