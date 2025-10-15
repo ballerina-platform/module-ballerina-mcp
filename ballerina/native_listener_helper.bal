@@ -32,7 +32,7 @@ isolated function listToolsForRemoteFunctions(Service 'service, typedesc<ListToo
 } external;
 
 isolated function callToolForRemoteFunctions(Service 'service, CallToolParams params, Session? session,
-        typedesc<CallToolResult> t = <>) returns t|Error = @java:Method {
+        typedesc<CallToolResult> t = <>) returns t|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
