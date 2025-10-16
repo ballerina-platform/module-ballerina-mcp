@@ -17,7 +17,7 @@
 import ballerina/http;
 
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
-public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse;
+public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcError|JsonRpcResponse;
 
 public const LATEST_PROTOCOL_VERSION = "2025-03-26";
 public const SUPPORTED_PROTOCOL_VERSIONS = [
@@ -143,7 +143,7 @@ public const NOT_ACCEPTABLE = -32001;
 public const UNSUPPORTED_MEDIA_TYPE = -32002;
 
 # A response to a request that indicates an error occurred.
-public type JsonRpcError record {
+public type JsonRpcError record {|
     # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
     # Identifier of the request
@@ -157,7 +157,7 @@ public type JsonRpcError record {
         # Additional information about the error. The value of this member is defined by the sender (e.g. detailed error information, nested errors etc.).
         anydata data?;
     } 'error;
-};
+|};
 
 # This request is sent from the client to the server when it first connects, asking it to begin initialization.
 type InitializeRequest record {|

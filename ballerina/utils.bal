@@ -70,5 +70,8 @@ isolated function extractResultFromMessage(JsonRpcMessage message) returns Serve
     if message is JsonRpcResponse {
         return message.result;
     }
+    if message is JsonRpcError {
+        return error ServerResponseError(string `Received JSON-RPC error from server: ${message.toJsonString()}`);
+    }
     return error InvalidMessageTypeError("Received message from server is not a valid JsonRpcResponse.");
 }
