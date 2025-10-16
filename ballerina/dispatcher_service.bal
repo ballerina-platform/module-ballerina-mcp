@@ -318,13 +318,18 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             return error DispatcherError("MCP Service is not attached");
         }
 
-        private isolated function executeOnCallTool(CallToolParams params, Session? session) returns CallToolResult|Error {
+        private isolated function executeOnCallTool(CallToolParams params, Session? session)
+                returns CallToolResult|Error {
             Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
             if mcpService is AdvancedService {
                 return invokeOnCallTool(mcpService, params.cloneReadOnly(), session);
             }
             if mcpService is Service {
-                return callToolForRemoteFunctions(mcpService, params.cloneReadOnly(), session);
+                CallToolResult|error result = callToolForRemoteFunctions(mcpService, params.cloneReadOnly(), session);
+                if result is error {
+                    return error DispatcherError(result.message());
+                }
+                return result;
             }
             return error DispatcherError("MCP Service is not attached");
         }

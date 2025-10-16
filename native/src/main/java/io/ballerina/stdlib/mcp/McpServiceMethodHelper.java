@@ -27,8 +27,10 @@ import io.ballerina.runtime.api.types.ReferenceType;
 import io.ballerina.runtime.api.types.RemoteMethodType;
 import io.ballerina.runtime.api.types.ServiceType;
 import io.ballerina.runtime.api.types.Type;
+import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.types.UnionType;
 import io.ballerina.runtime.api.values.BArray;
+import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BMap;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BString;
@@ -138,8 +140,14 @@ public final class McpServiceMethodHelper {
                     .createError("RemoteMethodType with name '" + toolName.getValue() + "' not found");
         }
 
-        Object[] args =
+        Object argsOrError =
                 buildArgsForMethod(method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)), session);
+
+        if (argsOrError instanceof BError) {
+            return argsOrError;
+        }
+
+        Object[] args = (Object[]) argsOrError;
         Object result = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
 
         return createCallToolResult(typed, result);
@@ -195,7 +203,7 @@ public final class McpServiceMethodHelper {
         return tool;
     }
 
-    private static Object[] buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments, Object session) {
+    private static Object buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments, Object session) {
         List<Parameter> params = List.of(method.getParameters());
         Object[] args = new Object[params.size()];
         for (int i = 0; i < params.size(); i++) {
@@ -205,15 +213,36 @@ public final class McpServiceMethodHelper {
                 args[i] = session;
             } else {
                 String paramName = param.name;
-                args[i] = arguments == null ? null : arguments.get(fromString(paramName));
+                Object argValue = arguments == null ? null : arguments.get(fromString(paramName));
+
+                // Check if the parameter is required (non-optional) but the value is null
+                if (argValue == null && !isOptionalParameter(param)) {
+                    return ModuleUtils.createError(
+                            "Missing required argument '" + paramName + "' for parameter of type '"
+                            + param.type.getName() + "'");
+                }
+
+                args[i] = argValue;
             }
         }
         return args;
     }
 
+    private static boolean isOptionalParameter(Parameter param) {
+        Type paramType = param.type;
+
+        if (paramType instanceof UnionType unionType) {
+            return unionType.getMemberTypes().stream()
+                    .anyMatch(type -> type.getTag() == TypeTags.NULL_TAG);
+        }
+
+        return false;
+    }
+
     private static boolean isSessionParameter(Parameter param) {
         Type paramType = param.type;
-        return MCP_PACKAGE_NAME.equals(paramType.getPackage().getName())
+        return paramType.getPackage() != null
+                && MCP_PACKAGE_NAME.equals(paramType.getPackage().getName())
                 && SESSION_TYPE_NAME.equals(paramType.getName());
     }
 
