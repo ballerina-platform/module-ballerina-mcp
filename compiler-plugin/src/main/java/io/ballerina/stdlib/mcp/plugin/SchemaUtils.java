@@ -30,13 +30,13 @@ import io.swagger.v3.core.util.OpenAPISchema2JsonSchema;
 import io.swagger.v3.oas.models.media.Schema;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 import static io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask.EMPTY_STRING;
-import static io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask.NIL_EXPRESSION;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isSessionType;
 
 /**
@@ -53,10 +53,8 @@ public class SchemaUtils {
     public static String getParameterSchema(FunctionSymbol functionSymbol, SyntaxNodeAnalysisContext context)
             throws Exception {
         FunctionTypeSymbol functionTypeSymbol = functionSymbol.typeDescriptor();
-        List<ParameterSymbol> parameterSymbolList = functionTypeSymbol.params().get();
-        if (functionTypeSymbol.params().isEmpty() || parameterSymbolList.isEmpty()) {
-            return NIL_EXPRESSION;
-        }
+        List<ParameterSymbol> parameterSymbolList =
+                functionTypeSymbol.params().orElse(Collections.emptyList());
 
         Map<String, String> individualParamSchema = new HashMap<>();
         List<String> requiredParams = new ArrayList<>();
