@@ -315,6 +315,7 @@ public type ListToolsResult record {
 
 # The server's response to a tool call.
 public type CallToolResult record {
+    *Result;
     # The content of the tool call result
     (TextContent|ImageContent|AudioContent|EmbeddedResource)[] content;
     # Whether the tool call ended in an error.
