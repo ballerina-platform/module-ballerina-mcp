@@ -28,7 +28,9 @@ import io.ballerina.compiler.api.symbols.ParameterSymbol;
 import io.ballerina.compiler.api.symbols.ServiceDeclarationSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
 import io.ballerina.compiler.api.symbols.SymbolKind;
+import io.ballerina.compiler.api.symbols.TypeDescKind;
 import io.ballerina.compiler.api.symbols.TypeSymbol;
+import io.ballerina.compiler.api.symbols.UnionTypeSymbol;
 import io.ballerina.compiler.api.values.ConstantValue;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
 import io.ballerina.compiler.syntax.tree.BasicLiteralNode;
@@ -58,6 +60,7 @@ public class Utils {
     public static final String MCP_PACKAGE_NAME = "mcp";
     public static final String MCP_BASIC_SERVICE_NAME = "Service";
     public static final String SESSION_TYPE_NAME = "Session";
+    public static final String META_TYPE_NAME = "Meta";
     public static final String UNKNOWN_SYMBOL = "unknown";
     public static final String SERVICE_CONFIG_ANNOTATION_NAME = "ServiceConfig";
     public static final String SESSION_MODE_FIELD = "sessionMode";
@@ -190,6 +193,7 @@ public class Utils {
 
         var parameterSymbolList = functionTypeSymbol.params().get();
         boolean hasSessionParam = false;
+        boolean hasMetaParam = false;
 
         for (int i = 0; i < parameterSymbolList.size(); i++) {
             ParameterSymbol parameterSymbol = parameterSymbolList.get(i);
@@ -197,6 +201,7 @@ public class Utils {
             String parameterName = parameterSymbol.getName().orElse(UNKNOWN_SYMBOL);
 
             boolean isSessionType = isSessionType(parameterType);
+            boolean isMetaParam = isMetaParameter(parameterType);
 
             if (isSessionType) {
                 if (hasSessionParam) {
@@ -227,6 +232,36 @@ public class Utils {
                 }
 
                 hasSessionParam = true;
+            } else if (isMetaParam) {
+                if (hasMetaParam) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.META_PARAM_MUST_BE_LAST,
+                            parameterSymbol.getLocation().orElse(alternativeLocation),
+                            functionName, parameterName);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+
+                if (i != parameterSymbolList.size() - 1) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.META_PARAM_MUST_BE_LAST,
+                            parameterSymbol.getLocation().orElse(alternativeLocation),
+                            functionName, parameterName);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+
+                // Check if Meta parameter is optional
+                if (!isOptionalType(parameterType)) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.META_PARAM_MUST_BE_OPTIONAL,
+                            parameterSymbol.getLocation().orElse(alternativeLocation),
+                            functionName, parameterName);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+
+                hasMetaParam = true;
             } else if (!isAnydataType(parameterType, context)) {
                 Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
                         CompilationDiagnostic.INVALID_PARAMETER_TYPE,
@@ -243,6 +278,58 @@ public class Utils {
     static boolean isSessionType(TypeSymbol typeSymbol) {
         return SESSION_TYPE_NAME.equals(typeSymbol.getName().orElse(""))
                 && isMcpModuleSymbol(typeSymbol);
+    }
+
+    static boolean isMetaType(TypeSymbol typeSymbol) {
+        return META_TYPE_NAME.equals(typeSymbol.getName().orElse(""))
+                && isMcpModuleSymbol(typeSymbol);
+    }
+
+    /**
+     * Check if a TypeSymbol is optional/nullable (e.g., mcp:Meta?).
+     * An optional type is a union type that includes NIL as one of its members.
+     *
+     * @param typeSymbol The type symbol to check
+     * @return true if the type is optional/nullable, false otherwise
+     */
+    static boolean isOptionalType(TypeSymbol typeSymbol) {
+        if (typeSymbol.typeKind() != TypeDescKind.UNION) {
+            return false;
+        }
+
+        UnionTypeSymbol unionTypeSymbol = (UnionTypeSymbol) typeSymbol;
+        for (TypeSymbol memberType : unionTypeSymbol.memberTypeDescriptors()) {
+            if (memberType.typeKind() == TypeDescKind.NIL) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a parameter is of Meta type (either mcp:Meta or mcp:Meta?).
+     * Returns true if the parameter is Meta type, and also indicates if it's optional.
+     *
+     * @param typeSymbol The type symbol to check
+     * @return true if the parameter is a Meta type (optional or not)
+     */
+    static boolean isMetaParameter(TypeSymbol typeSymbol) {
+        // Direct Meta type check
+        if (isMetaType(typeSymbol)) {
+            return true;
+        }
+
+        // Check if it's an optional Meta type (mcp:Meta?)
+        if (typeSymbol.typeKind() == TypeDescKind.UNION) {
+            UnionTypeSymbol unionTypeSymbol = (UnionTypeSymbol) typeSymbol;
+            for (TypeSymbol memberType : unionTypeSymbol.memberTypeDescriptors()) {
+                if (isMetaType(memberType)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static SessionMode getSessionMode(FunctionDefinitionNode functionDefinitionNode,

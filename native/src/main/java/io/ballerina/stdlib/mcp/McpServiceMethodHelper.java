@@ -63,9 +63,11 @@ public final class McpServiceMethodHelper {
     private static final String TEXT_VALUE_NAME = "text";
     private static final String MCP_SERVICE_FIELD = "mcpService";
 
-    // MCP Session-related constants
+    // MCP Session and Meta-related constants
     private static final String MCP_PACKAGE_NAME = "mcp";
     private static final String SESSION_TYPE_NAME = "Session";
+    private static final String META_TYPE_NAME = "Meta";
+    private static final String META_FIELD_NAME = "_meta";
 
     private McpServiceMethodHelper() {}
 
@@ -140,8 +142,12 @@ public final class McpServiceMethodHelper {
                     .createError("RemoteMethodType with name '" + toolName.getValue() + "' not found");
         }
 
+        // Extract metadata from params
+        Object meta = params.get(fromString(META_FIELD_NAME));
+
         Object argsOrError =
-                buildArgsForMethod(method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)), session);
+                buildArgsForMethod(method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)),
+                        session, meta);
 
         if (argsOrError instanceof BError) {
             return argsOrError;
@@ -150,7 +156,7 @@ public final class McpServiceMethodHelper {
         Object[] args = (Object[]) argsOrError;
         Object result = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
 
-        return createCallToolResult(typed, result);
+        return createCallToolResult(typed, result, meta);
     }
 
     /**
@@ -203,7 +209,8 @@ public final class McpServiceMethodHelper {
         return tool;
     }
 
-    private static Object buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments, Object session) {
+    private static Object buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments, Object session,
+                                             Object meta) {
         List<Parameter> params = List.of(method.getParameters());
         Object[] args = new Object[params.size()];
         for (int i = 0; i < params.size(); i++) {
@@ -211,6 +218,8 @@ public final class McpServiceMethodHelper {
 
             if (isSessionParameter(param)) {
                 args[i] = session;
+            } else if (isMetaParameter(param)) {
+                args[i] = meta;
             } else {
                 String paramName = param.name;
                 Object argValue = arguments == null ? null : arguments.get(fromString(paramName));
@@ -246,7 +255,28 @@ public final class McpServiceMethodHelper {
                 && SESSION_TYPE_NAME.equals(paramType.getName());
     }
 
-    private static Object createCallToolResult(BTypedesc typed, Object result) {
+    private static boolean isMetaParameter(Parameter param) {
+        Type paramType = param.type;
+
+        // Direct Meta type check
+        if (paramType.getPackage() != null
+                && MCP_PACKAGE_NAME.equals(paramType.getPackage().getName())
+                && META_TYPE_NAME.equals(paramType.getName())) {
+            return true;
+        }
+
+        // Check if it's an optional Meta type (mcp:Meta?)
+        if (paramType instanceof UnionType unionType) {
+            return unionType.getMemberTypes().stream()
+                    .anyMatch(type -> type.getPackage() != null
+                            && MCP_PACKAGE_NAME.equals(type.getPackage().getName())
+                            && META_TYPE_NAME.equals(type.getName()));
+        }
+
+        return false;
+    }
+
+    private static Object createCallToolResult(BTypedesc typed, Object result, Object meta) {
         RecordType resultRecordType = (RecordType) typed.getDescribingType();
         BMap<BString, Object> callToolResult = ValueCreator.createRecordValue(resultRecordType);
 
@@ -268,6 +298,12 @@ public final class McpServiceMethodHelper {
         contentArray.append(textContent);
 
         callToolResult.put(fromString(CONTENT_FIELD_NAME), contentArray);
+
+        // Attach modified metadata to response if present
+        if (meta != null) {
+            callToolResult.put(fromString(META_FIELD_NAME), meta);
+        }
+
         return callToolResult;
     }
 }
