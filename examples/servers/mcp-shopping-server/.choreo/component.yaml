@@ -30,7 +30,7 @@ endpoints:
       # This is mandatory if the endpoint type is set to REST or GraphQL.
       basePath: /
       # +required Numeric port value that gets exposed via the endpoint
-      port: 9090
+      port: 9092
     # +required Type of traffic that the endpoint is accepting.
     # Allowed values: REST, GraphQL, GRPC, TCP, UDP.
     type: REST
