@@ -38,7 +38,7 @@ public enum RequestMethod {
     REQUEST_CALL_TOOL = "tools/call"
 };
 
-# Session management modes for MCP server transport
+# Represents the session management modes supported by the MCP server transport.
 public enum SessionMode {
     # Stateful mode - sessions are managed by the transport
     STATEFUL = "stateful",

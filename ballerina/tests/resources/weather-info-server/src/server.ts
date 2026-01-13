@@ -92,11 +92,11 @@ server.registerTool(
   {
     title: 'Get Weather Information',
     description: 'Get current weather information for a specified city',
-    inputSchema: {
-      city: z.string().describe('City name (supported: new-york, london, tokyo, colombo)'),
-    },
+    inputSchema: z.object({
+      city: z.string().describe('City name (supported: new-york, london, tokyo, colombo)')
+    }) as any,
   },
-  async ({ city }: { city: string }): Promise<CallToolResult> => {
+  async ({ city }: any): Promise<CallToolResult> => {
     const cityKey = city.toLowerCase().replace(/\s+/g, '-');
     const weather = weatherData[cityKey];
 
@@ -133,11 +133,11 @@ server.registerTool(
   {
     title: 'Get Weather Forecast',
     description: 'Get 3-day weather forecast for a specified city',
-    inputSchema: {
-      city: z.string().describe('City name (supported: new-york, london, tokyo, colombo)'),
-    },
+    inputSchema: z.object({
+      city: z.string().describe('City name (supported: new-york, london, tokyo, colombo)')
+    }) as any,
   },
-  async ({ city }: { city: string }): Promise<CallToolResult> => {
+  async ({ city }: any): Promise<CallToolResult> => {
     const cityKey = city.toLowerCase().replace(/\s+/g, '-');
     const weather = weatherData[cityKey];
 
@@ -190,7 +190,7 @@ server.registerTool(
   {
     title: 'Get City Information',
     description: 'Get general information about supported cities',
-    inputSchema: {},
+    inputSchema: z.object({}) as any,
   },
   async (): Promise<CallToolResult> => {
     const cities = Object.values(weatherData).map(weather =>
