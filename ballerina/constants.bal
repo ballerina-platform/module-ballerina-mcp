@@ -20,3 +20,8 @@ const ACCEPT_HEADER = "accept";
 const CONTENT_TYPE_HEADER = "content-type";
 const CONTENT_TYPE_JSON = "application/json";
 const CONTENT_TYPE_SSE = "text/event-stream";
+
+const TOKEN_PREFIX = "token=";
+const TOKEN_TYPE_HINT = "&token_type_hint=";
+const CONTENT_TYPE_FORM_URL_ENCODED = "application/x-www-form-urlencoded";
+const AUTORIZATION = "authorization";

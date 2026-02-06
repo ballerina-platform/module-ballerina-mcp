@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/crypto;
 import ballerina/http;
 
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
@@ -372,6 +373,8 @@ public type ToolDefinition record {
     # A human-readable description of the tool
     # This can be used by clients to improve the LLM's understanding of available tools.
     string description?;
+    # Scopes required to invoke this tool.
+    string|string[] scopes?;
     # A JSON Schema object defining the expected parameters for the tool.
     record {
         "object" 'type;
@@ -436,10 +439,12 @@ public type McpToolConfig record {|
     string description?;
     # The JSON schema for the tool's parameters.
     map<json> schema?;
+    # Scopes required to invoke this tool.
+    string|string[] scopes?;
 |};
 
 # Annotation to mark a function as an MCP tool configuration.
-public annotation McpToolConfig Tool on object function;
+public annotation McpToolConfig Tool on function, object function;
 
 # Represents the options for configuring an MCP server.
 public type ServerOptions record {|
@@ -449,6 +454,45 @@ public type ServerOptions record {|
     string instructions?;
     # Whether to enforce strict capabilities compliance.
     boolean enforceStrictCapabilities?;
+|};
+
+# Validates JWT access tokens locally.
+public type JwtConfig record {|
+
+    # Configuration for resolving public keys from a JWKS endpoint.
+    # When provided, the validator retrieves signing keys dynamically.
+    record {|
+        string url;
+    |} jwksConfig?;
+
+    # Public certificate or key used for local signature verification
+    string|crypto:PublicKey certFile?;
+|};
+
+# Configuration for validating access tokens remotely using the introspection endpoint.
+public type IntrospectionConfig record {|
+
+    # The token introspection endpoint URL
+    @display {label: "Introspection URL"}
+    string url;
+
+    # The token type hint sent to the introspection endpoint
+    string tokenTypeHint = "Bearer";
+
+    # Client credentials used to authenticate with the introspection endpoint
+    ClientCredentialsConfig clientConfig;
+|};
+
+# Client credentials for authenticating with the introspection endpoint.
+public type ClientCredentialsConfig record {|
+
+    # The client identifier issued by the authorization server.
+    @display {label: "Client ID"}
+    string clientId;
+
+    # The confidential client secret issued by the authorization server.
+    @display {label: "Client Secret"}
+    string clientSecret;
 |};
 
 # Configuration for MCP service that defines server capabilities, metadata, and transport options.
@@ -464,6 +508,9 @@ public type ServiceConfiguration record {|
     # - STATELESS → No session management, each request is independent
     # - AUTO → Automatically determined based on client initialization behavior (default)
     SessionMode sessionMode = AUTO;
+    # Optional authentication configuration used to validate access tokens using 
+    # either JWT validation or introspection.
+    JwtConfig|IntrospectionConfig auth?;
 |};
 
 # Annotation to provide service configuration to MCP services.

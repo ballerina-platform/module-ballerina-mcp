@@ -85,3 +85,9 @@ public type ServerError distinct Error;
 
 # Custom error type for dispatcher service operations.
 type DispatcherError distinct ServerError;
+
+# Represents an error that occurs when getting token for tool 
+public type TokenValidationError distinct ServerError;
+
+# Errors occurred when validating tool scope.
+public type MissMatchScopeError distinct ServerError;

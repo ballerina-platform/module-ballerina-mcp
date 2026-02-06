@@ -45,6 +45,7 @@ import java.util.stream.Collectors;
 
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.DESCRIPTION_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCHEMA_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCOPES;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpServiceFunction;
 import static io.ballerina.stdlib.mcp.plugin.Utils.validateParameterTypes;
@@ -115,7 +116,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                         Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
         if (annotationNode == null) {
             String schema = getParameterSchema(functionSymbol, functionNodeLocation);
-            return new ToolAnnotationConfig(description, schema);
+            return new ToolAnnotationConfig(description, schema, "");
         }
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty() ?
                 NodeFactory.createSeparatedNodeList() : annotationNode.annotValue().get().fields();
@@ -126,7 +127,9 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         String parameters = fieldValues.containsKey(SCHEMA_FIELD_NAME)
                 ? fieldValues.get(SCHEMA_FIELD_NAME).toSourceCode()
                 : getParameterSchema(functionSymbol, functionNodeLocation);
-        return new ToolAnnotationConfig(description, parameters);
+        String scopes = fieldValues.containsKey(SCOPES) ? fieldValues.get(SCOPES).toSourceCode() : "";
+        return new ToolAnnotationConfig(description, parameters, scopes);
+
     }
 
     private Optional<FunctionSymbol> getFunctionSymbol(FunctionDefinitionNode functionDefinitionNode) {

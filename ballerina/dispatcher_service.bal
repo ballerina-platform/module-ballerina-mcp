@@ -14,19 +14,28 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/crypto;
 import ballerina/http;
+import ballerina/jwt;
+import ballerina/log;
 import ballerina/uuid;
 
 isolated service class DispatcherService {
     *http:Service;
 }
 
-isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig) returns DispatcherService {
+isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig, 
+                                       JwtConfig|IntrospectionConfig? authConfig) returns DispatcherService {
+    final (JwtConfig|IntrospectionConfig?) & readonly readonlyAuth =
+        authConfig is JwtConfig|IntrospectionConfig
+        ? authConfig.cloneReadOnly()
+        : ();
     return @http:ServiceConfig {
         ...httpServiceConfig
     } isolated service object {
         private map<Session> sessionMap = {};
         private ServiceConfiguration? cachedServiceConfig = ();
+        private ToolDefinition[] tools = [];
 
         isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
             http:authenticateResource(self, "delete", []);
@@ -229,6 +238,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 };
             }
 
+            lock {
+                self.tools = listToolsResult.tools.clone();
+            }
+
             JsonRpcResponse responseBody = {
                 jsonrpc: JSONRPC_VERSION,
                 id: request.id,
@@ -276,18 +289,33 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             }
 
             Session? session;
+            ToolDefinition[] tool = [];
             lock {
                 session = sessionId is string ? self.sessionMap[sessionId] : ();
+                tool = self.tools.cloneReadOnly();
             }
-
-            CallToolResult|error callToolResult = self.executeOnCallTool(params, session);
-            if callToolResult is error {
-                return <http:BadRequest>{
-                    body: createJsonRpcError(INTERNAL_ERROR,
-                            string `Failed to call tool '${params.name}': ${callToolResult.message()}`, request.id)
+            CallToolResult callToolResult = {content: [], isError: false};
+            TokenValidationError? validateResult = validateTool(tool, readonlyAuth, headers, params.name);
+            if validateResult is TokenValidationError {
+                callToolResult = {
+                    content: [
+                        {
+                            'type: "text",
+                            text: validateResult.message()
+                        }
+                    ],
+                    isError: true
                 };
+            } else {
+                CallToolResult|error executionResult = self.executeOnCallTool(params, session);
+                if executionResult is error {
+                    return <http:BadRequest>{
+                        body: createJsonRpcError(INTERNAL_ERROR,
+                                string `Failed to call tool '${params.name}': ${executionResult.message()}`, request.id)
+                    };
+                }
+                callToolResult = executionResult;
             }
-
             JsonRpcResponse responseBody = {
                 jsonrpc: JSONRPC_VERSION,
                 id: request.id,
@@ -337,3 +365,126 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
     };
 }
+
+isolated function validateTool(ToolDefinition[] tools, JwtConfig|IntrospectionConfig? auth, 
+                               http:Headers headers, string toolName) returns TokenValidationError? {
+    if auth !is () {
+        string|http:HeaderNotFoundError header = headers.getHeader(AUTORIZATION);
+        if header is http:HeaderNotFoundError {
+            return error TokenValidationError("Missing Authorization header");
+        }
+        TokenValidationError|ValidationResponse validateTokenResult = validateToken(auth, header);
+        if validateTokenResult is ValidationResponse {
+            MissMatchScopeError? validateToolScopeResult = validateToolScope(tools, validateTokenResult.scope, toolName);
+            if validateToolScopeResult is MissMatchScopeError {
+                return error TokenValidationError("Tool scope validation failed: " + validateToolScopeResult.message());
+            }
+        }
+    }
+    return;
+}
+
+isolated function validateToolScope(ToolDefinition[] tools, string? scopes, string toolName) returns MissMatchScopeError? {
+    foreach ToolDefinition tool in tools {
+        if tool.name == toolName {
+            string[] toolScopes = [];
+            string|string[]? toolDefinedScopes = tool.scopes;
+            if toolDefinedScopes is string {
+                toolScopes.push(toolDefinedScopes);
+            } else if toolDefinedScopes is string[] {
+                toolScopes = toolDefinedScopes;
+            }
+            string[] requiredScopes = scopes is string ? re ` `.split(scopes) : [];
+            foreach string scope in requiredScopes {
+                if toolScopes.indexOf(scope) is () {
+                    log:printDebug("Requested OAuth scope is not permitted or does not match " +
+                            "the existing token scopes: " + scope);
+                    return error MissMatchScopeError("Requested OAuth scope is not permitted or " +
+                        "does not match the existing token scopes: " + scope);
+                }
+            }
+            break;
+        }
+    }
+}
+
+isolated function validateToken(JwtConfig|IntrospectionConfig authConfig, string accessToken) 
+                  returns TokenValidationError|ValidationResponse {
+    if authConfig is IntrospectionConfig {
+        ValidationResponse|error usingIntrosepctionResult = usingIntrosepction(authConfig, accessToken);
+        if usingIntrosepctionResult is ValidationResponse {
+            return usingIntrosepctionResult;
+        }
+        return error TokenValidationError("Failed to validate token using introspection: " + 
+                      usingIntrosepctionResult.message());
+    }
+    record {string url;}? jwks = authConfig?.jwksConfig;
+    if (jwks is record {string url;}) {
+        ValidationResponse|error usingJwksResult = usingJwks(accessToken, jwks.url);
+        if usingJwksResult is ValidationResponse {
+            return usingJwksResult;
+        } 
+        return error TokenValidationError("Failed to validate token using JWKS: " + usingJwksResult.message());
+    } else {
+        string|crypto:PublicKey? certFile = authConfig?.certFile;
+        if (certFile is string|crypto:PublicKey) {
+            ValidationResponse|error usingCertificateResult = usingCertificate(accessToken, certFile);
+            if usingCertificateResult is ValidationResponse {
+                return usingCertificateResult;
+            }
+            return error TokenValidationError("Failed to validate token using certificate: " + usingCertificateResult.message());
+        }
+    }
+    return error TokenValidationError("No valid token validation configuration found");
+}
+
+isolated function usingJwks(string token, string url) returns ValidationResponse|error {
+    jwt:ValidatorConfig validatorConfig = {
+        signatureConfig: {
+            jwksConfig: {
+                url: url
+            }
+        }
+    };
+    jwt:Payload result = check jwt:validate(token, validatorConfig);
+    ValidationResponse resp = check result.cloneWithType(ValidationResponse);
+    return resp;
+}
+
+isolated function usingCertificate(string token, string|crypto:PublicKey certificate) returns error|ValidationResponse {
+    jwt:ValidatorConfig validatorConfig = {
+        signatureConfig: {
+            certFile: certificate
+        }
+    };
+    jwt:Payload result = check jwt:validate(token, validatorConfig);
+    ValidationResponse resp = check result.cloneWithType(ValidationResponse);
+    return resp;
+}
+
+isolated function usingIntrosepction(IntrospectionConfig authConfig, string accessToken)
+                  returns ValidationResponse|error {
+    string textPayload = TOKEN_PREFIX + accessToken;
+    textPayload += TOKEN_TYPE_HINT + authConfig.tokenTypeHint;
+    http:Client httpclient = check new (authConfig.url,
+        auth = {username: authConfig.clientConfig.clientId, password: authConfig.clientConfig.clientSecret}
+    );
+    http:Request req = new;
+    req.setHeader(CONTENT_TYPE_HEADER, CONTENT_TYPE_FORM_URL_ENCODED);
+    req.setPayload(textPayload);
+    http:Response res = check httpclient->post("", req);
+    json outputRes = check res.getJsonPayload();
+    ValidationResponse resp = check outputRes.cloneWithType(ValidationResponse);
+    return resp;
+}
+
+# Represents the validation response.
+#
+# + scope - A JSON string containing a space-separated list of scopes associated with this token
+# + client_id - Client identifier for the OAuth 2.0 client, which requested this token
+# + exp - Expiry time (seconds since the Epoch)
+type ValidationResponse record {
+    string scope?;
+    string client_id;
+    int exp;
+};
