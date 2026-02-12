@@ -25,9 +25,12 @@ public enum DiagnosticMessage {
     ERROR_101("Failed to generate the parameter schema definition for the function ''{0}''." +
             " Specify the parameter schema manually using the `@mcp:McpTool` annotation's parameter field."),
     ERROR_102("Parameter ''{1}'' in function ''{0}'' must be of type 'anydata'. " +
-            "Only the first parameter can be of type 'mcp:Session'."),
+            "Only the first parameter can be of type 'mcp:Session' and only the last parameter can be of type " +
+            "'mcp:Meta'."),
     ERROR_103("Session parameter ''{1}'' in function ''{0}'' must be the first parameter."),
-    ERROR_104("Session parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'.");
+    ERROR_104("Session parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'."),
+    ERROR_105("Meta parameter ''{1}'' in function ''{0}'' must be the last parameter."),
+    ERROR_106("Meta parameter ''{1}'' in function ''{0}'' must be optional (e.g., 'mcp:Meta?').");
 
     private final String message;
 

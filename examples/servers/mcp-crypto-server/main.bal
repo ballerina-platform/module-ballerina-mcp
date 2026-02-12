@@ -18,6 +18,7 @@ import ballerina/crypto;
 import ballerina/lang.array;
 import ballerina/log;
 import ballerina/mcp;
+import ballerina/time;
 
 listener mcp:Listener mcpListener = check new (9091);
 
@@ -79,12 +80,20 @@ service mcp:AdvancedService /mcp on mcpListener {
 
     remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session) returns mcp:CallToolResult|mcp:ServerError {
         record {} arguments = params.arguments ?: {};
+
+        // Extract metadata from client request if present
+        record {} clientMeta = {};
+        if params._meta is record {} {
+            clientMeta = <record {}>params._meta;
+            log:printInfo(string `Received _meta from client: ${clientMeta.toJsonString()}`);
+        }
+
         match params.name {
             "hashText" => {
-                return self.handleHashText(arguments);
+                return self.handleHashText(arguments, clientMeta);
             }
             "encodeBase64" => {
-                return self.handleBase64(arguments);
+                return self.handleBase64(arguments, clientMeta);
             }
             _ => {
                 return error mcp:ServerError(string `Unknown tool: ${params.name}`);
@@ -92,7 +101,9 @@ service mcp:AdvancedService /mcp on mcpListener {
         }
     }
 
-    private isolated function handleHashText(record {} arguments) returns mcp:CallToolResult|mcp:ServerError {
+    private isolated function handleHashText(record {} arguments, record {} clientMeta) returns mcp:CallToolResult|mcp:ServerError {
+        time:Utc startTime = time:utcNow();
+
         string|error text = (arguments["text"]).cloneWithType();
         if text is error {
             return error mcp:ServerError("Invalid 'text' parameter");
@@ -134,6 +145,9 @@ service mcp:AdvancedService /mcp on mcpListener {
             }
         }
 
+        time:Utc endTime = time:utcNow();
+        decimal executionTime = time:utcDiffSeconds(endTime, startTime) * 1000;
+
         log:printInfo(string `Hashed text using ${algorithm}: ${text} -> ${hashedValue}`);
 
         HashResult result = {
@@ -142,17 +156,29 @@ service mcp:AdvancedService /mcp on mcpListener {
             originalText: text
         };
 
+        record {} responseMeta = {
+            "executionTimeMs": executionTime,
+            "inputLength": text.length(),
+            "outputLength": hashedValue.length()
+        };
+        foreach var [key, value] in clientMeta.entries() {
+            responseMeta[key] = value;
+        }
+
         return {
             content: [
                 {
                     'type: "text",
                     text: result.toJsonString()
                 }
-            ]
+            ],
+            _meta: responseMeta
         };
     }
 
-    private isolated function handleBase64(record {} arguments) returns mcp:CallToolResult|mcp:ServerError {
+    private isolated function handleBase64(record {} arguments, record {} clientMeta) returns mcp:CallToolResult|mcp:ServerError {
+        time:Utc startTime = time:utcNow();
+
         string|error text = (arguments["text"]).cloneWithType();
         if text is error {
             return error mcp:ServerError("Invalid 'text' parameter");
@@ -184,6 +210,9 @@ service mcp:AdvancedService /mcp on mcpListener {
             return error mcp:ServerError("Invalid operation. Use 'encode' or 'decode'");
         }
 
+        time:Utc endTime = time:utcNow();
+        decimal executionTime = time:utcDiffSeconds(endTime, startTime) * 1000;
+
         log:printInfo(string `Base64 ${operation}: ${text} -> ${resultValue}`);
 
         Base64Result result = {
@@ -192,13 +221,23 @@ service mcp:AdvancedService /mcp on mcpListener {
             originalInput: text
         };
 
+        record {} responseMeta = {
+            "executionTimeMs": executionTime,
+            "inputLength": text.length(),
+            "outputLength": resultValue.length()
+        };
+        foreach var [key, value] in clientMeta.entries() {
+            responseMeta[key] = value;
+        }
+
         return {
             content: [
                 {
                     'type: "text",
                     text: result.toJsonString()
                 }
-            ]
+            ],
+            _meta: responseMeta
         };
     }
 }

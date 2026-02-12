@@ -36,7 +36,12 @@ service mcp:Service /mcp on mcpListener {
             - location (string, required): City name or coordinates (e.g., "London", "40.7128,-74.0060")
             `
     }
-    remote function getCurrentWeather(string city) returns Weather|error {
+    remote function getCurrentWeather(string city, mcp:Meta? meta) returns Weather|error {
+        // Log received metadata if present
+        if meta is mcp:Meta {
+            log:printInfo(string `Received _meta from client: ${meta.toJsonString()}`);
+        }
+
         log:printInfo(string `Getting current weather for: ${city}`);
 
         // Generate random weather data
@@ -67,8 +72,14 @@ service mcp:Service /mcp on mcpListener {
     #
     # + location - City name or coordinates (e.g., "London", "40.7128,-74.0060")
     # + days - Number of days to forecast (1-7)
+    # + meta - Optional metadata for the request
     # + return - Weather forecast for the specified location and days
-    remote function getWeatherForecast(string location, int days) returns WeatherForecast|error {
+    remote function getWeatherForecast(string location, int days, mcp:Meta? meta) returns WeatherForecast|error {
+        // Log received metadata if present
+        if meta is mcp:Meta {
+            log:printInfo(string `Received _meta from client: ${meta.toJsonString()}`);
+        }
+
         log:printInfo(string `Getting ${days}-day weather forecast for: ${location}`);
 
         // Generate forecast items with random data

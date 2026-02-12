@@ -60,14 +60,17 @@ public type ProgressToken string|int;
 # An opaque token used to represent a cursor for pagination.
 public type Cursor string;
 
+# Optional metadata for requests
+public type Meta record {
+    # If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress).
+    # The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
+    ProgressToken progressToken?;
+};
+
 # Parameters for the request
 public type RequestParams record {
-    # Optional parameters for the request
-    record {
-        # If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress).
-        # The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
-        ProgressToken progressToken?;
-    } _meta?;
+    # Optional metadata for the request
+    Meta _meta?;
 };
 
 # Represents a generic request in the protocol
@@ -315,6 +318,7 @@ public type ListToolsResult record {
 
 # The server's response to a tool call.
 public type CallToolResult record {
+    *Result;
     # The content of the tool call result
     (TextContent|ImageContent|AudioContent|EmbeddedResource)[] content;
     # Whether the tool call ended in an error.
