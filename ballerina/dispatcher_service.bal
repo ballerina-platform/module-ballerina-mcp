@@ -24,7 +24,7 @@ isolated service class DispatcherService {
     *http:Service;
 }
 
-isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig, 
+isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                                        JwtConfig|IntrospectionConfig? authConfig) returns DispatcherService {
     final (JwtConfig|IntrospectionConfig?) & readonly readonlyAuth =
         authConfig is JwtConfig|IntrospectionConfig
@@ -366,8 +366,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
     };
 }
 
-isolated function validateTool(ToolDefinition[] tools, JwtConfig|IntrospectionConfig? auth, 
-                               http:Headers headers, string toolName) returns TokenValidationError? {
+isolated function validateTool(ToolDefinition[] tools, JwtConfig|IntrospectionConfig? auth,
+        http:Headers headers, string toolName) returns TokenValidationError? {
     if auth !is () {
         string|http:HeaderNotFoundError header = headers.getHeader(AUTORIZATION);
         if header is http:HeaderNotFoundError {
@@ -408,22 +408,22 @@ isolated function validateToolScope(ToolDefinition[] tools, string? scopes, stri
     }
 }
 
-isolated function validateToken(JwtConfig|IntrospectionConfig authConfig, string accessToken) 
-                  returns TokenValidationError|ValidationResponse {
+isolated function validateToken(JwtConfig|IntrospectionConfig authConfig, string accessToken)
+                returns TokenValidationError|ValidationResponse {
     if authConfig is IntrospectionConfig {
         ValidationResponse|error usingIntrosepctionResult = usingIntrosepction(authConfig, accessToken);
         if usingIntrosepctionResult is ValidationResponse {
             return usingIntrosepctionResult;
         }
-        return error TokenValidationError("Failed to validate token using introspection: " + 
-                      usingIntrosepctionResult.message());
+        return error TokenValidationError("Failed to validate token using introspection: " +
+                    usingIntrosepctionResult.message());
     }
     record {string url;}? jwks = authConfig?.jwksConfig;
     if (jwks is record {string url;}) {
         ValidationResponse|error usingJwksResult = usingJwks(accessToken, jwks.url);
         if usingJwksResult is ValidationResponse {
             return usingJwksResult;
-        } 
+        }
         return error TokenValidationError("Failed to validate token using JWKS: " + usingJwksResult.message());
     } else {
         string|crypto:PublicKey? certFile = authConfig?.certFile;
@@ -463,7 +463,7 @@ isolated function usingCertificate(string token, string|crypto:PublicKey certifi
 }
 
 isolated function usingIntrosepction(IntrospectionConfig authConfig, string accessToken)
-                  returns ValidationResponse|error {
+                returns ValidationResponse|error {
     string textPayload = TOKEN_PREFIX + accessToken;
     textPayload += TOKEN_TYPE_HINT + authConfig.tokenTypeHint;
     http:Client httpclient = check new (authConfig.url,

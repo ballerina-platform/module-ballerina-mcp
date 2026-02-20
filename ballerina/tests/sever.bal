@@ -25,123 +25,123 @@ type WeatherInfo record {|
 
 final map<WeatherInfo> weatherData = {
     "new-york": {
-       city: "New York",
-       country: "USA",
-       temperature: 22,
-       condition: "Partly Cloudy",
-       humidity: 65,
-       windSpeed: 12
+        city: "New York",
+        country: "USA",
+        temperature: 22,
+        condition: "Partly Cloudy",
+        humidity: 65,
+        windSpeed: 12
     },
     "london": {
-       city: "London",
-       country: "UK",
-       temperature: 18,
-       condition: "Rainy",
-       humidity: 80,
-       windSpeed: 8
+        city: "London",
+        country: "UK",
+        temperature: 18,
+        condition: "Rainy",
+        humidity: 80,
+        windSpeed: 8
     },
     "tokyo": {
-       city: "Tokyo",
-       country: "Japan",
-       temperature: 25,
-       condition: "Sunny",
-       humidity: 55,
-       windSpeed: 6
+        city: "Tokyo",
+        country: "Japan",
+        temperature: 25,
+        condition: "Sunny",
+        humidity: 55,
+        windSpeed: 6
     },
     "colombo": {
-       city: "Colombo",
-       country: "Sri Lanka",
-       temperature: 30,
-       condition: "Tropical",
-       humidity: 75,
-       windSpeed: 10
+        city: "Colombo",
+        country: "Sri Lanka",
+        temperature: 30,
+        condition: "Tropical",
+        humidity: 75,
+        windSpeed: 10
     }
 };
 
-listener Listener weatherListener = new(3000);
+listener Listener weatherListener = new (3000);
 
 service Service /mcp on weatherListener {
 
     remote function getWeather(string city) returns CallToolResult {
-       if !weatherData.hasKey(city) {
-           TextContent textContent = {
-              'type: "text",
-              text: "Weather not available. Supported: New York, London, Tokyo, Colombo"
+        if !weatherData.hasKey(city) {
+            TextContent textContent = {
+                'type: "text",
+                text: "Weather not available. Supported: New York, London, Tokyo, Colombo"
             };
             CallToolResult errorResult = {
-              content: [textContent],
-              isError: true
+                content: [textContent],
+                isError: true
             };
             return errorResult;
-       }
+        }
 
-       WeatherInfo? weather = weatherData[city];
-       if (weather is ()) {
-           TextContent textContent = {
-              'type: "text",
-              text: "Weather data not found for the specified city."
-           };
+        WeatherInfo? weather = weatherData[city];
+        if (weather is ()) {
+            TextContent textContent = {
+                'type: "text",
+                text: "Weather data not found for the specified city."
+            };
 
-           CallToolResult errorResult = {
-              content: [textContent],
-              isError: true
-           };
-           return errorResult;
-       }
-       TextContent textContent = {
-           'type: "text",
+            CallToolResult errorResult = {
+                content: [textContent],
+                isError: true
+            };
+            return errorResult;
+        }
+        TextContent textContent = {
+            'type: "text",
             text: string `Weather in ${weather.city}, ${weather.country} 
                           Temperature: ${weather.temperature}°C 
                           Condition: ${weather.condition} 
                           Humidity: ${weather.humidity}% 
                           Wind Speed: ${weather.windSpeed} kmh`
-       };
+        };
 
-       CallToolResult result = {
+        CallToolResult result = {
             content: [textContent],
             isError: false
-       };
-       return result;
+        };
+        return result;
     }
 
     remote function getForecast(string city) returns CallToolResult {
 
-       if !weatherData.hasKey(city) {
-           TextContent textContent = {
-              'type: "text",
-              text: "Forecast not available. Supported: New York, London, Tokyo, Colombo"
-           };
-
-           CallToolResult errorResult = {
-              content: [textContent],
-              isError: true
-           };
-
-           return errorResult;
-       }
-
-       WeatherInfo? weather = weatherData[city];
-       if (weather is ()) {
-           TextContent textContent = {
-              'type: "text",
-              text: "Forecast data not found for the specified city."
-           };
-       
-           CallToolResult errorResult = {
-              content: [textContent],
-              isError: true
+        if !weatherData.hasKey(city) {
+            TextContent textContent = {
+                'type: "text",
+                text: "Forecast not available. Supported: New York, London, Tokyo, Colombo"
             };
-       
-            return errorResult;
-       }
 
-       TextContent textContent = {
+            CallToolResult errorResult = {
+                content: [textContent],
+                isError: true
+            };
+
+            return errorResult;
+        }
+
+        WeatherInfo? weather = weatherData[city];
+        if (weather is ()) {
+            TextContent textContent = {
+                'type: "text",
+                text: "Forecast data not found for the specified city."
+            };
+
+            CallToolResult errorResult = {
+                content: [textContent],
+                isError: true
+            };
+
+            return errorResult;
+        }
+
+        TextContent textContent = {
             'type: "text",
             text: string `3-Day Forecast for ${weather.city}, ${weather.country} 
                      Day +1: ${weather.temperature + 1}°C, Sunny 
                      Day +2: ${weather.temperature - 1}°C, Cloudy 
                      Day +3: ${weather.temperature}°C, Rainy`
-       };
+        };
 
         CallToolResult result = {
             content: [textContent],
@@ -153,16 +153,16 @@ service Service /mcp on weatherListener {
 
     remote function getCityInfo() returns CallToolResult {
 
-       TextContent textContent = {
-           'type: "text",
-           text: "Supported Cities:\n• New York\n• London\n• Tokyo\n• Colombo"
-       };
+        TextContent textContent = {
+            'type: "text",
+            text: "Supported Cities:\n• New York\n• London\n• Tokyo\n• Colombo"
+        };
 
-       CallToolResult result = {
+        CallToolResult result = {
             content: [textContent],
             isError: false
-       };
+        };
 
-       return result;
+        return result;
     }
 }

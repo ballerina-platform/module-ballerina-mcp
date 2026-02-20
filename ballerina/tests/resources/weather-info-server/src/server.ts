@@ -116,7 +116,11 @@ server.registerTool(
       content: [
         {
           type: 'text',
-          text: `Weather in ${weather.city}, ${weather.country}: Temperature: ${weather.temperature}°C Condition: ${weather.condition} Humidity: ${weather.humidity}% Wind Speed: ${weather.windSpeed} km/h`,
+          text: `Weather in ${weather.city}, ${weather.country}:
+🌡️ Temperature: ${weather.temperature}°C
+🌤️ Condition: ${weather.condition}
+💧 Humidity: ${weather.humidity}%
+💨 Wind Speed: ${weather.windSpeed} km/h`,
         },
       ],
     };

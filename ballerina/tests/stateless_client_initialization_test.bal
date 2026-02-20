@@ -26,7 +26,6 @@ const string TEST_CLIENT_VERSION = "1.0.0";
 final StreamableHttpClient mcpClient = check new (VALID_MCP_URL);
 final StreamableHttpClient invalidClient = check new (INVALID_URL);
 final StreamableHttpClient unreachableClient = check new (UNREACHABLE_MCP_URL);
-
 final Implementation clientInfo = {
     name: TEST_CLIENT_NAME,
     version: TEST_CLIENT_VERSION
