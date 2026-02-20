@@ -81,18 +81,37 @@ task commitTomlFiles {
 task startMcpServer() {
     doLast {
         if (!Os.isFamily(Os.FAMILY_WINDOWS)) {
+
             def stdOut = new ByteArrayOutputStream()
+
             exec {
-                commandLine 'sh', '-c', "docker ps --filter name=weather-info-server"
+                commandLine 'sh', '-c',
+                        "docker ps --filter 'name=weather-info-server' --filter 'status=running' --format '{{.Names}}'"
                 standardOutput = stdOut
+                ignoreExitValue true
             }
-            if (!stdOut.toString().contains("weather-info-server")) {
+
+            def containerRunning = stdOut.toString().trim()
+
+            if (!containerRunning.contains("weather-info-server")) {
+
                 println "Starting MCP Weather Info Server..."
+
+                def composeOut = new ByteArrayOutputStream()
+
                 exec {
-                    commandLine 'sh', '-c', "docker compose -f $project.projectDir/tests/resources/weather-info-server/compose.yml up -d"
-                    standardOutput = stdOut
+                    commandLine 'sh', '-c',
+                            "docker compose -f $project.projectDir/tests/resources/weather-info-server/compose.yml up -d"
+                    standardOutput = composeOut
+                    errorOutput = composeOut
                 }
-                sleep(5 * 1000)
+
+                println composeOut.toString()
+
+                println "Waiting for MCP server to start..."
+                sleep(5000)
+            } else {
+                println "MCP Weather Info Server is already running."
             }
         }
     }
@@ -144,8 +163,8 @@ build.dependsOn ":${packageName}-compiler-plugin:build"
 
 test.dependsOn ":${packageName}-native:build"
 test.dependsOn ":${packageName}-compiler-plugin:build"
-test.dependsOn startMcpServer
-test.finalizedBy stopMcpServer
+// test.dependsOn startMcpServer
+// test.finalizedBy stopMcpServer
 
 publishToMavenLocal.dependsOn build
 publish.dependsOn build

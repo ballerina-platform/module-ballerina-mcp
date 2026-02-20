@@ -373,18 +373,18 @@ isolated function validateTool(ToolDefinition[] tools, JwtConfig|IntrospectionCo
         if header is http:HeaderNotFoundError {
             return error TokenValidationError("Missing Authorization header");
         }
-        TokenValidationError|ValidationResponse validateTokenResult = validateToken(auth, header);
+        ValidationResponse validateTokenResult = check validateToken(auth, header);
         if validateTokenResult is ValidationResponse {
-            MissMatchScopeError? validateToolScopeResult = validateToolScope(tools, validateTokenResult.scope, toolName);
-            if validateToolScopeResult is MissMatchScopeError {
-                return error TokenValidationError("Tool scope validation failed: " + validateToolScopeResult.message());
+            MismatchScopeError? validateToolResult = validateToolScope(tools, validateTokenResult.scope, toolName);
+            if validateToolResult is MismatchScopeError {
+                return error TokenValidationError("Tool scope validation failed: " + validateToolResult.message());
             }
         }
     }
     return;
 }
 
-isolated function validateToolScope(ToolDefinition[] tools, string? scopes, string toolName) returns MissMatchScopeError? {
+isolated function validateToolScope(ToolDefinition[] tools, string? scopes, string toolName) returns MismatchScopeError? {
     foreach ToolDefinition tool in tools {
         if tool.name == toolName {
             string[] toolScopes = [];
@@ -395,11 +395,11 @@ isolated function validateToolScope(ToolDefinition[] tools, string? scopes, stri
                 toolScopes = toolDefinedScopes;
             }
             string[] requiredScopes = scopes is string ? re ` `.split(scopes) : [];
-            foreach string scope in requiredScopes {
-                if toolScopes.indexOf(scope) is () {
+            foreach string scope in toolScopes {
+                if requiredScopes.indexOf(scope) is () {
                     log:printDebug("Requested OAuth scope is not permitted or does not match " +
                             "the existing token scopes: " + scope);
-                    return error MissMatchScopeError("Requested OAuth scope is not permitted or " +
+                    return error MismatchScopeError("Requested OAuth scope is not permitted or " +
                         "does not match the existing token scopes: " + scope);
                 }
             }
@@ -487,4 +487,5 @@ type ValidationResponse record {
     string scope?;
     string client_id;
     int exp;
+    boolean active;
 };
