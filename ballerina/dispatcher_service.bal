@@ -373,11 +373,16 @@ isolated function validateTool(ToolDefinition[] tools, JwtConfig|IntrospectionCo
         if header is http:HeaderNotFoundError {
             return error TokenValidationError("Missing Authorization header");
         }
-        ValidationResponse validateTokenResult = check validateToken(auth, header);
+        ValidationResponse validateTokenResult = check validateToken(auth, header); 
         if validateTokenResult is ValidationResponse {
-            MismatchScopeError? validateToolResult = validateToolScope(tools, validateTokenResult.scope, toolName);
-            if validateToolResult is MismatchScopeError {
-                return error TokenValidationError("Tool scope validation failed: " + validateToolResult.message());
+            boolean? active = validateTokenResult.active;
+            if active is boolean && active {
+                MismatchScopeError? validateToolResult = validateToolScope(tools, validateTokenResult.scope, toolName);
+                if validateToolResult is MismatchScopeError {
+                    return error TokenValidationError("Tool scope validation failed: " + validateToolResult.message());
+                }
+            } else {
+                return error TokenValidationError("Token is not active. Active state: " + active.toString());
             }
         }
     }
@@ -447,8 +452,7 @@ isolated function usingJwks(string token, string url) returns ValidationResponse
         }
     };
     jwt:Payload result = check jwt:validate(token, validatorConfig);
-    ValidationResponse resp = check result.cloneWithType(ValidationResponse);
-    return resp;
+    return result.cloneWithType(ValidationResponse);
 }
 
 isolated function usingCertificate(string token, string|crypto:PublicKey certificate) returns error|ValidationResponse {
@@ -458,8 +462,7 @@ isolated function usingCertificate(string token, string|crypto:PublicKey certifi
         }
     };
     jwt:Payload result = check jwt:validate(token, validatorConfig);
-    ValidationResponse resp = check result.cloneWithType(ValidationResponse);
-    return resp;
+    return result.cloneWithType(ValidationResponse);
 }
 
 isolated function usingIntrosepction(IntrospectionConfig authConfig, string accessToken)
@@ -472,10 +475,7 @@ isolated function usingIntrosepction(IntrospectionConfig authConfig, string acce
     http:Request req = new;
     req.setHeader(CONTENT_TYPE_HEADER, CONTENT_TYPE_FORM_URL_ENCODED);
     req.setPayload(textPayload);
-    http:Response res = check httpclient->post("", req);
-    json outputRes = check res.getJsonPayload();
-    ValidationResponse resp = check outputRes.cloneWithType(ValidationResponse);
-    return resp;
+    return httpclient->post("", req);
 }
 
 # Represents the validation response.
@@ -483,9 +483,10 @@ isolated function usingIntrosepction(IntrospectionConfig authConfig, string acce
 # + scope - A JSON string containing a space-separated list of scopes associated with this token
 # + client_id - Client identifier for the OAuth 2.0 client, which requested this token
 # + exp - Expiry time (seconds since the Epoch)
+# + active - Indicates whether the token is currently active.
 type ValidationResponse record {
     string scope?;
     string client_id;
     int exp;
-    boolean active;
+    boolean active?;
 };
