@@ -376,7 +376,7 @@ isolated function validateTool(ToolDefinition[] tools, JwtConfig|IntrospectionCo
         ValidationResponse validateTokenResult = check validateToken(auth, header); 
         if validateTokenResult is ValidationResponse {
             boolean? active = validateTokenResult.active;
-            if active is boolean && active {
+            if (active is boolean && active) || active is () {
                 MismatchScopeError? validateToolResult = validateToolScope(tools, validateTokenResult.scope, toolName);
                 if validateToolResult is MismatchScopeError {
                     return error TokenValidationError("Tool scope validation failed: " + validateToolResult.message());

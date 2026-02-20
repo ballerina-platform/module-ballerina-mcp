@@ -116,7 +116,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                         Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
         if (annotationNode == null) {
             String schema = getParameterSchema(functionSymbol, functionNodeLocation);
-            return new ToolAnnotationConfig(description, schema, "");
+            return new ToolAnnotationConfig(description, schema, null);
         }
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty() ?
                 NodeFactory.createSeparatedNodeList() : annotationNode.annotValue().get().fields();
@@ -127,7 +127,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         String parameters = fieldValues.containsKey(SCHEMA_FIELD_NAME)
                 ? fieldValues.get(SCHEMA_FIELD_NAME).toSourceCode()
                 : getParameterSchema(functionSymbol, functionNodeLocation);
-        String scopes = fieldValues.containsKey(SCOPES) ? fieldValues.get(SCOPES).toSourceCode() : "";
+        String scopes = fieldValues.containsKey(SCOPES) ? fieldValues.get(SCOPES).toSourceCode() : null;
         return new ToolAnnotationConfig(description, parameters, scopes);
 
     }
