@@ -373,8 +373,6 @@ public type ToolDefinition record {
     # A human-readable description of the tool
     # This can be used by clients to improve the LLM's understanding of available tools.
     string description?;
-    # Scopes required to invoke this tool.
-    string|string[] scopes?;
     # A JSON Schema object defining the expected parameters for the tool.
     record {
         "object" 'type;

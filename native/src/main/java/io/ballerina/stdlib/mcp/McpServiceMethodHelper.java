@@ -19,9 +19,12 @@
 package io.ballerina.stdlib.mcp;
 
 import io.ballerina.runtime.api.Environment;
+import io.ballerina.runtime.api.creators.TypeCreator;
 import io.ballerina.runtime.api.creators.ValueCreator;
 import io.ballerina.runtime.api.types.ArrayType;
+import io.ballerina.runtime.api.types.MapType;
 import io.ballerina.runtime.api.types.Parameter;
+import io.ballerina.runtime.api.types.PredefinedTypes;
 import io.ballerina.runtime.api.types.RecordType;
 import io.ballerina.runtime.api.types.ReferenceType;
 import io.ballerina.runtime.api.types.RemoteMethodType;
@@ -119,6 +122,22 @@ public final class McpServiceMethodHelper {
         return result;
     }
 
+    public static BMap<BString, Object> getToolScopes(BObject mcpService) {
+        ArrayType arrayType = TypeCreator.createArrayType(PredefinedTypes.TYPE_STRING);
+        MapType mapType = TypeCreator.createMapType(arrayType);
+        BMap<BString, Object> scopes = ValueCreator.createMapValue(mapType);
+        for (RemoteMethodType remoteMethod : getRemoteMethods(mcpService)) {
+            remoteMethod.getAnnotations().entrySet().stream()
+                .filter(e -> e.getKey().getValue().contains(ANNOTATION_MCP_TOOL))
+                .findFirst()
+                .ifPresent(annotation -> {
+                    BMap<?, ?> annotationValue = (BMap<?, ?>) annotation.getValue();
+                    scopes.put(fromString(remoteMethod.getName()), getScopes(annotationValue));
+                });
+        }
+        return scopes;
+    }
+
     /**
      * Invokes a remote function (tool) by name with arguments.
      *
@@ -201,10 +220,21 @@ public final class McpServiceMethodHelper {
         tool.put(fromString(NAME_FIELD_NAME), fromString(remoteMethod.getName()));
         tool.put(fromString(DESCRIPTION_FIELD_NAME), annotationValue.get(fromString(DESCRIPTION_FIELD_NAME)));
         tool.put(fromString(INPUT_SCHEMA_FIELD_NAME), annotationValue.get(fromString(SCHEMA_FIELD_NAME)));
-        if (annotationValue.containsKey(fromString(SCOPES))) {
-            tool.put(fromString(SCOPES), annotationValue.get(fromString(SCOPES)));
-        }
         return tool;
+    }
+
+    private static BArray getScopes(BMap<?, ?> annotationValue) {
+        ArrayType arrayType = TypeCreator.createArrayType(PredefinedTypes.TYPE_STRING);
+        BArray scopeArray = ValueCreator.createArrayValue(arrayType);
+        if (annotationValue.containsKey(fromString(SCOPES))) {
+            Object value = annotationValue.get(fromString(SCOPES));
+            if (value instanceof BString) {
+                scopeArray.append(value);
+            } else if (value instanceof BArray) {
+                return (BArray) value;
+            }
+        }
+        return scopeArray;
     }
 
     private static Object buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments, Object session) {

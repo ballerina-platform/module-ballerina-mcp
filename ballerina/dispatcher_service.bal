@@ -35,7 +35,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
     } isolated service object {
         private map<Session> sessionMap = {};
         private ServiceConfiguration? cachedServiceConfig = ();
-        private ToolDefinition[] tools = [];
+        private map<string[]> toolScopes = {};
 
         isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
             http:authenticateResource(self, "delete", []);
@@ -238,10 +238,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 };
             }
 
-            lock {
-                self.tools = listToolsResult.tools.clone();
-            }
-
+            
             JsonRpcResponse responseBody = {
                 jsonrpc: JSONRPC_VERSION,
                 id: request.id,
@@ -289,10 +286,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             }
 
             Session? session;
-            ToolDefinition[] tool = [];
+            map<string[]> tool = {};
             lock {
                 session = sessionId is string ? self.sessionMap[sessionId] : ();
-                tool = self.tools.cloneReadOnly();
+                tool = self.toolScopes.cloneReadOnly();
             }
             CallToolResult callToolResult = {content: [], isError: false};
             TokenValidationError? validateResult = validateTool(tool, readonlyAuth, headers, params.name);
@@ -343,6 +340,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 return invokeOnListTools(mcpService);
             }
             if mcpService is Service {
+                map<string[]> scopes = check getToolScopes(mcpService);
+                lock {
+	                self.toolScopes = scopes.cloneReadOnly();
+                }
                 return listToolsForRemoteFunctions(mcpService);
             }
             return error DispatcherError("MCP Service is not attached");
@@ -366,49 +367,42 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
     };
 }
 
-isolated function validateTool(ToolDefinition[] tools, JwtConfig|IntrospectionConfig? auth,
+isolated function validateTool(map<string[]> toolScopes, JwtConfig|IntrospectionConfig? auth,
         http:Headers headers, string toolName) returns TokenValidationError? {
     if auth !is () {
         string|http:HeaderNotFoundError header = headers.getHeader(AUTORIZATION);
         if header is http:HeaderNotFoundError {
             return error TokenValidationError("Missing Authorization header");
         }
-        ValidationResponse validateTokenResult = check validateToken(auth, header); 
-        if validateTokenResult is ValidationResponse {
-            boolean? active = validateTokenResult.active;
-            if (active is boolean && active) || active is () {
-                MismatchScopeError? validateToolResult = validateToolScope(tools, validateTokenResult.scope, toolName);
-                if validateToolResult is MismatchScopeError {
-                    return error TokenValidationError("Tool scope validation failed: " + validateToolResult.message());
+        if (toolScopes.hasKey(toolName)) {
+            string[] scopes = toolScopes.get(toolName);
+            if (scopes.length() > 0) {
+                ValidationResponse validateTokenResult = check validateToken(auth, header); 
+                if validateTokenResult is ValidationResponse {
+                    boolean? active = validateTokenResult.active;
+                    if (active is boolean && active) || active is () {
+                        InsufficientScopeError? validateToolResult = validateToolScope(scopes, validateTokenResult.scope, toolName);
+                        if validateToolResult is InsufficientScopeError {
+                            return error TokenValidationError("Tool scope validation failed: " + validateToolResult.message());
+                        }
+                    } else {
+                        return error TokenValidationError("Token is not active. Active state: " + active.toString());
+                    }
                 }
-            } else {
-                return error TokenValidationError("Token is not active. Active state: " + active.toString());
             }
         }
+        
     }
     return;
 }
 
-isolated function validateToolScope(ToolDefinition[] tools, string? scopes, string toolName) returns MismatchScopeError? {
-    foreach ToolDefinition tool in tools {
-        if tool.name == toolName {
-            string[] toolScopes = [];
-            string|string[]? toolDefinedScopes = tool.scopes;
-            if toolDefinedScopes is string {
-                toolScopes.push(toolDefinedScopes);
-            } else if toolDefinedScopes is string[] {
-                toolScopes = toolDefinedScopes;
-            }
-            string[] requiredScopes = scopes is string ? re ` `.split(scopes) : [];
-            foreach string scope in toolScopes {
-                if requiredScopes.indexOf(scope) is () {
-                    log:printDebug("Requested OAuth scope is not permitted or does not match " +
-                            "the existing token scopes: " + scope);
-                    return error MismatchScopeError("Requested OAuth scope is not permitted or " +
-                        "does not match the existing token scopes: " + scope);
-                }
-            }
-            break;
+isolated function validateToolScope(string[] requiredScopes, string? scopes, string toolName) returns InsufficientScopeError? {
+    foreach string scope in requiredScopes {
+        if requiredScopes.indexOf(scope) is () {
+            log:printDebug("Requested OAuth scope is not permitted or does not match " +
+                    "the existing token scopes: " + scope);
+            return error InsufficientScopeError("Requested OAuth scope is not permitted or " +
+                "does not match the existing token scopes: " + scope);
         }
     }
 }

@@ -90,4 +90,4 @@ type DispatcherError distinct ServerError;
 public type TokenValidationError distinct ServerError;
 
 # Errors occurred when validating tool scope.
-public type MismatchScopeError distinct ServerError;
+public type InsufficientScopeError distinct ServerError;
