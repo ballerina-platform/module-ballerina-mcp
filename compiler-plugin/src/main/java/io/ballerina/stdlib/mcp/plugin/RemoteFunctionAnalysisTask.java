@@ -129,7 +129,6 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                 : getParameterSchema(functionSymbol, functionNodeLocation);
         String scopes = fieldValues.containsKey(SCOPES) ? fieldValues.get(SCOPES).toSourceCode() : null;
         return new ToolAnnotationConfig(description, parameters, scopes);
-
     }
 
     private Optional<FunctionSymbol> getFunctionSymbol(FunctionDefinitionNode functionDefinitionNode) {

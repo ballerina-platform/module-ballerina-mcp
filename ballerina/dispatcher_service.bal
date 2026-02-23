@@ -25,17 +25,15 @@ isolated service class DispatcherService {
 }
 
 isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
-                                       JwtConfig|IntrospectionConfig? authConfig) returns DispatcherService {
-    final (JwtConfig|IntrospectionConfig?) & readonly readonlyAuth =
-        authConfig is JwtConfig|IntrospectionConfig
-        ? authConfig.cloneReadOnly()
-        : ();
+        JwtConfig|IntrospectionConfig? authConfig) returns DispatcherService {
+    final (JwtConfig|IntrospectionConfig?) & readonly readonlyAuth = authConfig.cloneReadOnly();
     return @http:ServiceConfig {
         ...httpServiceConfig
     } isolated service object {
         private map<Session> sessionMap = {};
         private ServiceConfiguration? cachedServiceConfig = ();
         private map<string[]> toolScopes = {};
+        private string? agentId = ();
 
         isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
             http:authenticateResource(self, "delete", []);
@@ -178,6 +176,15 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 };
             }
 
+            lock {
+                if self.toolScopes.length() == 0 {
+                    Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
+                    if mcpService is Service {
+                        self.toolScopes = check getToolScopes(mcpService).cloneReadOnly();
+                    }
+                }
+            }
+
             string? existingSessionId = getSessionIdFromHeaders(headers);
 
             lock {
@@ -238,7 +245,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 };
             }
 
-            
             JsonRpcResponse responseBody = {
                 jsonrpc: JSONRPC_VERSION,
                 id: request.id,
@@ -286,13 +292,21 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             }
 
             Session? session;
-            map<string[]> tool = {};
+            map<string[]> toolSopes = {};
             lock {
                 session = sessionId is string ? self.sessionMap[sessionId] : ();
-                tool = self.toolScopes.cloneReadOnly();
+                if self.toolScopes.length() > 0 {
+                    toolSopes = self.toolScopes.cloneReadOnly();
+                } else {
+                    Service|AdvancedService mcpService = check getMcpServiceFromDispatcher(self);
+                    if mcpService is Service {
+                        toolSopes = check getToolScopes(mcpService).cloneReadOnly();
+                    }
+                }
             }
-            CallToolResult callToolResult = {content: [], isError: false};
-            TokenValidationError? validateResult = validateTool(tool, readonlyAuth, headers, params.name);
+            CallToolResult callToolResult;
+            TokenValidationError|string? validateResult = validateTool(toolSopes, readonlyAuth, 
+                    headers, params.name);
             if validateResult is TokenValidationError {
                 callToolResult = {
                     content: [
@@ -313,6 +327,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }
                 callToolResult = executionResult;
             }
+
             JsonRpcResponse responseBody = {
                 jsonrpc: JSONRPC_VERSION,
                 id: request.id,
@@ -340,10 +355,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 return invokeOnListTools(mcpService);
             }
             if mcpService is Service {
-                map<string[]> scopes = check getToolScopes(mcpService);
-                lock {
-	                self.toolScopes = scopes.cloneReadOnly();
-                }
                 return listToolsForRemoteFunctions(mcpService);
             }
             return error DispatcherError("MCP Service is not attached");
@@ -368,39 +379,35 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 }
 
 isolated function validateTool(map<string[]> toolScopes, JwtConfig|IntrospectionConfig? auth,
-        http:Headers headers, string toolName) returns TokenValidationError? {
-    if auth !is () {
-        string|http:HeaderNotFoundError header = headers.getHeader(AUTORIZATION);
-        if header is http:HeaderNotFoundError {
-            return error TokenValidationError("Missing Authorization header");
-        }
-        if (toolScopes.hasKey(toolName)) {
-            string[] scopes = toolScopes.get(toolName);
-            if (scopes.length() > 0) {
-                ValidationResponse validateTokenResult = check validateToken(auth, header); 
-                if validateTokenResult is ValidationResponse {
-                    boolean? active = validateTokenResult.active;
-                    if (active is boolean && active) || active is () {
-                        InsufficientScopeError? validateToolResult = validateToolScope(scopes, validateTokenResult.scope, toolName);
-                        if validateToolResult is InsufficientScopeError {
-                            return error TokenValidationError("Tool scope validation failed: " + validateToolResult.message());
-                        }
-                    } else {
-                        return error TokenValidationError("Token is not active. Active state: " + active.toString());
-                    }
-                }
-            }
-        }
-        
+        http:Headers headers, string toolName) returns TokenValidationError|string? {
+    if auth is () || !toolScopes.hasKey(toolName) || toolScopes.get(toolName).length() == 0 {
+        return "";       
     }
-    return;
+    string|http:HeaderNotFoundError header = headers.getHeader(AUTORIZATION);
+    if header is http:HeaderNotFoundError {
+        return error ("Missing Authorization header");
+    }
+    ValidationResponse validateTokenResult = check validateToken(auth, header);
+    boolean? active = validateTokenResult.active;
+    if active is false {
+        return error TokenValidationError("Token validation failed: token is expired or revoked.");
+    }
+    InsufficientScopeError? validateToolResult = validateToolScope(toolScopes.get(toolName), 
+            validateTokenResult.scope, validateTokenResult.sub);
+    if validateToolResult is InsufficientScopeError {
+        log:printError("Requested OAuth scope is not permitted or does " +
+                "not match the existing token scopes: ", 'error = validateToolResult);
+        return error TokenValidationError(validateToolResult.message());
+    }
+    return validateTokenResult.sub;
 }
 
-isolated function validateToolScope(string[] requiredScopes, string? scopes, string toolName) returns InsufficientScopeError? {
-    foreach string scope in requiredScopes {
+isolated function validateToolScope(string[] toolScopes, string? scopesInToken, string? agentId) returns InsufficientScopeError? {
+    string[] requiredScopes = scopesInToken is string ? re ` `.split(scopesInToken) : [];
+    foreach string scope in toolScopes {
         if requiredScopes.indexOf(scope) is () {
-            log:printDebug("Requested OAuth scope is not permitted or does not match " +
-                    "the existing token scopes: " + scope);
+            log:printError("Requested OAuth scope is not permitted or does not match " +
+                    "the existing token scopes: " + scope, agentId = agentId);
             return error InsufficientScopeError("Requested OAuth scope is not permitted or " +
                 "does not match the existing token scopes: " + scope);
         }
@@ -410,46 +417,57 @@ isolated function validateToolScope(string[] requiredScopes, string? scopes, str
 isolated function validateToken(JwtConfig|IntrospectionConfig authConfig, string accessToken)
                 returns TokenValidationError|ValidationResponse {
     if authConfig is IntrospectionConfig {
-        ValidationResponse|error usingIntrosepctionResult = usingIntrosepction(authConfig, accessToken);
+        ValidationResponse|error usingIntrosepctionResult = validateWithIntrosepction(authConfig, 
+            accessToken);
         if usingIntrosepctionResult is ValidationResponse {
+            log:printDebug("Successfully validated token using introspection: ", 
+                    agentId = usingIntrosepctionResult.sub);
             return usingIntrosepctionResult;
         }
+        log:printError("Failed to validate token using introspection: ", 'error = usingIntrosepctionResult);
         return error TokenValidationError("Failed to validate token using introspection: " +
                     usingIntrosepctionResult.message());
     }
-    record {string url;}? jwks = authConfig?.jwksConfig;
-    if (jwks is record {string url;}) {
-        ValidationResponse|error usingJwksResult = usingJwks(accessToken, jwks.url);
-        if usingJwksResult is ValidationResponse {
-            return usingJwksResult;
+    JwksConfig? jwks = authConfig?.jwksConfig;
+    if (jwks is JwksConfig) {
+        ValidationResponse|error jwksResult = validateWithJwks(accessToken, jwks.url);
+        if jwksResult is ValidationResponse {
+            log:printDebug("Successfully validated token using JWKS: ", agentId = jwksResult.sub);
+            return jwksResult;
         }
-        return error TokenValidationError("Failed to validate token using JWKS: " + usingJwksResult.message());
+        log:printError("Failed to validate token using JWKS: ", 'error = jwksResult);
+        return error TokenValidationError("Failed to validate token using JWKS: " + 
+                jwksResult.message());
     } else {
         string|crypto:PublicKey? certFile = authConfig?.certFile;
         if (certFile is string|crypto:PublicKey) {
-            ValidationResponse|error usingCertificateResult = usingCertificate(accessToken, certFile);
-            if usingCertificateResult is ValidationResponse {
-                return usingCertificateResult;
+            ValidationResponse|error certificateResult = validateWithCertificate(accessToken,
+                 certFile);
+            if certificateResult is ValidationResponse {
+                log:printDebug("Successfully validated token using certificate: ", agentId = certificateResult.sub);
+                return certificateResult;
             }
-            return error TokenValidationError("Failed to validate token using certificate: " + usingCertificateResult.message());
+            log:printError("Failed to validate token using certificate: ", 'error = certificateResult);
+            return error TokenValidationError("Failed to validate token using certificate: " + 
+                    certificateResult.message());
         }
     }
     return error TokenValidationError("No valid token validation configuration found");
 }
 
-isolated function usingJwks(string token, string url) returns ValidationResponse|error {
+isolated function validateWithJwks(string token, string url) returns ValidationResponse|error {
     jwt:ValidatorConfig validatorConfig = {
         signatureConfig: {
             jwksConfig: {
-                url: url
+                url
             }
         }
     };
     jwt:Payload result = check jwt:validate(token, validatorConfig);
-    return result.cloneWithType(ValidationResponse);
+    return result.cloneWithType();
 }
 
-isolated function usingCertificate(string token, string|crypto:PublicKey certificate) returns error|ValidationResponse {
+isolated function validateWithCertificate(string token, string|crypto:PublicKey certificate) returns error|ValidationResponse {
     jwt:ValidatorConfig validatorConfig = {
         signatureConfig: {
             certFile: certificate
@@ -459,10 +477,9 @@ isolated function usingCertificate(string token, string|crypto:PublicKey certifi
     return result.cloneWithType(ValidationResponse);
 }
 
-isolated function usingIntrosepction(IntrospectionConfig authConfig, string accessToken)
+isolated function validateWithIntrosepction(IntrospectionConfig authConfig, string accessToken)
                 returns ValidationResponse|error {
-    string textPayload = TOKEN_PREFIX + accessToken;
-    textPayload += TOKEN_TYPE_HINT + authConfig.tokenTypeHint;
+    string textPayload = TOKEN_PREFIX + accessToken + TOKEN_TYPE_HINT + authConfig.tokenTypeHint;
     http:Client httpclient = check new (authConfig.url,
         auth = {username: authConfig.clientConfig.clientId, password: authConfig.clientConfig.clientSecret}
     );
@@ -481,6 +498,7 @@ isolated function usingIntrosepction(IntrospectionConfig authConfig, string acce
 type ValidationResponse record {
     string scope?;
     string client_id;
+    string sub?;
     int exp;
     boolean active?;
 };

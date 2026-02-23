@@ -224,17 +224,19 @@ public final class McpServiceMethodHelper {
     }
 
     private static BArray getScopes(BMap<?, ?> annotationValue) {
-        ArrayType arrayType = TypeCreator.createArrayType(PredefinedTypes.TYPE_STRING);
-        BArray scopeArray = ValueCreator.createArrayValue(arrayType);
         if (annotationValue.containsKey(fromString(SCOPES))) {
             Object value = annotationValue.get(fromString(SCOPES));
-            if (value instanceof BString) {
-                scopeArray.append(value);
-            } else if (value instanceof BArray) {
+            if (value instanceof BArray) {
                 return (BArray) value;
             }
+            if (value instanceof BString) {
+                BArray scopeArray = ValueCreator.createArrayValue(
+                    TypeCreator.createArrayType(PredefinedTypes.TYPE_STRING));
+                scopeArray.append(value);
+            } 
         }
-        return scopeArray;
+        return ValueCreator.createArrayValue(
+            TypeCreator.createArrayType(PredefinedTypes.TYPE_STRING));
     }
 
     private static Object buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments, Object session) {

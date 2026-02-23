@@ -442,7 +442,7 @@ public type McpToolConfig record {|
 |};
 
 # Annotation to mark a function as an MCP tool configuration.
-public annotation McpToolConfig Tool on function, object function;
+public annotation McpToolConfig Tool on object function;
 
 # Represents the options for configuring an MCP server.
 public type ServerOptions record {|
@@ -457,27 +457,31 @@ public type ServerOptions record {|
 # Validates JWT access tokens locally.
 public type JwtConfig record {|
 
-    # Configuration for resolving public keys from a JWKS endpoint.
-    # When provided, the validator retrieves signing keys dynamically.
-    record {|
-        string url;
-    |} jwksConfig?;
+    # Optional configuration to retrieve public signing keys dynamically
+    # from a JWKS endpoint for JWT signature verification.
+    JwksConfig jwksConfig?;
 
-    # Public certificate or key used for local signature verification
+    # Public certificate or key used for local signature verification.
     string|crypto:PublicKey certFile?;
+|};
+
+# Configuration for resolving public signing keys from a JWKS endpoint.
+public type JwksConfig record {|
+    # The HTTPS URL of the JWKS endpoint. 
+    string url;
 |};
 
 # Configuration for validating access tokens remotely using the introspection endpoint.
 public type IntrospectionConfig record {|
 
-    # The token introspection endpoint URL
+    # The token introspection endpoint URL.
     @display {label: "Introspection URL"}
     string url;
 
-    # The token type hint sent to the introspection endpoint
+    # The token type hint sent to the introspection endpoint.
     string tokenTypeHint = "Bearer";
 
-    # Client credentials used to authenticate with the introspection endpoint
+    # Client credentials used to authenticate with the introspection endpoint.
     ClientCredentialsConfig clientConfig;
 |};
 
