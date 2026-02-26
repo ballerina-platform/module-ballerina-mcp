@@ -29,6 +29,7 @@ import io.ballerina.compiler.api.symbols.ServiceDeclarationSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
 import io.ballerina.compiler.api.symbols.SymbolKind;
 import io.ballerina.compiler.api.symbols.TypeSymbol;
+import io.ballerina.compiler.api.symbols.UnionTypeSymbol;
 import io.ballerina.compiler.api.values.ConstantValue;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
 import io.ballerina.compiler.syntax.tree.BasicLiteralNode;
@@ -158,12 +159,9 @@ public class Utils {
         }
 
         ServiceDeclarationSymbol serviceSymbol = (ServiceDeclarationSymbol) parentSymbol.get();
-        Optional<TypeSymbol> firstListenerType = serviceSymbol.listenerTypes().stream().findFirst();
 
-        boolean isFromMcpModule = firstListenerType
-                .flatMap(TypeSymbol::getModule)
-                .flatMap(module -> module.getName().map(MCP_PACKAGE_NAME::equals))
-                .orElse(false);
+        boolean isFromMcpModule = serviceSymbol.listenerTypes().stream()
+                .anyMatch(Utils::isListenerFromMcpModule);
 
         boolean isServiceType = serviceSymbol.typeDescriptor()
                 .flatMap(type -> type.getName().map(MCP_BASIC_SERVICE_NAME::equals))
@@ -321,5 +319,16 @@ public class Utils {
         String identifier = qualifiedRef.identifier().text();
 
         return MCP_PACKAGE_NAME.equals(modulePrefix) && SERVICE_CONFIG_ANNOTATION_NAME.equals(identifier);
+    }
+
+    private static boolean isListenerFromMcpModule(TypeSymbol typeSymbol) {
+        if (typeSymbol instanceof UnionTypeSymbol unionTypeSymbol) {
+            return unionTypeSymbol.memberTypeDescriptors().stream()
+                    .anyMatch(Utils::isListenerFromMcpModule);
+        }
+        return typeSymbol.getModule()
+                .map(module -> MCP_PACKAGE_NAME.equals(module.id().moduleName())
+                        && BALLERINA_ORG.equals(module.id().orgName()))
+                .orElse(false);
     }
 }
