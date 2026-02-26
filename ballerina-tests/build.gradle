@@ -146,9 +146,11 @@ clean {
 }
 
 task deleteDependencyTomlFile {
-    if (project.hasProperty("deleteDependencies")) {
-        testSuites.each { testPackage ->
-            delete "${project.projectDir}/${testPackage}/Dependencies.toml"
+    doLast {
+        if (project.hasProperty("deleteDependencies")) {
+            testSuites.each { testPackage ->
+                delete "${project.projectDir}/${testPackage}/Dependencies.toml"
+            }
         }
     }
 }

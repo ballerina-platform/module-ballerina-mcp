@@ -327,7 +327,8 @@ public class Utils {
                     .anyMatch(Utils::isListenerFromMcpModule);
         }
         return typeSymbol.getModule()
-                .flatMap(module -> module.getName().map(MCP_PACKAGE_NAME::equals))
+                .map(module -> MCP_PACKAGE_NAME.equals(module.id().moduleName())
+                        && BALLERINA_ORG.equals(module.id().orgName()))
                 .orElse(false);
     }
 }

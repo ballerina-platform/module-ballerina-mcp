@@ -91,6 +91,6 @@ function testListenerDeclToolDiscovery() returns error? {
     mcp:ListToolsResult result = check mcpClient2->listTools();
 
     test:assertEquals(result.tools.length(), 1,
-        msg = "Expected 1 tool — compiler plugin must have processed the inline-listener service");
+        msg = "Expected 1 tool — compiler plugin must have processed the declared-listener service");
     test:assertEquals(result.tools[0].name, "getGreetingStr");
 }
