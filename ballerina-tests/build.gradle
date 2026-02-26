@@ -67,9 +67,9 @@ task commitTomlFiles {
         project.exec {
             ignoreExitValue true
             if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-                commandLine 'cmd', '/c', "git commit -m \"[Automated] Update the native jar versions\" ${files}"
+                commandLine 'cmd', '/c', "git commit -m \"[Automated] Update test package TOML files\" ${files}"
             } else {
-                commandLine 'sh', '-c', "git commit -m '[Automated] Update the native jar versions' ${files}"
+                commandLine 'sh', '-c', "git commit -m '[Automated] Update test package TOML files' ${files}"
             }
         }
     }
@@ -140,8 +140,10 @@ test {
 }
 
 clean {
-    testSuites.each { testPackage ->
-        delete "${project.projectDir}/${testPackage}/target"
+    doLast {
+        testSuites.each { testPackage ->
+            delete "${project.projectDir}/${testPackage}/target"
+        }
     }
 }
 

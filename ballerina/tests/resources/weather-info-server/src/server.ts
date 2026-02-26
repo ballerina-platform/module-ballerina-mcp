@@ -220,7 +220,9 @@ app.use(cors({
   exposedHeaders: ["Mcp-Session-Id"]
 }));
 
-// Stateless MCP handler - creates new transport for each request
+// MCP handler - creates new transport for each request
+// WARNING: Uses a single global McpServer instance with connect/close per request.
+// Concurrent requests may interfere with each other.
 app.post('/mcp', async (req: Request, res: Response) => {
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined
