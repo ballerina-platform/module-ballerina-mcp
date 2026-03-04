@@ -31,10 +31,6 @@ isolated function listToolsForRemoteFunctions(Service 'service, typedesc<ListToo
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
-isolated function getToolScopes(Service 'service) returns map<string[]>|Error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
-} external;
-
 isolated function callToolForRemoteFunctions(Service 'service, CallToolParams params, Session? session,
         typedesc<CallToolResult> t = <>) returns t|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
