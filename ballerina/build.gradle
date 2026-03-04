@@ -78,45 +78,6 @@ task commitTomlFiles {
     }
 }
 
-task startMcpServer() {
-    doLast {
-        if (!Os.isFamily(Os.FAMILY_WINDOWS)) {
-            def stdOut = new ByteArrayOutputStream()
-            exec {
-                commandLine 'sh', '-c', "docker ps --filter name=weather-info-server"
-                standardOutput = stdOut
-            }
-            if (!stdOut.toString().contains("weather-info-server")) {
-                println "Starting MCP Weather Info Server..."
-                exec {
-                    commandLine 'sh', '-c', "docker compose -f $project.projectDir/tests/resources/weather-info-server/compose.yml up -d"
-                    standardOutput = stdOut
-                }
-                sleep(5 * 1000)
-            }
-        }
-    }
-}
-
-task stopMcpServer() {
-    doLast {
-        if (!Os.isFamily(Os.FAMILY_WINDOWS)) {
-            def stdOut = new ByteArrayOutputStream()
-            exec {
-                commandLine 'sh', '-c', "docker ps --filter name=weather-info-server"
-                standardOutput = stdOut
-            }
-            if (stdOut.toString().contains("weather-info-server")) {
-                println "Stopping MCP Weather Info Server..."
-                exec {
-                    commandLine 'sh', '-c', "docker compose -f $project.projectDir/tests/resources/weather-info-server/compose.yml down"
-                    standardOutput = stdOut
-                }
-            }
-        }
-    }
-}
-
 publishing {
     publications {
         maven(MavenPublication) {
@@ -136,6 +97,29 @@ publishing {
     }
 }
 
+
+task buildMcpServer(type: Exec) {
+    workingDir "$project.projectDir/tests/resources/weather-info-server"
+    commandLine 'docker', 'build', '-t', 'mcp-server', '.'
+}
+
+task startMcpServer(type: Exec) {
+    commandLine 'docker', 'run', '-d', '-p', '3000:3000', 'mcp-server'
+}
+
+task stopMcpServer(type: Exec) {
+    commandLine 'sh', '-c', 'docker stop $(docker ps -q --filter ancestor=mcp-server)'
+}
+
+if (!project.gradle.startParameter.excludedTaskNames.contains('test') && !Os.isFamily(Os.FAMILY_WINDOWS)) {
+    build.dependsOn buildMcpServer
+    build.dependsOn startMcpServer
+    test.dependsOn buildMcpServer
+    test.dependsOn startMcpServer
+    build.finalizedBy stopMcpServer
+    test.finalizedBy stopMcpServer
+}
+
 updateTomlFiles.dependsOn copyStdlibs
 
 build.dependsOn "generatePomFileForMavenPublication"
@@ -144,8 +128,6 @@ build.dependsOn ":${packageName}-compiler-plugin:build"
 
 test.dependsOn ":${packageName}-native:build"
 test.dependsOn ":${packageName}-compiler-plugin:build"
-test.dependsOn startMcpServer
-test.finalizedBy stopMcpServer
 
 publishToMavenLocal.dependsOn build
 publish.dependsOn build

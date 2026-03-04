@@ -14,19 +14,27 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/crypto;
 import ballerina/http;
+import ballerina/jwt;
+import ballerina/log;
 import ballerina/uuid;
 
 isolated service class DispatcherService {
     *http:Service;
 }
 
-isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig) returns DispatcherService {
+isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
+        JwtConfig|IntrospectionConfig? authConfig) returns DispatcherService {
+    final (JwtConfig|IntrospectionConfig?) & readonly readonlyAuth = authConfig.cloneReadOnly();
     return @http:ServiceConfig {
         ...httpServiceConfig
     } isolated service object {
         private map<Session> sessionMap = {};
         private ServiceConfiguration? cachedServiceConfig = ();
+        private map<string[]> toolScopes = {};
+        private ListToolsResult? listToolsRequest = ();
+        private string? agentId = ();
 
         isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
             http:authenticateResource(self, "delete", []);
@@ -67,7 +75,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         isolated resource function post .(@http:Payload JsonRpcMessage request, http:Headers headers)
-                returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok|Error {
+                returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok|http:Unauthorized|Error {
             http:authenticateResource(self, "post", []);
             http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = validateRequiredHeaders(headers);
             if headerValidationError !is () {
@@ -98,7 +106,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Headers headers)
-            returns http:BadRequest|http:Ok|Error {
+            returns http:BadRequest|http:Ok|http:Unauthorized|Error {
             match request.method {
                 REQUEST_INITIALIZE => {
                     return self.handleInitializeRequest(request, headers);
@@ -222,6 +230,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             }
 
             ListToolsResult|error listToolsResult = self.executeOnListTools();
+            lock {
+	            self.listToolsRequest = listToolsResult is ListToolsResult ? listToolsResult.clone() : ();
+            }
             if listToolsResult is error {
                 return <http:BadRequest>{
                     body: createJsonRpcError(INTERNAL_ERROR,
@@ -242,7 +253,42 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         private isolated function handleCallToolRequest(JsonRpcRequest request, http:Headers headers)
-            returns http:BadRequest|http:Ok|Error {
+            returns http:BadRequest|http:Ok|http:Unauthorized|Error {
+            CallToolParams|error params = request.params.cloneWithType();
+            if params is error {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_PARAMS,
+                            string `Invalid parameters: ${params.message()}`, request.id)
+                };
+            }
+            ToolDefinition[] tools = [];
+            map<string[]> toolScopes = {};
+            lock {
+                if (!self.toolScopes.hasKey(request.method) ) {
+                    ListToolsResult? listToolsRequestResult = self.listToolsRequest;
+                    if listToolsRequestResult !is () {
+                        tools = listToolsRequestResult.tools.cloneReadOnly();
+                    } else {
+                        ListToolsResult|error listToolsResult = self.executeOnListTools();
+                        if listToolsResult is error {
+                            return <http:BadRequest>{
+                                body: createJsonRpcError(INTERNAL_ERROR,
+                                        string `Failed to list tools: ${listToolsResult.message()}`, request.id)
+                            };
+                        }
+                        tools = listToolsResult.tools.cloneReadOnly();
+                    }
+                    toolScopes = splitScopes(tools.cloneReadOnly(), self.toolScopes).cloneReadOnly();
+                }
+            }
+            TokenValidationError|string? validateResult = validateTool(toolScopes, readonlyAuth, 
+                    headers, params.name);
+            if validateResult is TokenValidationError {
+                return <http:Unauthorized>{
+                    body: createJsonRpcError(UNAUTHORISED,
+                            string `Invalid scopes: ${validateResult.message()}`, request.id)
+                };
+            }
             ServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
             SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_CALL_TOOL);
 
@@ -265,14 +311,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                         };
                     }
                 }
-            }
-
-            CallToolParams|error params = request.params.cloneWithType();
-            if params is error {
-                return <http:BadRequest>{
-                    body: createJsonRpcError(INVALID_PARAMS,
-                            string `Invalid parameters: ${params.message()}`, request.id)
-                };
             }
 
             Session? session;
@@ -337,3 +375,143 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
     };
 }
+
+isolated function validateTool(map<string[]> toolScopes, JwtConfig|IntrospectionConfig? auth,
+        http:Headers headers, string toolName) returns TokenValidationError|string? {
+    if auth is () || !toolScopes.hasKey(toolName) || toolScopes.get(toolName).length() == 0 {
+        return;       
+    }
+    string|http:HeaderNotFoundError header = headers.getHeader(AUTORIZATION);
+    if header is http:HeaderNotFoundError {
+        return error ("Missing Authorization header");
+    }
+    ValidationResponse validateTokenResult = check validateToken(auth, header);
+    boolean? active = validateTokenResult.active;
+    if active is false {
+        return error TokenValidationError("Token validation failed: token is expired or revoked.");
+    }
+    InsufficientScopeError? validateToolResult = validateToolScope(toolScopes.get(toolName), 
+            validateTokenResult.scope, validateTokenResult.sub);
+    if validateToolResult is InsufficientScopeError {
+        log:printError("Requested OAuth scope is not permitted or does " +
+                "not match the existing token scopes: ", 'error = validateToolResult);
+        return error TokenValidationError(validateToolResult.message());
+    }
+    return validateTokenResult.sub;
+}
+
+isolated function validateToolScope(string[] toolScopes, string? scopesInToken, string? agentId) returns InsufficientScopeError? {
+    string[] requiredScopes = scopesInToken is string ? re ` `.split(scopesInToken) : [];
+    foreach string scope in toolScopes {
+        if requiredScopes.indexOf(scope) is () {
+            log:printError("Requested OAuth scope is not permitted or does not match " +
+                    "the existing token scopes: " + scope, agentId = agentId);
+            return error InsufficientScopeError("Requested OAuth scope is not permitted or " +
+                "does not match the existing token scopes: " + scope);
+        }
+    }
+}
+
+isolated function validateToken(JwtConfig|IntrospectionConfig authConfig, string accessToken)
+                returns TokenValidationError|ValidationResponse {
+    if authConfig is IntrospectionConfig {
+        ValidationResponse|error usingIntrosepctionResult = validateWithIntrosepction(authConfig, 
+            accessToken);
+        if usingIntrosepctionResult is ValidationResponse {
+            log:printDebug("Successfully validated token using introspection: ", 
+                    agentId = usingIntrosepctionResult.sub);
+            return usingIntrosepctionResult;
+        }
+        log:printError("Failed to validate token using introspection: ", 'error = usingIntrosepctionResult);
+        return error TokenValidationError("Failed to validate token using introspection: " +
+                    usingIntrosepctionResult.message());
+    }
+    JwksConfig? jwks = authConfig?.jwksConfig;
+    if (jwks is JwksConfig) {
+        ValidationResponse|error jwksResult = validateWithJwks(accessToken, jwks.url);
+        if jwksResult is ValidationResponse {
+            log:printDebug("Successfully validated token using JWKS: ", agentId = jwksResult.sub);
+            return jwksResult;
+        }
+        log:printError("Failed to validate token using JWKS: ", 'error = jwksResult);
+        return error TokenValidationError("Failed to validate token using JWKS: " + 
+                jwksResult.message());
+    } else {
+        string|crypto:PublicKey? certFile = authConfig?.certFile;
+        if (certFile is string|crypto:PublicKey) {
+            ValidationResponse|error certificateResult = validateWithCertificate(accessToken,
+                 certFile);
+            if certificateResult is ValidationResponse {
+                log:printDebug("Successfully validated token using certificate: ", agentId = certificateResult.sub);
+                return certificateResult;
+            }
+            log:printError("Failed to validate token using certificate: ", 'error = certificateResult);
+            return error TokenValidationError("Failed to validate token using certificate: " + 
+                    certificateResult.message());
+        }
+    }
+    return error TokenValidationError("No valid token validation configuration found");
+}
+
+isolated function validateWithJwks(string token, string url) returns ValidationResponse|error {
+    jwt:ValidatorConfig validatorConfig = {
+        signatureConfig: {
+            jwksConfig: {
+                url
+            }
+        }
+    };
+    jwt:Payload result = check jwt:validate(token, validatorConfig);
+    return result.cloneWithType();
+}
+
+isolated function validateWithCertificate(string token, string|crypto:PublicKey certificate) returns error|ValidationResponse {
+    jwt:ValidatorConfig validatorConfig = {
+        signatureConfig: {
+            certFile: certificate
+        }
+    };
+    jwt:Payload result = check jwt:validate(token, validatorConfig);
+    return result.cloneWithType(ValidationResponse);
+}
+
+isolated function validateWithIntrosepction(IntrospectionConfig authConfig, string accessToken)
+                returns ValidationResponse|error {
+    string textPayload = TOKEN_PREFIX + accessToken + TOKEN_TYPE_HINT + authConfig.tokenTypeHint;
+    http:Client httpclient = check new (authConfig.url,
+        auth = {username: authConfig.clientConfig.clientId, password: authConfig.clientConfig.clientSecret}
+    );
+    http:Request req = new;
+    req.setHeader(CONTENT_TYPE_HEADER, CONTENT_TYPE_FORM_URL_ENCODED);
+    req.setPayload(textPayload);
+    return httpclient->post("", req);
+}
+
+isolated function splitScopes(ToolDefinition[] tools, map<string[]> existingToolScopes) returns map<string[]> {
+    foreach ToolDefinition tool in tools {
+        string|string[]? scopes = tool.scopes;
+        string[] scopesArray = [];
+        if scopes is string {
+            scopesArray = re ` `.split(scopes.trim());
+        } else if (scopes is string[]) {
+            scopesArray = scopes;
+        }
+        existingToolScopes[tool.name] = scopesArray;
+    }
+    return existingToolScopes;
+}
+
+# Represents the validation response.
+#
+# + scope - A JSON string containing a space-separated list of scopes associated with this token
+# + client_id - Client identifier for the OAuth 2.0 client, which requested this token
+# + sub - The subject (user or entity) to whom the token was issued. 
+# + exp - Expiry time (seconds since the Epoch)
+# + active - Indicates whether the token is currently active.
+type ValidationResponse record {
+    string scope?;
+    string client_id;
+    string sub?;
+    int exp;
+    boolean active?;
+};
