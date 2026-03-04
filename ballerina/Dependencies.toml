@@ -5,7 +5,7 @@
 
 [ballerina]
 dependencies-toml-version = "2"
-distribution-version = "2201.12.0"
+distribution-version = "2201.12.10"
 
 [[package]]
 org = "ballerina"
@@ -17,6 +17,9 @@ dependencies = [
 	{org = "ballerina", name = "lang.array"},
 	{org = "ballerina", name = "lang.string"},
 	{org = "ballerina", name = "log"}
+]
+modules = [
+	{org = "ballerina", packageName = "auth", moduleName = "auth"}
 ]
 
 [[package]]
@@ -240,11 +243,13 @@ org = "ballerina"
 name = "mcp"
 version = "1.0.3"
 dependencies = [
+	{org = "ballerina", name = "auth"},
 	{org = "ballerina", name = "crypto"},
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "jwt"},
 	{org = "ballerina", name = "log"},
+	{org = "ballerina", name = "oauth2"},
 	{org = "ballerina", name = "test"},
 	{org = "ballerina", name = "uuid"}
 ]
@@ -274,6 +279,9 @@ dependencies = [
 	{org = "ballerina", name = "log"},
 	{org = "ballerina", name = "time"},
 	{org = "ballerina", name = "url"}
+]
+modules = [
+	{org = "ballerina", packageName = "oauth2", moduleName = "oauth2"}
 ]
 
 [[package]]

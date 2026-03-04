@@ -139,7 +139,7 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
         String scopes = config.scopes();
         if (scopes != null) {
             sb.append(",");
-            sb.append("scopes:").append(config.scopes());
+            sb.append("scopes:").append(scopes);
         }
         sb.append(closeBraceSource);
         return sb.toString();

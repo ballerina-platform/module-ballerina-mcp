@@ -136,6 +136,8 @@ public const METHOD_NOT_FOUND = -32601;
 public const INVALID_PARAMS = -32602;
 # Standard JSON-RPC 2.0 error code indicating that an internal error occurred on the server.
 public const INTERNAL_ERROR = -32603;
+# Standard JSON-RPC 2.0 error code indicating that the request is unauthorized.
+public const UNAUTHORISED = 1001;
 
 // Library-defined error codes
 # MCP library-defined error code indicating that the request is not acceptable.
@@ -381,6 +383,9 @@ public type ToolDefinition record {
     } inputSchema;
     # Optional additional tool information.
     ToolAnnotations annotations?;
+    # Scopes required to invoke this tool. This can be used by clients to 
+    # determine which tools they have permission to call.
+    string|string[]? scopes;
 };
 
 # Optional annotations for the client. The client can use annotations to inform how objects are used or displayed
