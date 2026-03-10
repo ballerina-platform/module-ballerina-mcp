@@ -1,0 +1,4 @@
+[package]
+org = "ballerinatests"
+name = "mcp_ballerina_tests"
+version = "1.0.4"

@@ -38,11 +38,13 @@ include ':checkstyle'
 include ':mcp-ballerina'
 include ':mcp-native'
 include ':mcp-compiler-plugin'
+include ':mcp-ballerina-tests'
 
 project(':checkstyle').projectDir = file("build-config${File.separator}checkstyle")
 project(':mcp-ballerina').projectDir = file('ballerina')
 project(':mcp-native').projectDir = file('native')
 project(':mcp-compiler-plugin').projectDir = file('compiler-plugin')
+project(':mcp-ballerina-tests').projectDir = file('ballerina-tests')
 
 gradleEnterprise {
     buildScan {

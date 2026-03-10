@@ -220,19 +220,16 @@ app.use(cors({
   exposedHeaders: ["Mcp-Session-Id"]
 }));
 
-// Stateless MCP handler - creates new transport for each request
+// MCP handler - creates new transport for each request
+// WARNING: Uses a single global McpServer instance with connect/close per request.
+// Concurrent requests may interfere with each other.
 app.post('/mcp', async (req: Request, res: Response) => {
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined
+  });
+
   try {
-
-    // Create a new transport for each request (stateless)
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined
-    });
-
-    // Connect server to transport
     await server.connect(transport);
-
-    // Handle the request
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
     console.error('Error handling MCP request:', error);
@@ -243,8 +240,15 @@ app.post('/mcp', async (req: Request, res: Response) => {
           code: -32603,
           message: 'Internal server error',
         },
-        id: req.body?.id || null,
+        id: req.body?.id ?? null,
       });
+    }
+  } finally {
+    // Reset connection state to allow next request
+    try {
+      await server.close();
+    } catch {
+      // Ignore cleanup errors
     }
   }
 });
