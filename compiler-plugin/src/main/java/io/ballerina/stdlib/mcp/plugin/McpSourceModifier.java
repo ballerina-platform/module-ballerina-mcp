@@ -136,11 +136,7 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
         String desc = config.description().replaceAll("\\R", " ");
         sb.append("description:").append(desc).append(",");
         sb.append("schema:").append(config.schema());
-        String scopes = config.scopes();
-        if (scopes != null) {
-            sb.append(",");
-            sb.append("scopes:").append(scopes);
-        }
+        sb.append(",").append("scopes:").append(config.scopes());
         sb.append(closeBraceSource);
         return sb.toString();
     }

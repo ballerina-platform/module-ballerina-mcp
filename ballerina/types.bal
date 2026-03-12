@@ -385,7 +385,7 @@ public type ToolDefinition record {
     ToolAnnotations annotations?;
     # Scopes required to invoke this tool. This can be used by clients to 
     # determine which tools they have permission to call.
-    string|string[]? scopes;
+    string|string[] scopes?;
 };
 
 # Optional annotations for the client. The client can use annotations to inform how objects are used or displayed
@@ -515,9 +515,6 @@ public type ServiceConfiguration record {|
     # - STATELESS → No session management, each request is independent
     # - AUTO → Automatically determined based on client initialization behavior (default)
     SessionMode sessionMode = AUTO;
-    # Optional authentication configuration used to validate access tokens using 
-    # either JWT validation or introspection.
-    JwtConfig|IntrospectionConfig auth?;
 |};
 
 # Annotation to provide service configuration to MCP services.

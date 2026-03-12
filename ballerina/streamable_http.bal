@@ -16,11 +16,80 @@
 
 import ballerina/http;
 
-# Configuration options for the Streamable HTTP client transport.
-#
-# + sessionId - Optional session identifier for continued interactions.
+# Represents the OAuth 2.0 client configuration required to interact
+# with an external Authorization Server and validate issued access tokens.
+@display {label: "OAuth Client Configuration"}
+public type AgentIdAuthConfig record {|
+
+    # The base URL of the Authorization Server used to resolve
+    # OAuth 2.0 endpoints such as authorization, token, and introspection.
+    @display {label: "Authorization Server Base URL"}
+    string baseAuthUrl?;
+
+    # The OAuth 2.0 client identifier issued to this client application.
+    @display {label: "Client ID"}
+    string clientId?;
+
+    # The redirect URI registered for the OAuth client and used
+    # in the Authorization Code flow.
+    @display {label: "Redirect URI"}
+    string redirectUri?;
+
+    # Scopes required to invoke this tool
+    @display {label: "Required Scopes"}
+    string|string[] scopes?;
+
+    # Indicates whether PKCE (Proof Key for Code Exchange) is enabled
+    # for the Authorization Code flow.
+    @display {label: "Enable PKCE"}
+    boolean isPkceEnabled = false;
+|};
+
+#Configuration options for the Streamable HTTP client transport.
 public type StreamableHttpClientTransportConfig record {|
-    *http:ClientConfiguration;
+    # HTTP protocol version supported by the client
+    http:HttpVersion httpVersion = http:HTTP_2_0;
+    # HTTP/1.x specific settings
+    http:ClientHttp1Settings http1Settings = {};
+    # HTTP/2 specific settings
+    http:ClientHttp2Settings http2Settings = {};
+    # Maximum time(in seconds) to wait for a response before the request times out
+    decimal timeout = 30;
+    # The choice of setting `Forwarded`/`X-Forwarded-For` header, when acting as a proxy
+    string forwarded = "disable";
+    # HTTP redirect handling configurations (with 3xx status codes)
+    http:FollowRedirects? followRedirects = ();
+    # Configurations associated with the request connection pool
+    http:PoolConfiguration? poolConfig = ();
+    # HTTP response caching related configurations
+    http:CacheConfig cache = {};
+    # Enable request/response compression (using `accept-encoding` header)
+    http:Compression compression = http:COMPRESSION_AUTO;
+    # Client authentication options (Basic, Bearer token, OAuth, etc.)
+    # Circuit breaker configurations to prevent cascading failures
+    http:CircuitBreakerConfig? circuitBreaker = ();
+    # Automatic retry settings for failed requests
+    http:RetryConfig? retryConfig = ();
+    # Cookie handling settings for session management
+    http:CookieConfig? cookieConfig = ();
+    # Configurations related to client authentication
+    http:ClientAuthConfig|AgentIdAuthConfig? auth = ();
+    # Limits for response size and headers (to prevent memory issues)
+    http:ResponseLimitConfigs responseLimits = {};
+    # Proxy server settings if requests need to go through a proxy
+    http:ProxyConfig? proxy = ();
+    # Enable automatic payload validation for request/response data against constraints
+    boolean validation = true;
+    # Low-level socket settings (timeouts, buffer sizes, etc.)
+    http:ClientSocketConfig socketConfig = {};
+    # Enable relaxed data binding on the client side.
+    # When enabled:
+    # - `null` values in JSON are allowed to be mapped to optional fields
+    # - missing fields in JSON are allowed to be mapped as `null` values
+    boolean laxDataBinding = false;
+    # SSL/TLS-related options
+    http:ClientSecureSocket? secureSocket = ();
+    # Optional session identifier for continued interactions
     string sessionId?;
 |};
 
@@ -29,6 +98,7 @@ isolated class StreamableHttpClientTransport {
     private final string serverUrl;
     private final http:Client httpClient;
     private string? sessionId;
+    private AgentIdAuthConfig? auth = ();
 
     # Initializes the HTTP client transport with the provided server URL.
     #
@@ -38,15 +108,23 @@ isolated class StreamableHttpClientTransport {
     isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config)
             returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
+        StreamableHttpClientTransportConfig {sessionId, auth, ...clientConfig} = config;
 
-        StreamableHttpClientTransportConfig {sessionId, ...clientConfig} = config;
-        clientConfig.followRedirects = clientConfig.followRedirects ?: {
-            enabled: true
-        };
+        clientConfig.followRedirects = clientConfig.followRedirects ?: {enabled: true};
+
         do {
-            self.httpClient = check new (serverUrl, clientConfig);
+            http:ClientConfiguration httpClientAction = {...clientConfig};
+            if auth is http:ClientAuthConfig {
+                httpClientAction.auth = auth;
+            } else {
+                self.auth = auth.cloneReadOnly();
+                
+            }
+            self.httpClient = check new (serverUrl, httpClientAction);
         } on fail error e {
-            return error HttpClientError(string `Unable to initialize HTTP client for '${serverUrl}': ${e.message()}`);
+            return error HttpClientError(
+                string `Unable to initialize HTTP client for '${serverUrl}': ${e.message()}`
+            );
         }
         self.sessionId = sessionId;
     }
