@@ -80,7 +80,7 @@ isolated function tryAuthenticate(http:ListenerAuthConfig[] authConfig, string h
 
 // Extract the scheme from `string` header.
 isolated function extractScheme(string header) returns string {
-    return re `\s`.split(header)[0];
+    return re `\s`.split(header.trim())[0];
 }
 
 // Defines the listener authentication handlers.

@@ -136,8 +136,6 @@ public const METHOD_NOT_FOUND = -32601;
 public const INVALID_PARAMS = -32602;
 # Standard JSON-RPC 2.0 error code indicating that an internal error occurred on the server.
 public const INTERNAL_ERROR = -32603;
-# Standard JSON-RPC 2.0 error code indicating that the request is unauthorized.
-public const UNAUTHORISED = 1001;
 
 // Library-defined error codes
 # MCP library-defined error code indicating that the request is not acceptable.
@@ -457,49 +455,6 @@ public type ServerOptions record {|
     string instructions?;
     # Whether to enforce strict capabilities compliance.
     boolean enforceStrictCapabilities?;
-|};
-
-# Validates JWT access tokens locally.
-public type JwtConfig record {|
-
-    # Optional configuration to retrieve public signing keys dynamically
-    # from a JWKS endpoint for JWT signature verification.
-    JwksConfig jwksConfig?;
-
-    # Public certificate or key used for local signature verification.
-    string|crypto:PublicKey certFile?;
-|};
-
-# Configuration for resolving public signing keys from a JWKS endpoint.
-public type JwksConfig record {|
-    # The HTTPS URL of the JWKS endpoint. 
-    string url;
-|};
-
-# Configuration for validating access tokens remotely using the introspection endpoint.
-public type IntrospectionConfig record {|
-
-    # The token introspection endpoint URL.
-    @display {label: "Introspection URL"}
-    string url;
-
-    # The token type hint sent to the introspection endpoint.
-    string tokenTypeHint = "Bearer";
-
-    # Client credentials used to authenticate with the introspection endpoint.
-    ClientCredentialsConfig clientConfig;
-|};
-
-# Client credentials for authenticating with the introspection endpoint.
-public type ClientCredentialsConfig record {|
-
-    # The client identifier issued by the authorization server.
-    @display {label: "Client ID"}
-    string clientId;
-
-    # The confidential client secret issued by the authorization server.
-    @display {label: "Client Secret"}
-    string clientSecret;
 |};
 
 # Configuration for MCP service that defines server capabilities, metadata, and transport options.

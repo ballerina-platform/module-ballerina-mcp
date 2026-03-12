@@ -148,7 +148,7 @@ export class MCPServer {
         // Set tools dynamically, changing every 5 seconds
         this.toolInterval = setInterval(async () => {
             setToolSchema();
-            
+
             Object.values(this.transports).forEach((transport) => {
                 const notification: ToolListChangedNotification = {
                     method: "notifications/tools/list_changed",
@@ -286,11 +286,11 @@ export class MCPServer {
             const result = InitializeRequestSchema.safeParse(data);
             return result.success;
         };
-        
+
         if (Array.isArray(body)) {
             return body.some(request => isInitial(request));
         }
-        
+
         return isInitial(body);
     }
 }

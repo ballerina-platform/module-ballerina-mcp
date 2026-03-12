@@ -1,0 +1,174 @@
+/*
+ * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+import org.apache.tools.ant.taskdefs.condition.Os
+
+plugins {
+    id 'groovy'
+}
+
+description = 'Ballerina - MCP Tests'
+
+def packageOrg = "ballerina"
+def packageName = "mcp"
+def tomlVersion = stripBallerinaExtensionVersion("${project.version}")
+def ballerinaTomlFilePlaceHolder = new File("${project.rootDir}/build-config/resources/BallerinaTest.toml")
+def testCommonTomlFilePlaceHolder = new File("${project.rootDir}/build-config/resources/BallerinaTestCommon.toml")
+def ballerinaDist = "${project.rootDir}/target/ballerina-runtime"
+def distributionBinPath =  "${ballerinaDist}/bin"
+def testCoverageParam = "--code-coverage --coverage-format=xml --includes=io.ballerina.lib.mcp.*:ballerina.*"
+def testSuites = ["mcp-ballerina-tests"]
+
+def stripBallerinaExtensionVersion(String extVersion) {
+    if (extVersion.matches(project.ext.timestampedVersionRegex)) {
+        def splitVersion = extVersion.split('-');
+        return splitVersion.length > 3 ? splitVersion[0..-4].join('-') : extVersion
+    }
+    return extVersion.replace("${project.ext.snapshotVersion}", "")
+}
+
+dependencies {
+    testImplementation project(":mcp-compiler-plugin")
+}
+
+task updateTomlFiles {
+    doLast {
+        testSuites.each { testPackage ->
+            def ballerinaTomlFile =  new File("${project.projectDir}/${testPackage}/Ballerina.toml")
+            def newBallerinaToml = ballerinaTomlFilePlaceHolder.text.replace("@project.version@", project.version)
+            newBallerinaToml = newBallerinaToml.replace("@toml.version@", tomlVersion)
+            newBallerinaToml = newBallerinaToml.replace("@package.name@", testPackage.replaceAll("-", "_"))
+            ballerinaTomlFile.text = newBallerinaToml
+        }
+    }
+}
+
+task commitTomlFiles {
+    doLast {
+        def files = ""
+        testSuites.each{ testPackage ->
+            files += "${project.projectDir}/${testPackage}/Ballerina.toml ${project.projectDir}/${testPackage}/Dependencies.toml "
+        }
+
+        project.exec {
+            ignoreExitValue true
+            if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+                commandLine 'cmd', '/c', "git commit -m \"[Automated] Update test package TOML files\" ${files}"
+            } else {
+                commandLine 'sh', '-c', "git commit -m '[Automated] Update test package TOML files' ${files}"
+            }
+        }
+    }
+}
+
+def groupParams = ""
+def disableGroups = ""
+def debugParams = ""
+def balJavaDebugParam = ""
+def graalvmFlag = ""
+def testParams = ""
+def skipTests = false
+
+task initializeVariables {
+    if (project.hasProperty("groups")) {
+        groupParams = "--groups ${project.findProperty('groups')}"
+    }
+    if (project.hasProperty("disable")) {
+        disableGroups = "--disable-groups ${project.findProperty("disable")}"
+    }
+    if (project.hasProperty("debug")) {
+        debugParams = "--debug ${project.findProperty("debug")}"
+    }
+    if (project.hasProperty("balJavaDebug")) {
+        balJavaDebugParam = "BAL_JAVA_DEBUG=${project.findProperty("balJavaDebug")}"
+    }
+    if (project.hasProperty('balGraalVMTest')) {
+        graalvmFlag = '--graalvm'
+    }
+
+    gradle.taskGraph.whenReady { graph ->
+        if (graph.hasTask(":${packageName}-ballerina-tests:test") || graph.hasTask(":${packageName}-ballerina-tests:ballerinaTest")) {
+            if (!project.hasProperty('balGraalVMTest')) {
+                testParams = "${testCoverageParam}"
+            }
+        } else {
+            testParams = "--skip-tests"
+            skipTests = true
+        }
+    }
+}
+
+task ballerinaTest {
+    dependsOn(":${packageName}-${packageOrg}:build")
+    dependsOn(updateTomlFiles)
+    dependsOn(initializeVariables)
+    finalizedBy(commitTomlFiles)
+
+    doLast {
+        testSuites.each { testPackage ->
+            if (!skipTests) {
+                exec {
+                    workingDir "${project.projectDir}/${testPackage}"
+                    environment "JAVA_OPTS", "-DBALLERINA_DEV_COMPILE_BALLERINA_ORG=true"
+                    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+                        commandLine 'cmd', '/c', "${balJavaDebugParam} ${distributionBinPath}/bal.bat test ${graalvmFlag} ${testParams} --offline ${groupParams} ${disableGroups} ${debugParams} && exit %%ERRORLEVEL%%"
+                    } else {
+                        commandLine 'sh', '-c', "BALLERINA_MAX_POOL_SIZE=500 ${balJavaDebugParam} ${distributionBinPath}/bal test ${graalvmFlag} ${testParams} --offline ${groupParams} ${disableGroups} ${debugParams}"
+                    }
+                }
+            }
+        }
+    }
+}
+
+test {
+    dependsOn(ballerinaTest)
+}
+
+clean {
+    doLast {
+        testSuites.each { testPackage ->
+            delete "${project.projectDir}/${testPackage}/target"
+        }
+    }
+}
+
+task deleteDependencyTomlFile {
+    doLast {
+        if (project.hasProperty("deleteDependencies")) {
+            testSuites.each { testPackage ->
+                delete "${project.projectDir}/${testPackage}/Dependencies.toml"
+            }
+        }
+    }
+}
+
+compileJava {
+    doFirst {
+        options.compilerArgs = [
+                '--module-path', classpath.asPath,
+        ]
+        classpath = files()
+    }
+}
+
+build.dependsOn ":${packageName}-ballerina:build"
+build.dependsOn ":${packageName}-compiler-plugin:build"
+test.dependsOn ":${packageName}-ballerina:build"
+test.dependsOn ":${packageName}-compiler-plugin:build"
+
+publish.dependsOn build

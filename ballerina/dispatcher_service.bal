@@ -30,7 +30,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         private ServiceConfiguration? cachedServiceConfig = ();
         private map<string[]> toolScopes = {};
         private ListToolsResult? listToolsRequest = ();
-        private string? agentId = ();
         private http:ListenerAuthConfig[]? authConfig = ();
 
         isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
@@ -163,16 +162,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
             http:Unauthorized|http:Forbidden|string? authenticateResult = self.authenticate(headers);
             if authenticateResult is http:Unauthorized || authenticateResult is http:Forbidden {
-                if authenticateResult is http:Forbidden {
-                    if authenticateResult?.body.toString().equalsIgnoreCaseAscii("Missing Authorization header") && 
-                                effectiveSessionMode == STATEFUL {
-                        return <http:BadRequest> {
-                            body: createJsonRpcError(INVALID_REQUEST,
-                                string `Stateful session mode is not allowed when agent identity authentication 
-                                    is enabled. Use stateless mode.`, id)
-                        }; 
-                    }
-                }
                 return authenticateResult;
             }
             string userName = authenticateResult is string ? authenticateResult : "";
@@ -288,7 +277,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             http:ListenerAuthConfig[]? listenerAuthConfig = ();
             lock {
                 if !self.toolScopes.hasKey(params.name) {
-                    http:BadRequest? toolsResult = self.getTools(request.id, self.toolScopes);
+                    http:BadRequest? toolsResult = self.getTools(request.id);
                     if toolsResult is http:BadRequest {
                         return toolsResult.cloneReadOnly();
                     }
@@ -393,7 +382,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             return error DispatcherError("MCP Service is not attached");
         }
 
-        private isolated function getTools(RequestId requestId, map<string[]> existingToolScopes) returns http:BadRequest? {
+        private isolated function getTools(RequestId requestId) returns http:BadRequest? {
             ToolDefinition[] tools = [];
             lock {
                 ListToolsResult? listToolsRequestResult = self.listToolsRequest;
@@ -409,16 +398,16 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                     }
                     tools = listToolsResult.tools.cloneReadOnly();
                 }
-            }
-            foreach ToolDefinition tool in tools {
-                string|string[]? scopes = tool.scopes;
-                string[] scopesArray = [];
-                if scopes is string {
-                    scopesArray = re ` `.split(scopes.trim());
-                } else if (scopes is string[]) {
-                    scopesArray = scopes;
+                foreach ToolDefinition tool in tools.cloneReadOnly() {
+                    string|string[]? scopes = tool.scopes;
+                    string[] scopesArray = [];
+                    if scopes is string {
+                        scopesArray = re ` `.split(scopes.trim());
+                    } else if (scopes is string[]) {
+                        scopesArray = scopes;
+                    }
+                    self.toolScopes[tool.name] = scopesArray;
                 }
-                existingToolScopes[tool.name] = scopesArray;
             }
             return; 
         }
@@ -435,9 +424,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                     authConfig = self.authConfig;
                 }
             }
-            string|http:HeaderNotFoundError header = headers.getHeader(AUTORIZATION);
+            string|http:HeaderNotFoundError header = headers.getHeader(AUTHORIZATION);
             if header is http:HeaderNotFoundError {
-                return <http:Forbidden>{body :"Missing Authorization header"};
+                return <http:Unauthorized>{body :"Missing Authorization header"};
             }
             return authenticateResource(<http:ListenerAuthConfig[]>authConfig, header);
         }

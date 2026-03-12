@@ -98,7 +98,6 @@ isolated class StreamableHttpClientTransport {
     private final string serverUrl;
     private final http:Client httpClient;
     private string? sessionId;
-    private AgentIdAuthConfig? auth = ();
 
     # Initializes the HTTP client transport with the provided server URL.
     #
@@ -109,16 +108,14 @@ isolated class StreamableHttpClientTransport {
             returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
         StreamableHttpClientTransportConfig {sessionId, auth, ...clientConfig} = config;
-
-        clientConfig.followRedirects = clientConfig.followRedirects ?: {enabled: true};
+        clientConfig.followRedirects = clientConfig.followRedirects ?: {
+            enabled: true
+        };
 
         do {
             http:ClientConfiguration httpClientAction = {...clientConfig};
             if auth is http:ClientAuthConfig {
                 httpClientAction.auth = auth;
-            } else {
-                self.auth = auth.cloneReadOnly();
-                
             }
             self.httpClient = check new (serverUrl, httpClientAction);
         } on fail error e {
