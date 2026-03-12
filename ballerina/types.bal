@@ -14,7 +14,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/crypto;
 import ballerina/http;
 
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.

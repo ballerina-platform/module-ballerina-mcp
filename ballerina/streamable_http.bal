@@ -26,12 +26,11 @@ public type AgentIdAuthConfig record {|
     @display {label: "Authorization Server Base URL"}
     string baseAuthUrl?;
 
-    # The OAuth 2.0 client identifier issued to this client application.
+    # The OAuth 2.0 client identifier issued to this client application
     @display {label: "Client ID"}
     string clientId?;
 
-    # The redirect URI registered for the OAuth client and used
-    # in the Authorization Code flow.
+    # The redirect URI registered for the OAuth client
     @display {label: "Redirect URI"}
     string redirectUri?;
 
@@ -111,7 +110,6 @@ isolated class StreamableHttpClientTransport {
         clientConfig.followRedirects = clientConfig.followRedirects ?: {
             enabled: true
         };
-
         do {
             http:ClientConfiguration httpClientAction = {...clientConfig};
             if auth is http:ClientAuthConfig {

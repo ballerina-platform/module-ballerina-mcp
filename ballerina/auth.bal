@@ -51,7 +51,7 @@ isolated function getListenerAuthConfig(http:ListenerAuthConfig[] serviceAuthCon
 }
 
 isolated function tryAuthenticate(http:ListenerAuthConfig[] authConfig, string header) returns http:Unauthorized|http:Forbidden|string? {
-    string scheme = extractScheme(header);
+    string scheme = extractScheme(header).trim();
     http:Unauthorized|http:Forbidden|string? authResult = <http:Unauthorized>{};
     foreach http:ListenerAuthConfig config in authConfig {
         if scheme is http:AUTH_SCHEME_BASIC {
