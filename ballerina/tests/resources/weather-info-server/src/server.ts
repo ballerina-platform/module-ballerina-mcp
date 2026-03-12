@@ -16,255 +16,281 @@
  * under the License.
  */
 
-import express, { Request, Response } from 'express';
-import cors from 'cors';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { 
+    Notification, 
+    CallToolRequestSchema, 
+    ListToolsRequestSchema, 
+    LoggingMessageNotification, 
+    ToolListChangedNotification, 
+    JSONRPCNotification, 
+    JSONRPCError, 
+    InitializeRequestSchema 
+} from "@modelcontextprotocol/sdk/types.js";
+import { randomUUID } from "crypto";
+import { Request, Response } from "express";
 
-interface WeatherInfo {
-  city: string;
-  country: string;
-  temperature: number;
-  condition: string;
-  humidity: number;
-  windSpeed: number;
+const SESSION_ID_HEADER_NAME = "mcp-session-id";
+const JSON_RPC = "2.0";
+
+export class MCPServer {
+    server: Server;
+    transports: {[sessionId: string]: StreamableHTTPServerTransport} = {};
+    
+    private toolInterval: NodeJS.Timeout | undefined;
+    private singleGreetToolName = "single-greet";
+    private multiGreetToolName = "multi-greet";
+
+    constructor(server: Server) {
+        this.server = server;
+        this.setupTools();
+    }
+
+    async handleGetRequest(req: Request, res: Response) {
+        console.log("get request received");
+        
+        const sessionId = req.headers['mcp-session-id'] as string | undefined;
+        if (!sessionId || !this.transports[sessionId]) {
+            res.status(400).json(this.createErrorResponse("Bad Request: invalid session ID or method."));
+            return;
+        }
+
+        console.log(`Establishing SSE stream for session ${sessionId}`);
+        const transport = this.transports[sessionId];
+        await transport.handleRequest(req, res);
+        await this.streamMessages(transport);
+    }
+
+    async handlePostRequest(req: Request, res: Response) {
+        const sessionId = req.headers[SESSION_ID_HEADER_NAME] as string | undefined;
+
+        console.log("post request received");
+        console.log("body: ", req.body);
+
+        try {
+            // Reuse existing transport
+            if (sessionId && this.transports[sessionId]) {
+                const transport = this.transports[sessionId];
+                await transport.handleRequest(req, res, req.body);
+                return;
+            }
+
+            // Create new transport
+            if (!sessionId && this.isInitializeRequest(req.body)) {
+                const transport = new StreamableHTTPServerTransport({
+                    sessionIdGenerator: () => randomUUID(),
+                });
+
+                await this.server.connect(transport);
+                await transport.handleRequest(req, res, req.body);
+
+                const newSessionId = transport.sessionId;
+                if (newSessionId) {
+                    this.transports[newSessionId] = transport;
+                }
+                return;
+            }
+
+            res.status(400).json(this.createErrorResponse("Bad Request: invalid session ID or method."));
+        } catch (error) {
+            console.error('Error handling MCP request:', error);
+            res.status(500).json(this.createErrorResponse("Internal server error."));
+        }
+    }
+
+    async cleanup() {
+        this.toolInterval?.close();
+        await this.server.close();
+    }
+
+    private setupTools() {
+        const setToolSchema = () => this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+            this.singleGreetToolName = `single-greeting`;
+
+            const singleGreetTool = {
+                name: this.singleGreetToolName,
+                description: "Greet a person with a name",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        greetName: {
+                            type: "string",
+                            description: "name to greet"
+                        },
+                    },
+                    required: ["greetName"]
+                }
+            };
+
+            const multiGreetTool = {
+                name: this.multiGreetToolName,
+                description: "Greet the user multiple times with delay in between.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        greetName: {
+                            type: "string",
+                            description: "name to greet"
+                        },
+                    },
+                    required: ["name"]
+                }
+            };
+
+            return {
+                tools: [singleGreetTool, multiGreetTool]
+            };
+        });
+
+        setToolSchema();
+
+        // Set tools dynamically, changing every 5 seconds
+        this.toolInterval = setInterval(async () => {
+            setToolSchema();
+
+            Object.values(this.transports).forEach((transport) => {
+                const notification: ToolListChangedNotification = {
+                    method: "notifications/tools/list_changed",
+                };
+                this.sendNotification(transport, notification);
+            });
+        }, 5000);
+
+        // Handle tool calls
+        this.server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+            console.log("tool request received: ", request);
+            console.log("extra: ", extra);
+
+            const args = request.params.arguments;
+            const toolName = request.params.name;
+            const sendNotification = extra.sendNotification;
+
+            if (!args) {
+                throw new Error("arguments undefined");
+            }
+
+            if (!toolName) {
+                throw new Error("tool name undefined");
+            }
+
+            if (toolName === this.singleGreetToolName) {
+                const { greetName } = args;
+
+                if (!greetName) {
+                    throw new Error("Name to greet undefined.");
+                }
+
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Hey ${greetName}! Welcome to Ballerina!`
+                    }]
+                };
+            }
+
+            if (toolName === this.multiGreetToolName) {
+                const { greetName } = args;
+                const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+                let notification: LoggingMessageNotification = {
+                    method: "notifications/message",
+                    params: { level: "info", data: `First greet to ${greetName}` }
+                };
+
+                await sendNotification(notification);
+                await sleep(1000);
+
+                notification.params.data = `Second greet to ${greetName}`;
+                await sendNotification(notification);
+                await sleep(1000);
+
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Hope you enjoy your day!`
+                    }]
+                };
+            }
+
+            throw new Error("Tool not found");
+        });
+    }
+
+    private async streamMessages(transport: StreamableHTTPServerTransport) {
+        try {
+            const message: LoggingMessageNotification = {
+                method: "notifications/message",
+                params: { level: "info", data: "SSE Connection established" }
+            };
+
+            this.sendNotification(transport, message);
+
+            let messageCount = 0;
+
+            const interval = setInterval(async () => {
+                messageCount++;
+                const data = `Message ${messageCount} at ${new Date().toISOString()}`;
+
+                const streamMessage: LoggingMessageNotification = {
+                    method: "notifications/message",
+                    params: { level: "info", data: data }
+                };
+
+                try {
+                    this.sendNotification(transport, streamMessage);
+                    console.log(`Sent: ${data}`);
+
+                    if (messageCount === 2) {
+                        clearInterval(interval);
+
+                        const completeMessage: LoggingMessageNotification = {
+                            method: "notifications/message",
+                            params: { level: "info", data: "Streaming complete!" }
+                        };
+
+                        this.sendNotification(transport, completeMessage);
+                        console.log("Stream completed");
+                    }
+                } catch (error) {
+                    console.error("Error sending message:", error);
+                    clearInterval(interval);
+                }
+            }, 1000);
+        } catch (error) {
+            console.error("Error sending message:", error);
+        }
+    }
+
+    private async sendNotification(transport: StreamableHTTPServerTransport, notification: Notification) {
+        const rpcNotification: JSONRPCNotification = {
+            ...notification,
+            jsonrpc: JSON_RPC,
+        };
+        await transport.send(rpcNotification);
+    }
+
+    private createErrorResponse(message: string): JSONRPCError {
+        return {
+            jsonrpc: '2.0',
+            error: {
+                code: -32000,
+                message: message,
+            },
+            id: randomUUID(),
+        };
+    }
+
+    private isInitializeRequest(body: any): boolean {
+        const isInitial = (data: any) => {
+            const result = InitializeRequestSchema.safeParse(data);
+            return result.success;
+        };
+
+        if (Array.isArray(body)) {
+            return body.some(request => isInitial(request));
+        }
+
+        return isInitial(body);
+    }
 }
-
-interface ForecastDay {
-  day: string;
-  temperature: number;
-  condition: string;
-  humidity: number;
-}
-
-// Create a stateless MCP server for weather information
-const server = new McpServer({
-  name: 'weather-info-server',
-  version: '1.0.0'
-}, {
-  capabilities: {
-    logging: {},
-    tools: {}
-  }
-});
-
-// Mock weather data for different cities
-const weatherData: Record<string, WeatherInfo> = {
-  'new-york': {
-    city: 'New York',
-    country: 'USA',
-    temperature: 22,
-    condition: 'Partly Cloudy',
-    humidity: 65,
-    windSpeed: 12
-  },
-  'london': {
-    city: 'London',
-    country: 'UK',
-    temperature: 18,
-    condition: 'Rainy',
-    humidity: 80,
-    windSpeed: 8
-  },
-  'tokyo': {
-    city: 'Tokyo',
-    country: 'Japan',
-    temperature: 25,
-    condition: 'Sunny',
-    humidity: 55,
-    windSpeed: 6
-  },
-  'colombo': {
-    city: 'Colombo',
-    country: 'Sri Lanka',
-    temperature: 30,
-    condition: 'Tropical',
-    humidity: 75,
-    windSpeed: 10
-  }
-};
-
-// Register weather information tool
-server.registerTool(
-  'get-weather',
-  {
-    title: 'Get Weather Information',
-    description: 'Get current weather information for a specified city',
-    inputSchema: z.object({
-      city: z.string().describe('City name (supported: new-york, london, tokyo, colombo)')
-    }) as any,
-  },
-  async ({ city }: any): Promise<CallToolResult> => {
-    const cityKey = city.toLowerCase().replace(/\s+/g, '-');
-    const weather = weatherData[cityKey];
-
-    if (!weather) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Weather information not available for "${city}". Supported cities: New York, London, Tokyo, Colombo`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Weather in ${weather.city}, ${weather.country}:
-🌡️ Temperature: ${weather.temperature}°C
-🌤️ Condition: ${weather.condition}
-💧 Humidity: ${weather.humidity}%
-💨 Wind Speed: ${weather.windSpeed} km/h`,
-        },
-      ],
-    };
-  }
-);
-
-// Register weather forecast tool
-server.registerTool(
-  'get-forecast',
-  {
-    title: 'Get Weather Forecast',
-    description: 'Get 3-day weather forecast for a specified city',
-    inputSchema: z.object({
-      city: z.string().describe('City name (supported: new-york, london, tokyo, colombo)')
-    }) as any,
-  },
-  async ({ city }: any): Promise<CallToolResult> => {
-    const cityKey = city.toLowerCase().replace(/\s+/g, '-');
-    const weather = weatherData[cityKey];
-
-    if (!weather) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Weather forecast not available for "${city}". Supported cities: New York, London, Tokyo, Colombo`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    // Generate mock forecast based on current weather
-    const forecast: ForecastDay[] = [];
-    for (let i = 1; i <= 3; i++) {
-      const tempVariation = Math.floor(Math.random() * 6) - 3; // -3 to +3 degrees
-      const conditions = ['Sunny', 'Partly Cloudy', 'Cloudy', 'Rainy'];
-      const randomCondition = conditions[Math.floor(Math.random() * conditions.length)];
-
-      forecast.push({
-        day: `Day +${i}`,
-        temperature: weather.temperature + tempVariation,
-        condition: randomCondition,
-        humidity: weather.humidity + (Math.floor(Math.random() * 20) - 10)
-      });
-    }
-
-    const forecastText = forecast.map(day =>
-      `${day.day}: ${day.temperature}°C, ${day.condition}, ${day.humidity}% humidity`
-    ).join('\n');
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `3-Day Forecast for ${weather.city}, ${weather.country}:
-${forecastText}`,
-        },
-      ],
-    };
-  }
-);
-
-// Register city information tool
-server.registerTool(
-  'get-city-info',
-  {
-    title: 'Get City Information',
-    description: 'Get general information about supported cities',
-    inputSchema: z.object({}) as any,
-  },
-  async (): Promise<CallToolResult> => {
-    const cities = Object.values(weatherData).map(weather =>
-      `${weather.city}, ${weather.country}`
-    ).join('\n• ');
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Supported Cities:
-• ${cities}
-
-Use the city names (case-insensitive) with the weather tools.`,
-        },
-      ],
-    };
-  }
-);
-
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const app = express();
-
-app.use(express.json());
-app.use(cors({
-  origin: '*',
-  exposedHeaders: ["Mcp-Session-Id"]
-}));
-
-// MCP handler - creates new transport for each request
-// WARNING: Uses a single global McpServer instance with connect/close per request.
-// Concurrent requests may interfere with each other.
-app.post('/mcp', async (req: Request, res: Response) => {
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined
-  });
-
-  try {
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
-  } catch (error) {
-    console.error('Error handling MCP request:', error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: 'Internal server error',
-        },
-        id: req.body?.id ?? null,
-      });
-    }
-  } finally {
-    // Reset connection state to allow next request
-    try {
-      await server.close();
-    } catch {
-      // Ignore cleanup errors
-    }
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Weather Info Server listening on port ${PORT}`);
-  console.log(`MCP endpoint: http://localhost:${PORT}/mcp`);
-});
-
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('Shutting down Weather Info Server...');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  console.log('Shutting down Weather Info Server...');
-  process.exit(0);
-});

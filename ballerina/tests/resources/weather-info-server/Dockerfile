@@ -1,14 +1,20 @@
-FROM node:18-alpine
+# Use an official Node.js base image
+FROM node:20
 
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY package.json tsconfig.json ./
+# Copy package.json and package-lock.json
+COPY package*.json ./
+
+# Install dependencies
 RUN npm install
 
-# Copy source and build
-COPY src/ ./src/
+# Copy the rest of the project files
+COPY . .
+
+# Build the TypeScript project
 RUN npm run build
 
-EXPOSE 3000
-CMD ["npm", "start"]
+# Run the server directly using node
+CMD ["node", "build/index.js"]

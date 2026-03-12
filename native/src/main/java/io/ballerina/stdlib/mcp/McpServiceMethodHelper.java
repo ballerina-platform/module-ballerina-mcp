@@ -52,6 +52,7 @@ public final class McpServiceMethodHelper {
     private static final String NAME_FIELD_NAME = "name";
     private static final String DESCRIPTION_FIELD_NAME = "description";
     private static final String SCHEMA_FIELD_NAME = "schema";
+    private static final String SCOPES = "scopes";
     private static final String INPUT_SCHEMA_FIELD_NAME = "inputSchema";
     private static final String ARGUMENTS_FIELD_NAME = "arguments";
     private static final String CONTENT_FIELD_NAME = "content";
@@ -200,6 +201,9 @@ public final class McpServiceMethodHelper {
         tool.put(fromString(NAME_FIELD_NAME), fromString(remoteMethod.getName()));
         tool.put(fromString(DESCRIPTION_FIELD_NAME), annotationValue.get(fromString(DESCRIPTION_FIELD_NAME)));
         tool.put(fromString(INPUT_SCHEMA_FIELD_NAME), annotationValue.get(fromString(SCHEMA_FIELD_NAME)));
+        if (annotationValue.containsKey(fromString(SCOPES))) {
+            tool.put(fromString(SCOPES), annotationValue.get(fromString(SCOPES)));
+        }
         return tool;
     }
 

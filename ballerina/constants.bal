@@ -20,3 +20,4 @@ const ACCEPT_HEADER = "accept";
 const CONTENT_TYPE_HEADER = "content-type";
 const CONTENT_TYPE_JSON = "application/json";
 const CONTENT_TYPE_SSE = "text/event-stream";
+const AUTHORIZATION = "authorization";

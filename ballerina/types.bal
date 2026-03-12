@@ -380,6 +380,9 @@ public type ToolDefinition record {
     } inputSchema;
     # Optional additional tool information.
     ToolAnnotations annotations?;
+    # Scopes required to invoke this tool. This can be used by clients to 
+    # determine which tools they have permission to call.
+    string|string[] scopes?;
 };
 
 # Optional annotations for the client. The client can use annotations to inform how objects are used or displayed
@@ -436,6 +439,8 @@ public type McpToolConfig record {|
     string description?;
     # The JSON schema for the tool's parameters.
     map<json> schema?;
+    # Scopes required to invoke this tool.
+    string|string[] scopes?;
 |};
 
 # Annotation to mark a function as an MCP tool configuration.
