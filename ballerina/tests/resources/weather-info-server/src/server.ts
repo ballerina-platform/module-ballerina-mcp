@@ -99,198 +99,103 @@ export class MCPServer {
         }
     }
 
-    async cleanup() {
-        this.toolInterval?.close();
-        await this.server.close();
+    const forecastText = forecast.map(day =>
+      `${day.day}: ${day.temperature}°C, ${day.condition}, ${day.humidity}% humidity`
+    ).join('\n');
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `3-Day Forecast for ${weather.city}, ${weather.country}:
+${forecastText}`,
+        },
+      ],
+    };
+  }
+);
+
+// Register city information tool
+server.registerTool(
+  'get-city-info',
+  {
+    title: 'Get City Information',
+    description: 'Get general information about supported cities',
+    inputSchema: z.object({}) as any,
+  },
+  async (): Promise<CallToolResult> => {
+    const cities = Object.values(weatherData).map(weather =>
+      `${weather.city}, ${weather.country}`
+    ).join('\n• ');
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Supported Cities:
+• ${cities}
+
+Use the city names (case-insensitive) with the weather tools.`,
+        },
+      ],
+    };
+  }
+);
+
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const app = express();
+
+app.use(express.json());
+app.use(cors({
+  origin: '*',
+  exposedHeaders: ["Mcp-Session-Id"]
+}));
+
+// MCP handler - creates new transport for each request
+// WARNING: Uses a single global McpServer instance with connect/close per request.
+// Concurrent requests may interfere with each other.
+app.post('/mcp', async (req: Request, res: Response) => {
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined
+  });
+
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error('Error handling MCP request:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal server error',
+        },
+        id: req.body?.id ?? null,
+      });
     }
-
-    private setupTools() {
-        const setToolSchema = () => this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-            this.singleGreetToolName = `single-greeting`;
-
-            const singleGreetTool = {
-                name: this.singleGreetToolName,
-                description: "Greet a person with a name",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        greetName: {
-                            type: "string",
-                            description: "name to greet"
-                        },
-                    },
-                    required: ["greetName"]
-                }
-            };
-
-            const multiGreetTool = {
-                name: this.multiGreetToolName,
-                description: "Greet the user multiple times with delay in between.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        greetName: {
-                            type: "string",
-                            description: "name to greet"
-                        },
-                    },
-                    required: ["name"]
-                }
-            };
-
-            return {
-                tools: [singleGreetTool, multiGreetTool]
-            };
-        });
-
-        setToolSchema();
-
-        // Set tools dynamically, changing every 5 seconds
-        this.toolInterval = setInterval(async () => {
-            setToolSchema();
-            
-            Object.values(this.transports).forEach((transport) => {
-                const notification: ToolListChangedNotification = {
-                    method: "notifications/tools/list_changed",
-                };
-                this.sendNotification(transport, notification);
-            });
-        }, 5000);
-
-        // Handle tool calls
-        this.server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-            console.log("tool request received: ", request);
-            console.log("extra: ", extra);
-
-            const args = request.params.arguments;
-            const toolName = request.params.name;
-            const sendNotification = extra.sendNotification;
-
-            if (!args) {
-                throw new Error("arguments undefined");
-            }
-
-            if (!toolName) {
-                throw new Error("tool name undefined");
-            }
-
-            if (toolName === this.singleGreetToolName) {
-                const { greetName } = args;
-
-                if (!greetName) {
-                    throw new Error("Name to greet undefined.");
-                }
-
-                return {
-                    content: [{
-                        type: "text",
-                        text: `Hey ${greetName}! Welcome to Ballerina!`
-                    }]
-                };
-            }
-
-            if (toolName === this.multiGreetToolName) {
-                const { greetName } = args;
-                const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-                let notification: LoggingMessageNotification = {
-                    method: "notifications/message",
-                    params: { level: "info", data: `First greet to ${greetName}` }
-                };
-
-                await sendNotification(notification);
-                await sleep(1000);
-
-                notification.params.data = `Second greet to ${greetName}`;
-                await sendNotification(notification);
-                await sleep(1000);
-
-                return {
-                    content: [{
-                        type: "text",
-                        text: `Hope you enjoy your day!`
-                    }]
-                };
-            }
-
-            throw new Error("Tool not found");
-        });
+  } finally {
+    // Reset connection state to allow next request
+    try {
+      await server.close();
+    } catch {
+      // Ignore cleanup errors
     }
+  }
+});
 
-    private async streamMessages(transport: StreamableHTTPServerTransport) {
-        try {
-            const message: LoggingMessageNotification = {
-                method: "notifications/message",
-                params: { level: "info", data: "SSE Connection established" }
-            };
+app.listen(PORT, () => {
+  console.log(`Weather Info Server listening on port ${PORT}`);
+  console.log(`MCP endpoint: http://localhost:${PORT}/mcp`);
+});
 
-            this.sendNotification(transport, message);
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('Shutting down Weather Info Server...');
+  process.exit(0);
+});
 
-            let messageCount = 0;
-
-            const interval = setInterval(async () => {
-                messageCount++;
-                const data = `Message ${messageCount} at ${new Date().toISOString()}`;
-
-                const streamMessage: LoggingMessageNotification = {
-                    method: "notifications/message",
-                    params: { level: "info", data: data }
-                };
-
-                try {
-                    this.sendNotification(transport, streamMessage);
-                    console.log(`Sent: ${data}`);
-
-                    if (messageCount === 2) {
-                        clearInterval(interval);
-
-                        const completeMessage: LoggingMessageNotification = {
-                            method: "notifications/message",
-                            params: { level: "info", data: "Streaming complete!" }
-                        };
-
-                        this.sendNotification(transport, completeMessage);
-                        console.log("Stream completed");
-                    }
-                } catch (error) {
-                    console.error("Error sending message:", error);
-                    clearInterval(interval);
-                }
-            }, 1000);
-        } catch (error) {
-            console.error("Error sending message:", error);
-        }
-    }
-
-    private async sendNotification(transport: StreamableHTTPServerTransport, notification: Notification) {
-        const rpcNotification: JSONRPCNotification = {
-            ...notification,
-            jsonrpc: JSON_RPC,
-        };
-        await transport.send(rpcNotification);
-    }
-
-    private createErrorResponse(message: string): JSONRPCError {
-        return {
-            jsonrpc: '2.0',
-            error: {
-                code: -32000,
-                message: message,
-            },
-            id: randomUUID(),
-        };
-    }
-
-    private isInitializeRequest(body: any): boolean {
-        const isInitial = (data: any) => {
-            const result = InitializeRequestSchema.safeParse(data);
-            return result.success;
-        };
-        
-        if (Array.isArray(body)) {
-            return body.some(request => isInitial(request));
-        }
-        
-        return isInitial(body);
-    }
-}
+process.on('SIGTERM', () => {
+  console.log('Shutting down Weather Info Server...');
+  process.exit(0);
+});
