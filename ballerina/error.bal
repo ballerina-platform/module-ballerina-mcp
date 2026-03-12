@@ -91,3 +91,12 @@ public type TokenValidationError distinct ServerError;
 
 # Error that occurs during tool scope validation.
 public type InsufficientScopeError distinct ServerError;
+
+# Represents an error that occurs when getting token for tool 
+public type TokenAcquisitionError distinct ClientError;
+
+# Defined for internal use when panicing from the auth_desugar
+type InternalListenerAuthzError distinct ServerError;
+
+# Defined for internal use when panicing from the auth_desugar
+type InternalListenerAuthnError distinct ServerError;
