@@ -37,15 +37,18 @@ public class ModifierContext {
 
 record ToolAnnotationConfig(
         String description,
-        String schema) {
+        String schema,
+        String scopes) {
 
     public static final String DESCRIPTION_FIELD_NAME = "description";
     public static final String SCHEMA_FIELD_NAME = "schema";
+    public static final String SCOPES = "scopes";
 
     public String get(String field) {
         return switch (field) {
             case DESCRIPTION_FIELD_NAME -> description();
             case SCHEMA_FIELD_NAME -> schema();
+            case SCOPES -> scopes();
             default -> null;
         };
     }
