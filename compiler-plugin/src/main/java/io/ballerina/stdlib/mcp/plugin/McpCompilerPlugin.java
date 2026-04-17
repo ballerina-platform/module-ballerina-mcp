@@ -24,6 +24,7 @@ import io.ballerina.projects.plugins.CompilerPluginContext;
 public class McpCompilerPlugin extends CompilerPlugin {
     @Override
     public void init(CompilerPluginContext compilerPluginContext) {
+        compilerPluginContext.addCodeAnalyzer(new McpCodeAnalyzer());
         compilerPluginContext.addCodeModifier(new McpCodeModifier());
     }
 }
