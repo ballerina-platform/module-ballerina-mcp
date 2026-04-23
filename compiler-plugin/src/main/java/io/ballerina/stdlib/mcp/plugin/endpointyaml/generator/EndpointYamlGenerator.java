@@ -25,7 +25,6 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.api.symbols.ModuleSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
-import io.ballerina.compiler.api.symbols.TypeSymbol;
 import io.ballerina.compiler.syntax.tree.BasicLiteralNode;
 import io.ballerina.compiler.syntax.tree.CheckExpressionNode;
 import io.ballerina.compiler.syntax.tree.ExplicitNewExpressionNode;
@@ -74,16 +73,15 @@ public class EndpointYamlGenerator {
     private final PrintStream outStream = System.out;
 
     private static final String ARTIFACT = "artifact";
-    private static final String MCP = "mcp";
     private static final String TARGET = "target";
     private static final String YAML_EXTENSTION = ".yaml";
     private static final String ENDPOINT_SUFFIX = "_endpoint";
-    private String type;
+    private String type = "mcp";
 
-    private record ListenerInfo(Optional<ParenthesizedArgList> argList, String type) {
+    private record ListenerInfo(Optional<ParenthesizedArgList> argList) {
     }
 
-    private record ListenerResolution(Optional<ParenthesizedArgList> argList, String type) {
+    private record ListenerResolution(Optional<ParenthesizedArgList> argList) {
     }
 
     public EndpointYamlGenerator(SyntaxNodeAnalysisContext context) {
@@ -101,7 +99,6 @@ public class EndpointYamlGenerator {
         ListenerInfo listenerInfo = resolveListenerInfo(moduleName);
         port = resolvePort(listenerInfo.argList());
         String basePath = buildBasePath();
-        this.type = normalizeType(listenerInfo.type());
 
         return new Endpoint(String.valueOf(port), basePath, type);
     }
@@ -135,19 +132,16 @@ public class EndpointYamlGenerator {
             if (expr.kind().equals(SyntaxKind.EXPLICIT_NEW_EXPRESSION)) {
                 ExplicitNewExpressionNode explicit = (ExplicitNewExpressionNode) expr;
                 argList = Optional.ofNullable(explicit.parenthesizedArgList());
-                this.type = extractTypeFromExplicitNew();
             } else if (expr.kind().equals(SyntaxKind.IMPLICIT_NEW_EXPRESSION)) {
                 ImplicitNewExpressionNode implicit = (ImplicitNewExpressionNode) expr;
                 argList = implicit.parenthesizedArgList();
-                this.type = extractTypeFromSymbol(semanticModel, expr);
             } else if (isNameReference(expr)) {
                 ListenerResolution resolution = resolveNamedListener(expr, moduleName, semanticModel);
                 argList = resolution.argList();
-                this.type = resolution.type();
             }
         }
 
-        return new ListenerInfo(argList, this.type);
+        return new ListenerInfo(argList);
     }
 
     private ExpressionNode unwrapCheckExpression(ExpressionNode expr) {
@@ -157,18 +151,6 @@ public class EndpointYamlGenerator {
         return expr;
     }
 
-    private String extractTypeFromExplicitNew() {
-        List<String> parts = List.of(node.expressions().get(0).toString().split(" "));
-        return parts.get(1).split(":")[0];
-    }
-
-    private String extractTypeFromSymbol(SemanticModel semanticModel, ExpressionNode expr) {
-        Symbol symbol = semanticModel.symbol(expr).orElse(null);
-        if (symbol instanceof TypeSymbol typeSymbol) {
-            return typeSymbol.getModule().map(m -> m.id().moduleName()).orElse("");
-        }
-        return "";
-    }
 
     private boolean isNameReference(ExpressionNode expr) {
         return expr.kind().equals(SyntaxKind.SIMPLE_NAME_REFERENCE) ||
@@ -186,7 +168,6 @@ public class EndpointYamlGenerator {
 
         if (expr instanceof QualifiedNameReferenceNode refNode) {
             listenerName = unescapeIdentifier(refNode.identifier().text().trim());
-            this.type = refNode.modulePrefix().text();
         } else {
             listenerName = unescapeIdentifier(expr.toString().trim());
         }
@@ -195,13 +176,12 @@ public class EndpointYamlGenerator {
                 packageMemberVisitor.getListenerDeclaration(listenerModuleName, listenerName);
 
         if (declOpt.isEmpty()) {
-            return new ListenerResolution(Optional.empty(), this.type);
+            return new ListenerResolution(Optional.empty());
         }
 
         ListenerDeclarationNode decl = declOpt.get();
-        this.type = decl.typeDescriptor().get().children().get(0).toString();
         Optional<ParenthesizedArgList> argList = extractArgListFromListenerDecl(decl);
-        return new ListenerResolution(argList, this.type);
+        return new ListenerResolution(argList);
     }
 
     private Optional<ParenthesizedArgList> extractArgListFromListenerDecl(ListenerDeclarationNode decl) {
@@ -268,14 +248,6 @@ public class EndpointYamlGenerator {
             basePath.append(identifierNode.toString().replace("\"", "").trim());
         }
         return basePath.toString();
-    }
-
-    private String normalizeType(String rawType) {
-        if (rawType.equals("mcp")) {
-            return MCP;
-        } else {
-            return rawType;
-        }
     }
 
     public void writeEndpointYaml() throws IOException {
