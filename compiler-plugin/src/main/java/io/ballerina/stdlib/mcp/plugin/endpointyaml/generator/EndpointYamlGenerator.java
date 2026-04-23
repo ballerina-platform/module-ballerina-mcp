@@ -90,7 +90,7 @@ public class EndpointYamlGenerator {
         this.node = (ServiceDeclarationNode) context.node();
         this.context = context;
 
-        FileNameGeneratorUtil fileNameGeneratorUtil = new FileNameGeneratorUtil(context, ".");
+        FileNameGeneratorUtil fileNameGeneratorUtil = new FileNameGeneratorUtil(context);
         this.schemaFileName = fileNameGeneratorUtil.getFileName();
     }
 
