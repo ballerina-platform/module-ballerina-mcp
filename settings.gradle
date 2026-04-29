@@ -40,6 +40,10 @@ include ':mcp-native'
 include ':mcp-compiler-plugin'
 include ':mcp-ballerina-tests'
 
+include ':compiler-plugin-test'
+
+project(':compiler-plugin-test').projectDir = file('compiler-plugin-test')
+
 project(':checkstyle').projectDir = file("build-config${File.separator}checkstyle")
 project(':mcp-ballerina').projectDir = file('ballerina')
 project(':mcp-native').projectDir = file('native')

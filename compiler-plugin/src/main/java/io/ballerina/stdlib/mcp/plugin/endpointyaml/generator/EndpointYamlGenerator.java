@@ -56,7 +56,6 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -100,7 +99,7 @@ public class EndpointYamlGenerator {
         port = resolvePort(listenerInfo.argList());
         String basePath = buildBasePath();
 
-        return new Endpoint(String.valueOf(port), basePath, type);
+        return new Endpoint(port, basePath, type);
     }
 
     private void ensureModuleVisited(String moduleName) {

@@ -19,11 +19,11 @@
 package io.ballerina.stdlib.mcp.plugin.endpointyaml.generator;
 
 public class Endpoint {
-    private final String port;
+    private final int port;
     private final String basePath;
     private final String type;
 
-    Endpoint(String port, String basePath, String type) {
+    Endpoint(int port, String basePath, String type) {
         this.port = port;
         this.basePath = basePath;
         this.type = type;
@@ -37,7 +37,7 @@ public class Endpoint {
         return type;
     }
 
-    public String getPort() {
+    public int getPort() {
         return port;
     }
 }
