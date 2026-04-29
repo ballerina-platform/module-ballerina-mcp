@@ -220,7 +220,11 @@ public class EndpointYamlGenerator {
                 PositionalArgumentNode portArg = (PositionalArgumentNode) arg;
                 String portVal = getPortValue(portArg.expression(), context.semanticModel(), context).orElse(null);
                 if (portVal != null) {
-                    port = Integer.parseInt(portVal);
+                    try {
+                        port = Integer.parseInt(portVal);
+                    } catch (NumberFormatException e) {
+                        // Log or report diagnostic for invalid port value
+                    }
                 }
             }
         }
@@ -253,7 +257,7 @@ public class EndpointYamlGenerator {
         Endpoint ep = getEndpoint();
         Path outPath = resolveOutputPath();
         String fileName = buildEndpointFileName(outPath);
-        Path path = Paths.get(TARGET, ARTIFACT, fileName + YAML_EXTENSTION).toAbsolutePath();
+        Path path = outPath.resolve(ARTIFACT).resolve(fileName + YAML_EXTENSTION);
         writeYaml(path, new EndpointWrapper(ep));
     }
 

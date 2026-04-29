@@ -30,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 import static io.ballerina.stdlib.mcp.plugin.ServiceArtifactExtractorTest.executeBallerinaCommand;
@@ -94,8 +95,10 @@ public class EndpointDetailsExtractorTest {
             executeBallerinaCommand(projectDirPath, true);
             Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
             Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            // Expect 2 endpoint YAMLs for 2 services
-            long count = Files.list(artifactDir).filter(p -> p.getFileName().toString().endsWith("_endpoint.yaml")).count();
+            long count;
+            try (Stream<Path> paths = Files.list(artifactDir)) {
+                count = paths.filter(p -> p.getFileName().toString().endsWith("_endpoint.yaml")).count();
+            }
             Assert.assertEquals(count, 2, "Expected 2 endpoint YAML files for multiple services");
         } finally {
             deleteDirectories(projectDirPath);
@@ -116,7 +119,7 @@ public class EndpointDetailsExtractorTest {
             Assert.assertTrue(diagnostic.diagnostics().stream()
                     .anyMatch(diagnostic1 -> {
                         String code = diagnostic1.diagnosticInfo().code();
-                        if (code == "LISTENER_NOT_RESOLVED") {
+                        if (Objects.equals(code, "LISTENER_NOT_RESOLVED")) {
                             return true;
                         }
                         String message = diagnostic1.message();

@@ -170,16 +170,25 @@ public class FileNameGeneratorUtil {
         return fileName;
     }
 
-    private static String setGeneratedFileName(File[] listFiles, String fileName) {
+    private static String getFileNameWithoutExtension(String fileName) {
+        int i = fileName.lastIndexOf('.');
+        return i == -1 ? fileName : fileName.substring(0, i);
+    }
+
+    private static boolean isSameFileName(String file1, String file2) {
+        String fileName1 = getFileNameWithoutExtension(file1);
+        String fileName2 = getFileNameWithoutExtension(file2);
+        return fileName1.equals(fileName2);
+    }
+
+    private static String setGeneratedFileName(File[] filesList, String fileName) {
         int duplicateCount = 0;
-        for (File listFile : listFiles) {
-            String listFileName = listFile.getName();
-            if (listFileName.contains(".") && ((listFileName.split("\\.")).length >= 2)
-                    && (listFileName.split("\\.")[0]
-                    .equals(fileName.split("\\.")[0]))) {
+        for (File file : filesList) {
+            String fName = file.getName();
+            if (isSameFileName(fName, fileName)) {
                 duplicateCount++;
             }
         }
-        return fileName.split("\\.")[0] + "." + duplicateCount + YAML_EXTENSION;
+        return fileName.split("\\.")[0] + "." + duplicateCount;
     }
 }

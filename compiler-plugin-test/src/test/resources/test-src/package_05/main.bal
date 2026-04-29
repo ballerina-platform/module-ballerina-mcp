@@ -21,7 +21,7 @@ import ballerina/mcp;
 import ballerina/time;
 
 listener mcp:Listener mcpListener = check new (9092);
-listener mcp:Listener mcpListener = check new (9091);
+listener mcp:Listener mcpListener1 = check new (9091);
 
 @mcp:ServiceConfig {
     info: {
@@ -127,7 +127,7 @@ type CartView record {|
     },
     sessionMode: mcp:STATELESS
 }
-service mcp:AdvancedService /mcp1 on mcpListener {
+service mcp:AdvancedService /mcp1 on mcpListener1 {
 
     remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {

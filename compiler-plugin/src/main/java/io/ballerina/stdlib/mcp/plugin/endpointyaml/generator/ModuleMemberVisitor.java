@@ -89,14 +89,8 @@ public class ModuleMemberVisitor extends NodeVisitor {
         String variableName = unescapeIdentifier(captureBindingPatternNode.variableName().text());
         Optional<ExpressionNode> variableValue = moduleVariableDeclarationNode.initializer();
 
-        if (variableValue.isEmpty()) {
-            variableValue.ifPresent(expressionNode -> variableDeclarations.put(variableName,
-                    new VariableDeclaredValue(null, isConfigurable)));
-
-        } else {
-            variableValue.ifPresent(expressionNode -> variableDeclarations.put(variableName,
-                    new VariableDeclaredValue(expressionNode.toString(), isConfigurable)));
-        }
+        variableDeclarations.put(variableName,
+                new VariableDeclaredValue(variableValue.orElse(null).toString(), isConfigurable));
     }
 
     @Override

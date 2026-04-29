@@ -24,6 +24,9 @@ import io.ballerina.projects.Project;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.EndpointYamlGenerator;
+import io.ballerina.tools.diagnostics.DiagnosticFactory;
+import io.ballerina.tools.diagnostics.DiagnosticInfo;
+import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -35,7 +38,7 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
         Package currentPackage = context.currentPackage();
         Project project = currentPackage.project();
         BuildOptions buildOptions = project.buildOptions();
-        if (isExportEndpoints(buildOptions)) {
+        if (isExportEndpoints(buildOptions, context)) {
             EndpointYamlGenerator endpointYamlGeneratorMcp = new EndpointYamlGenerator(context);
             try {
                 endpointYamlGeneratorMcp.writeEndpointYaml();
@@ -45,14 +48,20 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
         }
     }
 
-    private boolean isExportEndpoints(BuildOptions buildOptions) {
+    private boolean isExportEndpoints(BuildOptions buildOptions, SyntaxNodeAnalysisContext context) {
         boolean isExportEndpoints = false;
         // Ensure backward compatibility with older ballerina-lang versions
         try {
             isExportEndpoints = buildOptions.exportEndpoints();
-        } catch (Throwable e) {
-            outStream.println("The ballerina version is not supported for --export-endpoints" +
-                    " build option. Try using ballerina 2201.13.3 or above.");
+        } catch (NoSuchMethodError e) {
+            // Used to catch the buildOption not found error for earlier ballerina versions
+            DiagnosticInfo diagnosticInfo = new DiagnosticInfo(
+                    "NO_SUCH_METHOD_ERROR",
+                    "The `--export-endpoints` build option is not supported in the current ballerina version. " +
+                            "Use ballerina 2201.13.3 or higher. " + e.getMessage(),
+                    DiagnosticSeverity.WARNING
+            );
+            context.reportDiagnostic(DiagnosticFactory.createDiagnostic(diagnosticInfo, context.node().location()));
         }
         return isExportEndpoints;
     }
