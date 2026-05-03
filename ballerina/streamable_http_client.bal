@@ -52,7 +52,8 @@ public distinct isolated client class StreamableHttpClient {
         }
 
         // Prepare and send the initialization request.
-        InitializeRequest initRequest = {
+        Request initRequest = {
+            method: REQUEST_INITIALIZE,
             params: {
                 protocolVersion: LATEST_PROTOCOL_VERSION,
                 capabilities: capabilities,

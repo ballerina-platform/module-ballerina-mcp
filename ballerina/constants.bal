@@ -20,3 +20,15 @@ const ACCEPT_HEADER = "accept";
 const CONTENT_TYPE_HEADER = "content-type";
 const CONTENT_TYPE_JSON = "application/json";
 const CONTENT_TYPE_SSE = "text/event-stream";
+
+// Task status constants
+const TASK_STATUS_WORKING = "working";
+const TASK_STATUS_COMPLETED = "completed";
+const TASK_STATUS_FAILED = "failed";
+const TASK_STATUS_CANCELLED = "cancelled";
+const TASK_STATUS_INPUT_REQUIRED = "input_required";
+
+// Tool task-support constants
+const TASK_SUPPORT_FORBIDDEN = "forbidden";
+const TASK_SUPPORT_OPTIONAL = "optional";
+const TASK_SUPPORT_REQUIRED = "required";

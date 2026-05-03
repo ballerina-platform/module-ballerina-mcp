@@ -137,6 +137,30 @@ function testInitializationWithClientCapabilities() returns error? {
 }
 
 @test:Config {}
+function testInitializationWithExperimentalCapability() returns error? {
+    ClientCapabilities capabilities = {
+        experimental: {"customFeature": {}}
+    };
+    error? result = mcpClient->initialize(clientInfo, capabilities);
+
+    test:assertFalse(result is error);
+}
+
+@test:Config {}
+function testInitializationWithExtendedImplementationInfo() returns error? {
+    Implementation extendedClientInfo = {
+        name: TEST_CLIENT_NAME,
+        title: "Test MCP Client",
+        version: TEST_CLIENT_VERSION,
+        description: "A client used for integration testing",
+        websiteUrl: "https://example.com"
+    };
+    error? result = mcpClient->initialize(extendedClientInfo);
+
+    test:assertFalse(result is error);
+}
+
+@test:Config {}
 function testInitializationWithEmptyCapabilities() returns error? {
     ClientCapabilities capabilities = {};
     error? result = mcpClient->initialize(clientInfo, capabilities);
