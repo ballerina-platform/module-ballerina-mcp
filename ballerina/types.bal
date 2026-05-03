@@ -17,11 +17,16 @@
 import ballerina/http;
 
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
-public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcError|JsonRpcResponse;
+public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcResponse;
 
-public const LATEST_PROTOCOL_VERSION = "2025-03-26";
+# A JSON-RPC response, which is either a successful result or an error.
+public type JsonRpcResponse JsonRpcResultResponse|JsonRpcError;
+
+public const LATEST_PROTOCOL_VERSION = "2025-11-25";
 public const SUPPORTED_PROTOCOL_VERSIONS = [
     LATEST_PROTOCOL_VERSION,
+    "2025-06-18",
+    "2025-03-26",
     "2024-11-05",
     "2024-10-07"
 ];
@@ -75,7 +80,7 @@ public type Request record {|
     # The method name for the request
     string method;
     # Optional parameters for the request
-    RequestParams params?;
+    map<anydata> params?;
 |};
 
 # Represents a notification.
@@ -115,7 +120,7 @@ public type JsonRpcNotification record {|
 |};
 
 # A successful (non-error) response to a request.
-public type JsonRpcResponse record {|
+public type JsonRpcResultResponse record {|
     # The JSON-RPC protocol version
     JSONRPC_VERSION jsonrpc;
     # Identifier of the request
@@ -161,20 +166,23 @@ public type JsonRpcError record {|
 
 # This request is sent from the client to the server when it first connects, asking it to begin initialization.
 type InitializeRequest record {|
-    *Request;
+    *JsonRpcRequest;
     # Method name for the request
     REQUEST_INITIALIZE method = REQUEST_INITIALIZE;
     # Parameters for the initialize request
-    record {
-        *RequestParams;
-        # The latest version of the Model Context Protocol that the client supports. 
-        # The client MAY decide to support older versions as well.
-        string protocolVersion;
-        # Capabilities supported by the client
-        ClientCapabilities capabilities;
-        # Information about the client implementation
-        Implementation clientInfo;
-    } params;
+    InitializeRequestParams params;
+|};
+
+# Parameters for an `initialize` request.
+type InitializeRequestParams record {|
+    *RequestParams;
+    # The latest version of the Model Context Protocol that the client supports.
+    # The client MAY decide to support older versions as well.
+    string protocolVersion;
+    # Capabilities supported by the client
+    ClientCapabilities capabilities;
+    # Information about the client implementation
+    Implementation clientInfo;
 |};
 
 # After receiving an initialize request from the client, the server sends this response.
@@ -205,13 +213,46 @@ public type InitializedNotification record {|
 # Capabilities a client may support. Known capabilities are defined here, in this schema,
 # but this is not a closed set: any client can define its own, additional capabilities.
 public type ClientCapabilities record {
+    # Experimental, non-standard capabilities that the client supports.
+    record {|record {}...;|} experimental?;
     # Present if the client supports listing roots.
     record {
         # Whether the client supports notifications for changes to the roots list.
         boolean listChanged?;
     } roots?;
-    # Present if the client supports sampling from an LLM. 
-    record {} sampling?;
+    # Present if the client supports sampling from an LLM.
+    record {
+        # Whether the client supports context inclusion via includeContext parameter.
+        # If not declared, servers SHOULD only use `includeContext: "none"` (or omit it).
+        record {|record {}...;|} context?;
+        # Whether the client supports tool use via tools and toolChoice parameters.
+        record {|record {}...;|} tools?;
+    } sampling?;
+    # Present if the client supports elicitation from the server.
+    record {
+        record {|record {}...;|} form?;
+        record {|record {}...;|} url?;
+    } elicitation?;
+    # Present if the client supports task-augmented requests.
+    record {
+        # Whether this client supports tasks/list.
+        record {|record {}...;|} list?;
+        # Whether this client supports tasks/cancel.
+        record {|record {}...;|} cancel?;
+        # Specifies which request types can be augmented with tasks.
+        record {
+            # Task support for sampling-related requests.
+            record {
+                # Whether the client supports task-augmented sampling/createMessage requests.
+                record {|record {}...;|} createMessage?;
+            } sampling?;
+            # Task support for elicitation-related requests.
+            record {
+                # Whether the client supports task-augmented elicitation/create requests.
+                record {|record {}...;|} create?;
+            } elicitation?;
+        } requests?;
+    } tasks?;
 };
 
 # Capabilities that a server may support. Known capabilities are defined here, in this schema,
@@ -240,14 +281,59 @@ public type ServerCapabilities record {
         # Whether this server supports notifications for changes to the tool list.
         boolean listChanged?;
     } tools?;
+    # Present if the server supports task-augmented requests.
+    record {
+        # Whether this server supports tasks/list.
+        record {|record {}...;|} list?;
+        # Whether this server supports tasks/cancel.
+        record {|record {}...;|} cancel?;
+        # Specifies which request types can be augmented with tasks.
+        record {
+            # Task support for tool-related requests.
+            record {
+                # Whether the server supports task-augmented tools/call requests.
+                record {|record {}...;|} call?;
+            } tools?;
+        } requests?;
+    } tasks?;
+};
+
+# Base metadata with name (identifier) and title (display name) properties.
+public type BaseMetadata record {
+    # Intended for programmatic or logical use, but used as a display name in past specs or fallback (if title isn't present).
+    string name;
+    # Intended for UI and end-user contexts — optimized to be human-readable and easily understood,
+    # even by those unfamiliar with domain-specific terminology.
+    string title?;
+};
+
+# Represents a sized icon that can be displayed in a user interface.
+public type Icon record {
+    # The MIME type of the icon (e.g. image/png, image/jpeg, image/svg+xml, image/webp)
+    string mimeType;
+    # The URL or base64-encoded data of the icon
+    string data;
+    # The size of the icon (e.g. 16, 32, 64, 128, 256)
+    int size?;
+};
+
+# Optional set of sized icons that the client can display in a user interface.
+public type Icons record {
+    # Optional set of sized icons that the client can display in a user interface.
+    # Supported MIME types: image/png, image/jpeg, image/svg+xml, image/webp
+    Icon[] icons?;
 };
 
 # Describes the name and version of an MCP implementation.
 public type Implementation record {
-    # The name of the implementation
-    string name;
+    *BaseMetadata;
+    *Icons;
     # The version of the implementation
     string version;
+    # An optional human-readable description of what this implementation does.
+    string description?;
+    # An optional URL of the website for this implementation.
+    string websiteUrl?;
 };
 
 # Represents a paginated request with optional cursor-based pagination.
@@ -286,8 +372,31 @@ public type BlobResourceContents record {
     string blob;
 };
 
+# A known resource that the server is capable of reading.
+public type Resource record {
+    *BaseMetadata;
+    *Icons;
+    # The URI of this resource.
+    string uri;
+    # A description of what this resource represents.
+    string description?;
+    # The MIME type of this resource, if known.
+    string mimeType?;
+    # Optional annotations for the client.
+    Annotations annotations?;
+    # The size of the raw resource content, in bytes, if known.
+    int size?;
+};
+
 # The sender or recipient of messages and data in a conversation.
 public type Role "user"|"assistant";
+
+# A resource that the server is capable of reading, included in a prompt or tool call result.
+public type ResourceLink record {
+    *Resource;
+    # The type of content
+    "resource_link" 'type;
+};
 
 # The contents of a resource, embedded into a prompt or tool call result.
 public type EmbeddedResource record {
@@ -313,10 +422,16 @@ public type ListToolsResult record {
     ToolDefinition[] tools;
 };
 
+# A content block that can be text, image, audio, resource link, or embedded resource.
+public type ContentBlock TextContent|ImageContent|AudioContent|ResourceLink|EmbeddedResource;
+
 # The server's response to a tool call.
 public type CallToolResult record {
-    # The content of the tool call result
-    (TextContent|ImageContent|AudioContent|EmbeddedResource)[] content;
+    *Result;
+    # A list of content objects that represent the unstructured result of the tool call.
+    ContentBlock[] content;
+    # An optional JSON object that represents the structured result of the tool call.
+    record {} structuredContent?;
     # Whether the tool call ended in an error.
     # If not set, this is assumed to be false (the call was successful).
     boolean isError?;
@@ -365,32 +480,61 @@ public type ToolAnnotations record {
     boolean openWorldHint?;
 };
 
+# Indicates whether a tool supports task-augmented execution.
+public type TaskSupport TASK_SUPPORT_FORBIDDEN|TASK_SUPPORT_OPTIONAL|TASK_SUPPORT_REQUIRED;
+
+# Execution-related properties for a tool.
+public type ToolExecution record {|
+    # Indicates whether this tool supports task-augmented execution.
+    # Default: `TASK_SUPPORT_FORBIDDEN`
+    TaskSupport taskSupport?;
+|};
+
 # Definition for a tool the client can call.
 public type ToolDefinition record {
-    # The name of the tool
-    string name;
-    # A human-readable description of the tool
-    # This can be used by clients to improve the LLM's understanding of available tools.
+    *BaseMetadata;
+    *Icons;
+    # A human-readable description of the tool.
     string description?;
     # A JSON Schema object defining the expected parameters for the tool.
     record {
+        # The JSON Schema version
+        string \$schema?;
+        # The type of the schema
         "object" 'type;
+        # The properties of the schema
         record {|record {}...;|} properties?;
+        # The required properties of the schema
         string[] required?;
     } inputSchema;
+    # Execution-related properties for this tool.
+    ToolExecution execution?;
+    # An optional JSON Schema object defining the structure of the tool's output.
+    record {
+        # The JSON Schema version
+        string \$schema?;
+        # The type of the schema
+        "object" 'type;
+        # The properties of the schema
+        record {|record {}...;|} properties?;
+        # The required properties of the schema
+        string[] required?;
+    } outputSchema?;
     # Optional additional tool information.
     ToolAnnotations annotations?;
 };
 
 # Optional annotations for the client. The client can use annotations to inform how objects are used or displayed
 public type Annotations record {|
-    # Describes who the intended customer of this object or data is.
+    # Describes who the intended audience of this object or data is.
     # This can include multiple entries to indicate content useful for multiple audiences (e.g., `["user", "assistant"]`).
     Role[] audience?;
     # Describes how important this data is for operating the server.
     # A value of 1 means "most important," and indicates that the data is effectively required,
     # while 0 means "least important," and indicates that the data is entirely optional.
     decimal priority?;
+    # The moment the resource was last modified, as an ISO 8601 formatted string.
+    string lastModified?;
 |};
 
 # Text provided to or from an LLM.
@@ -425,6 +569,60 @@ public type AudioContent record {
     string mimeType;
     # Optional annotations for the client
     Annotations annotations?;
+};
+
+# Represents the status of a task.
+public type TaskStatus TASK_STATUS_WORKING|TASK_STATUS_INPUT_REQUIRED|TASK_STATUS_COMPLETED|TASK_STATUS_CANCELLED|TASK_STATUS_FAILED;
+
+# Represents a task created by a task-augmented tool call.
+# NOTE: Server-side task execution is not yet supported in this library.
+public type Task record {
+    # Unique identifier for the task
+    string taskId;
+    # Current status of the task
+    TaskStatus status;
+    # Optional human-readable message describing the current status
+    string statusMessage?;
+    # Optional progress percentage (0–100)
+    decimal progressPercent?;
+    # Suggested polling interval in milliseconds
+    int pollInterval?;
+    # Time-to-live in milliseconds; task may be discarded after this duration
+    int? ttl;
+    # ISO 8601 timestamp when the task was created
+    string createdAt;
+    # ISO 8601 timestamp when the task was last updated
+    string lastUpdatedAt;
+};
+
+# Result returned when a task-augmented tool call creates a new task.
+# NOTE: Server-side task execution is not yet supported in this library.
+public type CreateTaskResult record {
+    *Result;
+    # The created task
+    Task task;
+};
+
+# Result returned for a tasks/list request.
+# NOTE: Server-side task execution is not yet supported in this library.
+public type ListTasksResult record {
+    *PaginatedResult;
+    # The list of tasks
+    Task[] tasks;
+};
+
+# Result returned for a tasks/get request (flattened Task fields).
+# NOTE: Server-side task execution is not yet supported in this library.
+public type GetTaskResult record {
+    *Result;
+    *Task;
+};
+
+# Result returned for a tasks/cancel request (flattened Task fields).
+# NOTE: Server-side task execution is not yet supported in this library.
+public type CancelTaskResult record {
+    *Result;
+    *Task;
 };
 
 # Represents a result sent from the server to the client.

@@ -53,7 +53,7 @@ isolated function extractResultFromMessageStream(stream<JsonRpcMessage, StreamEr
         }
 
         JsonRpcMessage message = streamItem.value;
-        if message is JsonRpcResponse {
+        if message is JsonRpcResultResponse {
             return message.result;
         }
         streamItem = messageStream.next();
@@ -67,7 +67,7 @@ isolated function extractResultFromMessageStream(stream<JsonRpcMessage, StreamEr
 # + message - The JsonRpcMessage to convert.
 # + return - The extracted ServerResult, or an InvalidMessageTypeError.
 isolated function extractResultFromMessage(JsonRpcMessage message) returns ServerResult|ServerResponseError {
-    if message is JsonRpcResponse {
+    if message is JsonRpcResultResponse {
         return message.result;
     }
     if message is JsonRpcError {

@@ -23,12 +23,12 @@ import io.ballerina.runtime.api.creators.ValueCreator;
 import io.ballerina.runtime.api.types.ArrayType;
 import io.ballerina.runtime.api.types.Parameter;
 import io.ballerina.runtime.api.types.RecordType;
-import io.ballerina.runtime.api.types.ReferenceType;
 import io.ballerina.runtime.api.types.RemoteMethodType;
 import io.ballerina.runtime.api.types.ServiceType;
 import io.ballerina.runtime.api.types.Type;
 import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.types.UnionType;
+import io.ballerina.runtime.api.utils.TypeUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BMap;
@@ -194,7 +194,7 @@ public final class McpServiceMethodHelper {
 
     private static BMap<BString, Object> createToolRecord(ArrayType toolsArrayType, RemoteMethodType remoteMethod,
                                                           BMap<?, ?> annotationValue) {
-        RecordType toolRecordType = (RecordType) ((ReferenceType) toolsArrayType.getElementType()).getReferredType();
+        RecordType toolRecordType = (RecordType) TypeUtils.getImpliedType(toolsArrayType.getElementType());
         BMap<BString, Object> tool = ValueCreator.createRecordValue(toolRecordType);
 
         tool.put(fromString(NAME_FIELD_NAME), fromString(remoteMethod.getName()));
@@ -253,7 +253,13 @@ public final class McpServiceMethodHelper {
         ArrayType contentArrayType = (ArrayType) resultRecordType.getFields().get(CONTENT_FIELD_NAME).getFieldType();
         BArray contentArray = ValueCreator.createArrayValue(contentArrayType);
 
-        UnionType contentUnionType = (UnionType) contentArrayType.getElementType();
+        Type contentElementType = TypeUtils.getImpliedType(contentArrayType.getElementType());
+        if (!(contentElementType instanceof UnionType)) {
+            return ModuleUtils.createError(
+                    "Expected content element type to be a union type, but found: "
+                            + contentElementType.getClass().getName());
+        }
+        UnionType contentUnionType = (UnionType) contentElementType;
         Optional<Type> textContentTypeOpt = contentUnionType.getMemberTypes().stream()
                 .filter(type -> TYPE_TEXT_CONTENT.equals(type.getName()))
                 .findFirst();
@@ -261,7 +267,7 @@ public final class McpServiceMethodHelper {
             return ModuleUtils
                     .createError("No member type named 'TextContent' found in content union type.");
         }
-        RecordType textContentRecordType = (RecordType) ((ReferenceType) textContentTypeOpt.get()).getReferredType();
+        RecordType textContentRecordType = (RecordType) TypeUtils.getImpliedType(textContentTypeOpt.get());
         BMap<BString, Object> textContent = ValueCreator.createRecordValue(textContentRecordType);
         textContent.put(fromString(TYPE_FIELD_NAME), fromString(TEXT_VALUE_NAME));
         textContent.put(fromString(TEXT_FIELD_NAME), fromString(result == null ? "" : result.toString()));
