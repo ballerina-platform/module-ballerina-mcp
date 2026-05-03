@@ -14,6 +14,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
+// Task status constants
+const TASK_STATUS_WORKING = "working";
+const TASK_STATUS_COMPLETED = "completed";
+const TASK_STATUS_FAILED = "failed";
+const TASK_STATUS_CANCELLED = "cancelled";
+const TASK_STATUS_INPUT_REQUIRED = "input_required";
+
 // Transport related constants (headers)
 const SESSION_ID_HEADER = "mcp-session-id";
 const ACCEPT_HEADER = "accept";
