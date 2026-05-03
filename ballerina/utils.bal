@@ -56,6 +56,11 @@ isolated function extractResultFromMessageStream(stream<JsonRpcMessage, StreamEr
         if message is JsonRpcResultResponse {
             return message.result;
         }
+        if message is JsonRpcError {
+            return error ServerResponseError(
+                string `Received JSON-RPC error from server: ${message.toJsonString()}`
+            );
+        }
         streamItem = messageStream.next();
     }
 

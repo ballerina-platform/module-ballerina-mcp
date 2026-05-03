@@ -43,8 +43,6 @@ function testImplementation() {
 
 // ---------------------------------------------------------------------------
 // ClientCapabilities — verifies new fields: elicitation, tasks
-// Note: task types are defined for protocol compatibility but server-side
-// task execution is not yet supported.
 // ---------------------------------------------------------------------------
 
 @test:Config {}
@@ -128,8 +126,6 @@ function testContentBlockUnion() {
 
 // ---------------------------------------------------------------------------
 // ToolDefinition — verifies new fields: title, icons, execution, outputSchema
-// Note: execution.taskSupport describes protocol capability; server-side task
-// execution is not yet supported.
 // ---------------------------------------------------------------------------
 
 @test:Config {}
@@ -157,18 +153,19 @@ function testToolDefinition() {
 }
 
 // ---------------------------------------------------------------------------
-// CallToolParams — verifies name and arguments fields
+// CallToolParams — verifies new task field with TaskMetadata
 // ---------------------------------------------------------------------------
 
 @test:Config {}
 function testCallToolParams() {
-    CallToolParams withArgs = {
-        name: "tool_with_args",
-        arguments: {"input": "data"}
+    CallToolParams withTask = {
+        name: "async_tool",
+        arguments: {"input": "data"},
+        task: {ttl: 30000}
     };
-    CallToolParams withoutArgs = {name: "sync_tool"};
-    test:assertEquals(withArgs.name, "tool_with_args");
-    test:assertEquals(withoutArgs.arguments, ());
+    CallToolParams withoutTask = {name: "sync_tool"};
+    test:assertEquals(withTask.task?.ttl, 30000);
+    test:assertEquals(withoutTask.task, ());
 }
 
 // ---------------------------------------------------------------------------
@@ -191,8 +188,7 @@ function testCallToolResult() {
 }
 
 // ---------------------------------------------------------------------------
-// Task — types defined per MCP 2025-11-25 spec; server-side task execution
-// is not yet supported in this library.
+// Task — verifies correct field names per MCP 2025-11-25 spec
 // ---------------------------------------------------------------------------
 
 @test:Config {}
@@ -214,6 +210,10 @@ function testTask() {
     test:assertEquals(t.lastUpdatedAt, "2025-11-25T10:00:05Z");
 }
 
+// ---------------------------------------------------------------------------
+// CreateTaskResult — verifies nested task field per MCP 2025-11-25 spec
+// ---------------------------------------------------------------------------
+
 @test:Config {}
 function testCreateTaskResult() {
     CreateTaskResult result = {
@@ -228,7 +228,14 @@ function testCreateTaskResult() {
     test:assertEquals(result.task.taskId, "task-456");
     test:assertEquals(result.task.status, "working");
     test:assertEquals(result.task.progressPercent, ());
+
+    ServerResult serverResult = result;
+    test:assertTrue(serverResult is CreateTaskResult);
 }
+
+// ---------------------------------------------------------------------------
+// ListTasksResult — verifies paginated task list
+// ---------------------------------------------------------------------------
 
 @test:Config {}
 function testListTasksResult() {
@@ -245,7 +252,14 @@ function testListTasksResult() {
     test:assertEquals(result.tasks[0].taskId, "t-1");
     test:assertEquals(result.tasks[1].status, "completed");
     test:assertEquals(result.nextCursor, "cursor-abc");
+
+    ServerResult sr = result;
+    test:assertTrue(sr is ListTasksResult);
 }
+
+// ---------------------------------------------------------------------------
+// GetTaskResult — verifies flattened Result & Task per MCP 2025-11-25 spec
+// ---------------------------------------------------------------------------
 
 @test:Config {}
 function testGetTaskResult() {
@@ -260,7 +274,14 @@ function testGetTaskResult() {
     test:assertEquals(result.taskId, "t-3");
     test:assertEquals(result.status, "input_required");
     test:assertEquals(result.statusMessage, "Waiting for user input");
+
+    ServerResult sr = result;
+    test:assertTrue(sr is GetTaskResult);
 }
+
+// ---------------------------------------------------------------------------
+// CancelTaskResult — verifies flattened Result & Task per MCP 2025-11-25 spec
+// ---------------------------------------------------------------------------
 
 @test:Config {}
 function testCancelTaskResult() {
@@ -274,6 +295,9 @@ function testCancelTaskResult() {
     test:assertEquals(result.taskId, "t-4");
     test:assertEquals(result.status, "cancelled");
     test:assertEquals(result.statusMessage, ());
+
+    ServerResult sr = result;
+    test:assertTrue(sr is CancelTaskResult);
 }
 
 // ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/time;
 import ballerina/uuid;
 
 isolated service class DispatcherService {
@@ -27,6 +28,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
     } isolated service object {
         private map<Session> sessionMap = {};
         private ServiceConfiguration? cachedServiceConfig = ();
+        private map<Task> taskStore = {};
+        private map<CallToolResult & readonly> taskResultStore = {};
+        private map<string> taskSessionMap = {};
 
         isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
             http:authenticateResource(self, "delete", []);
@@ -109,6 +113,18 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 REQUEST_CALL_TOOL => {
                     return self.handleCallToolRequest(request, headers);
                 }
+                REQUEST_LIST_TASKS => {
+                    return self.handleListTasksRequest(request, headers);
+                }
+                REQUEST_GET_TASK => {
+                    return self.handleGetTaskRequest(request, headers);
+                }
+                REQUEST_GET_TASK_RESULT => {
+                    return self.handleGetTaskResultRequest(request, headers);
+                }
+                REQUEST_CANCEL_TASK => {
+                    return self.handleCancelTaskRequest(request, headers);
+                }
                 _ => {
                     return <http:BadRequest>{
                         body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", request.id)
@@ -151,7 +167,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             string requestedVersion = initRequest.params.protocolVersion;
             string protocolVersion = self.selectProtocolVersion(requestedVersion);
 
-            InitializeResult initResult = {
+            InitializeResult & readonly initResult = {
                 protocolVersion: protocolVersion,
                 capabilities: (serviceConfig.options?.capabilities ?: {
                     tools: {}
@@ -189,7 +205,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                     body: {
                         jsonrpc: JSONRPC_VERSION,
                         id: id,
-                        result: initResult.clone()
+                        result: initResult
                     }
                 };
             }
@@ -280,6 +296,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 session = sessionId is string ? self.sessionMap[sessionId] : ();
             }
 
+            if params.task !is () {
+                return self.handleTaskAugmentedToolCall(request, params, session, sessionId);
+            }
+
             CallToolResult|error callToolResult = self.executeOnCallTool(params, session);
             if callToolResult is error {
                 return <http:BadRequest>{
@@ -297,6 +317,353 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             return <http:Ok>{
                 headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
                 body: responseBody
+            };
+        }
+
+        private isolated function handleTaskAugmentedToolCall(
+            JsonRpcRequest request, CallToolParams params, Session? session, string? sessionId
+        ) returns http:Ok|Error {
+            string taskId = uuid:createRandomUuid();
+            string createdAt = time:utcToString(time:utcNow());
+            int? ttl = params.task?.ttl;
+
+            lock {
+                self.taskStore[taskId] = {
+                    taskId: taskId,
+                    status: TASK_STATUS_WORKING,
+                    ttl: ttl,
+                    createdAt: createdAt,
+                    lastUpdatedAt: createdAt
+                };
+                if sessionId is string {
+                    self.taskSessionMap[taskId] = sessionId;
+                }
+            }
+
+            _ = start self.executeTaskAsync(taskId, params.cloneReadOnly(), session, ttl, createdAt);
+
+            CreateTaskResult & readonly createTaskResult = {
+                task: {
+                    taskId: taskId,
+                    status: TASK_STATUS_WORKING,
+                    ttl: ttl,
+                    createdAt: createdAt,
+                    lastUpdatedAt: createdAt
+                }
+            };
+            return <http:Ok>{
+                headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: request.id,
+                    result: createTaskResult
+                }
+            };
+        }
+
+        private isolated function executeTaskAsync(string taskId, CallToolParams & readonly params,
+                Session? session, int? ttl, string createdAt) {
+            CallToolResult|error callToolResult = self.executeOnCallTool(params, session);
+            string completedAt = time:utcToString(time:utcNow());
+
+            if callToolResult is error {
+                lock {
+                    Task? currentTask = self.taskStore[taskId];
+                    if currentTask !is () && currentTask.status != TASK_STATUS_CANCELLED {
+                        self.taskStore[taskId] = {
+                            taskId: taskId,
+                            status: TASK_STATUS_FAILED,
+                            statusMessage: callToolResult.message(),
+                            ttl: ttl,
+                            createdAt: createdAt,
+                            lastUpdatedAt: completedAt
+                        };
+                    }
+                }
+                return;
+            }
+
+            CallToolResult & readonly readonlyResult = callToolResult.cloneReadOnly();
+            lock {
+                Task? currentTask = self.taskStore[taskId];
+                if currentTask !is () && currentTask.status != TASK_STATUS_CANCELLED {
+                    self.taskStore[taskId] = {
+                        taskId: taskId,
+                        status: TASK_STATUS_COMPLETED,
+                        ttl: ttl,
+                        createdAt: createdAt,
+                        lastUpdatedAt: completedAt
+                    };
+                    self.taskResultStore[taskId] = readonlyResult;
+                }
+            }
+        }
+
+        private isolated function handleListTasksRequest(JsonRpcRequest request, http:Headers headers)
+                returns http:BadRequest|http:Ok|Error {
+            ServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_LIST_TASKS);
+
+            string? sessionId = ();
+            if effectiveSessionMode == STATEFUL {
+                sessionId = getSessionIdFromHeaders(headers);
+                if sessionId is () {
+                    return <http:BadRequest>{
+                        body: createJsonRpcError(INVALID_REQUEST, "Missing session ID header", request.id)
+                    };
+                }
+                lock {
+                    if !self.sessionMap.hasKey(sessionId) {
+                        return <http:BadRequest>{
+                            body: createJsonRpcError(INVALID_REQUEST,
+                                    string `Invalid session ID: ${sessionId}`, request.id)
+                        };
+                    }
+                }
+            }
+
+            Task[] taskList;
+            lock {
+                if sessionId is string {
+                    Task[] filtered = [];
+                    foreach Task t in self.taskStore {
+                        if self.taskSessionMap[t.taskId] == sessionId {
+                            filtered.push(t);
+                        }
+                    }
+                    taskList = filtered.clone();
+                } else {
+                    taskList = self.taskStore.toArray().clone();
+                }
+            }
+
+            ListTasksResult result = {tasks: taskList};
+            return <http:Ok>{
+                headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: request.id,
+                    result: result.cloneReadOnly()
+                }
+            };
+        }
+
+        private isolated function handleGetTaskRequest(JsonRpcRequest request, http:Headers headers)
+                returns http:BadRequest|http:Ok|Error {
+            ServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_GET_TASK);
+
+            string? sessionId = ();
+            if effectiveSessionMode == STATEFUL {
+                sessionId = getSessionIdFromHeaders(headers);
+                if sessionId is () {
+                    return <http:BadRequest>{
+                        body: createJsonRpcError(INVALID_REQUEST, "Missing session ID header", request.id)
+                    };
+                }
+                lock {
+                    if !self.sessionMap.hasKey(sessionId) {
+                        return <http:BadRequest>{
+                            body: createJsonRpcError(INVALID_REQUEST,
+                                    string `Invalid session ID: ${sessionId}`, request.id)
+                        };
+                    }
+                }
+            }
+
+            GetTaskParams|error params = request.params.cloneWithType();
+            if params is error {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_PARAMS,
+                            string `Invalid parameters: ${params.message()}`, request.id)
+                };
+            }
+
+            Task? task;
+            lock {
+                task = self.taskStore[params.taskId].clone();
+                if task !is () && sessionId is string && self.taskSessionMap[params.taskId] != sessionId {
+                    task = ();
+                }
+            }
+            if task is () {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_PARAMS,
+                            string `Task not found: ${params.taskId}`, request.id)
+                };
+            }
+
+            GetTaskResult|error result = task.cloneWithType();
+            if result is error {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INTERNAL_ERROR,
+                            string `Failed to build task result: ${result.message()}`, request.id)
+                };
+            }
+            return <http:Ok>{
+                headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: request.id,
+                    result: result.cloneReadOnly()
+                }
+            };
+        }
+
+        private isolated function handleGetTaskResultRequest(JsonRpcRequest request, http:Headers headers)
+                returns http:BadRequest|http:Ok|Error {
+            ServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers,
+                    REQUEST_GET_TASK_RESULT);
+
+            string? sessionId = ();
+            if effectiveSessionMode == STATEFUL {
+                sessionId = getSessionIdFromHeaders(headers);
+                if sessionId is () {
+                    return <http:BadRequest>{
+                        body: createJsonRpcError(INVALID_REQUEST, "Missing session ID header", request.id)
+                    };
+                }
+                lock {
+                    if !self.sessionMap.hasKey(sessionId) {
+                        return <http:BadRequest>{
+                            body: createJsonRpcError(INVALID_REQUEST,
+                                    string `Invalid session ID: ${sessionId}`, request.id)
+                        };
+                    }
+                }
+            }
+
+            GetTaskResultParams|error params = request.params.cloneWithType();
+            if params is error {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_PARAMS,
+                            string `Invalid parameters: ${params.message()}`, request.id)
+                };
+            }
+
+            Task? task;
+            (CallToolResult & readonly)? toolResult;
+            lock {
+                task = self.taskStore[params.taskId].clone();
+                if task !is () && sessionId is string && self.taskSessionMap[params.taskId] != sessionId {
+                    task = ();
+                }
+                toolResult = task !is () ? self.taskResultStore[params.taskId] : ();
+            }
+
+            if task is () {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_PARAMS,
+                            string `Task not found: ${params.taskId}`, request.id)
+                };
+            }
+            if toolResult is () {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_PARAMS,
+                            string `Result not yet available for task: ${params.taskId}`, request.id)
+                };
+            }
+            return <http:Ok>{
+                headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: request.id,
+                    result: toolResult
+                }
+            };
+        }
+
+        private isolated function handleCancelTaskRequest(JsonRpcRequest request, http:Headers headers)
+                returns http:BadRequest|http:Ok|Error {
+            ServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers,
+                    REQUEST_CANCEL_TASK);
+
+            string? sessionId = ();
+            if effectiveSessionMode == STATEFUL {
+                sessionId = getSessionIdFromHeaders(headers);
+                if sessionId is () {
+                    return <http:BadRequest>{
+                        body: createJsonRpcError(INVALID_REQUEST, "Missing session ID header", request.id)
+                    };
+                }
+                lock {
+                    if !self.sessionMap.hasKey(sessionId) {
+                        return <http:BadRequest>{
+                            body: createJsonRpcError(INVALID_REQUEST,
+                                    string `Invalid session ID: ${sessionId}`, request.id)
+                        };
+                    }
+                }
+            }
+
+            CancelTaskParams|error params = request.params.cloneWithType();
+            if params is error {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_PARAMS,
+                            string `Invalid parameters: ${params.message()}`, request.id)
+                };
+            }
+
+            Task? task;
+            lock {
+                task = self.taskStore[params.taskId].clone();
+                if task !is () && sessionId is string && self.taskSessionMap[params.taskId] != sessionId {
+                    task = ();
+                }
+            }
+            if task is () {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_PARAMS,
+                            string `Task not found: ${params.taskId}`, request.id)
+                };
+            }
+            if task.status == TASK_STATUS_COMPLETED || task.status == TASK_STATUS_FAILED
+                    || task.status == TASK_STATUS_CANCELLED {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_PARAMS,
+                            string `Task cannot be cancelled in status: ${task.status}`, request.id)
+                };
+            }
+
+            string cancelledTaskId = task.taskId;
+            string? statusMsg = task.statusMessage;
+            int? progressPct = task.progressPercent;
+            int? pollInterval = task.pollInterval;
+            int? taskTtl = task.ttl;
+            string taskCreatedAt = task.createdAt;
+            string cancelledAt = time:utcToString(time:utcNow());
+            lock {
+                self.taskStore[params.taskId] = {
+                    taskId: cancelledTaskId,
+                    status: TASK_STATUS_CANCELLED,
+                    statusMessage: statusMsg,
+                    progressPercent: progressPct,
+                    pollInterval: pollInterval,
+                    ttl: taskTtl,
+                    createdAt: taskCreatedAt,
+                    lastUpdatedAt: cancelledAt
+                };
+            }
+
+            CancelTaskResult & readonly result = {
+                taskId: cancelledTaskId,
+                status: TASK_STATUS_CANCELLED,
+                statusMessage: statusMsg,
+                progressPercent: progressPct,
+                pollInterval: pollInterval,
+                ttl: taskTtl,
+                createdAt: taskCreatedAt,
+                lastUpdatedAt: cancelledAt
+            };
+            return <http:Ok>{
+                headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: request.id,
+                    result: result
+                }
             };
         }
 

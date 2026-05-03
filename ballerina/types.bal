@@ -40,7 +40,15 @@ public enum RequestMethod {
     # Request to list all available tools from the server
     REQUEST_LIST_TOOLS = "tools/list",
     # Request to execute a specific tool with given parameters
-    REQUEST_CALL_TOOL = "tools/call"
+    REQUEST_CALL_TOOL = "tools/call",
+    # Request to list all tasks managed by the server
+    REQUEST_LIST_TASKS = "tasks/list",
+    # Request to get the status of a specific task by ID
+    REQUEST_GET_TASK = "tasks/get",
+    # Request to retrieve the result of a completed task
+    REQUEST_GET_TASK_RESULT = "tasks/result",
+    # Request to cancel an in-progress task
+    REQUEST_CANCEL_TASK = "tasks/cancel"
 };
 
 # Represents the session management modes supported by the MCP server transport.
@@ -208,6 +216,54 @@ public type InitializedNotification record {|
     *Notification;
     # The method identifier for the notification, must be "notifications/initialized"
     NOTIFICATION_INITIALIZED method = NOTIFICATION_INITIALIZED;
+|};
+
+# Parameters for a tasks/get request.
+type GetTaskParams record {|
+    *RequestParams;
+    # Unique identifier of the task to retrieve
+    string taskId;
+|};
+
+# Request to retrieve a specific task by ID.
+type GetTaskRequest record {|
+    *JsonRpcRequest;
+    # The JSON-RPC method name for a `tasks/get` request, used to poll for the current status of a task
+    REQUEST_GET_TASK method = REQUEST_GET_TASK;
+    # Parameters identifying the task to retrieve
+    GetTaskParams params;
+|};
+
+# Parameters for a tasks/result request.
+type GetTaskResultParams record {|
+    *RequestParams;
+    # Unique identifier of the task whose result to retrieve
+    string taskId;
+|};
+
+# Request to retrieve the result of a completed task.
+type GetTaskResultRequest record {|
+    *JsonRpcRequest;
+    # The JSON-RPC method name for a `tasks/result` request, used to retrieve the payload of a completed task
+    REQUEST_GET_TASK_RESULT method = REQUEST_GET_TASK_RESULT;
+    # Parameters identifying the task whose result to retrieve
+    GetTaskResultParams params;
+|};
+
+# Parameters for a tasks/cancel request.
+type CancelTaskParams record {|
+    *RequestParams;
+    # Unique identifier of the task to cancel
+    string taskId;
+|};
+
+# Request to cancel an in-progress task.
+type CancelTaskRequest record {|
+    *JsonRpcRequest;
+    # The JSON-RPC method name for a `tasks/cancel` request, used to explicitly cancel an in-progress task
+    REQUEST_CANCEL_TASK method = REQUEST_CANCEL_TASK;
+    # Parameters identifying the task to cancel
+    CancelTaskParams params;
 |};
 
 # Capabilities a client may support. Known capabilities are defined here, in this schema,
@@ -445,6 +501,13 @@ public type CallToolRequest record {|
     CallToolParams params;
 |};
 
+# Metadata for augmenting a request with task execution.
+# Include this in the `task` field of the request parameters.
+public type TaskMetadata record {|
+    # Requested duration in milliseconds to retain the task from creation.
+    int ttl?;
+|};
+
 # Parameters for the tools/call request
 public type CallToolParams record {|
     *RequestParams;
@@ -452,6 +515,9 @@ public type CallToolParams record {|
     string name;
     # Optional arguments to pass to the tool
     record {} arguments?;
+    # If specified, the caller is requesting task-augmented execution for this request.
+    # The server will return a CreateTaskResult immediately and run the tool asynchronously.
+    TaskMetadata task?;
 |};
 
 # Additional properties describing a Tool to clients.
@@ -574,17 +640,16 @@ public type AudioContent record {
 # Represents the status of a task.
 public type TaskStatus TASK_STATUS_WORKING|TASK_STATUS_INPUT_REQUIRED|TASK_STATUS_COMPLETED|TASK_STATUS_CANCELLED|TASK_STATUS_FAILED;
 
-# Represents a task created by a task-augmented tool call.
-# NOTE: Server-side task execution is not yet supported in this library.
+# Represents a long-running task managed by the MCP server.
 public type Task record {
     # Unique identifier for the task
     string taskId;
-    # Current status of the task
+    # Current lifecycle status of the task
     TaskStatus status;
-    # Optional human-readable message describing the current status
+    # Optional human-readable status message
     string statusMessage?;
-    # Optional progress percentage (0–100)
-    decimal progressPercent?;
+    # Optional progress percentage (0-100)
+    int progressPercent?;
     # Suggested polling interval in milliseconds
     int pollInterval?;
     # Time-to-live in milliseconds; task may be discarded after this duration
@@ -595,38 +660,36 @@ public type Task record {
     string lastUpdatedAt;
 };
 
-# Result returned when a task-augmented tool call creates a new task.
-# NOTE: Server-side task execution is not yet supported in this library.
+# Returned immediately when a tool call is accepted as a long-running task.
 public type CreateTaskResult record {
     *Result;
-    # The created task
+    # The created task information
     Task task;
 };
 
-# Result returned for a tasks/list request.
-# NOTE: Server-side task execution is not yet supported in this library.
+# The server's response to a tasks/list request.
 public type ListTasksResult record {
     *PaginatedResult;
-    # The list of tasks
+    # The list of tasks managed by this server
     Task[] tasks;
 };
 
-# Result returned for a tasks/get request (flattened Task fields).
-# NOTE: Server-side task execution is not yet supported in this library.
+# The server's response to a tasks/get request.
+# Fields from Task are flattened directly into the result per MCP 2025-11-25 spec.
 public type GetTaskResult record {
     *Result;
     *Task;
 };
 
-# Result returned for a tasks/cancel request (flattened Task fields).
-# NOTE: Server-side task execution is not yet supported in this library.
+# The server's response to a tasks/cancel request.
+# Fields from Task are flattened directly into the result per MCP 2025-11-25 spec.
 public type CancelTaskResult record {
     *Result;
     *Task;
 };
 
 # Represents a result sent from the server to the client.
-public type ServerResult InitializeResult|CallToolResult|ListToolsResult;
+public type ServerResult InitializeResult|CallToolResult|ListToolsResult|CreateTaskResult|ListTasksResult|GetTaskResult|CancelTaskResult;
 
 # Represents a tool configuration that can be used to define tools available in the MCP service.
 public type McpToolConfig record {|
