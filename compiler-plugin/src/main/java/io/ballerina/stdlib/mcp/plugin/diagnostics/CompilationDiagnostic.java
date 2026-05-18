@@ -36,7 +36,8 @@ public enum CompilationDiagnostic {
     SESSION_PARAM_MUST_BE_FIRST(DiagnosticMessage.ERROR_103, DiagnosticCode.MCP_103, ERROR),
     SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE(DiagnosticMessage.ERROR_104, DiagnosticCode.MCP_104, ERROR),
     UNABLE_TO_OBTAIN_VALID_SERVER_PORT_FROM_EXPRESSION(DiagnosticMessage.WARNING_105, DiagnosticCode.MCP_105, WARNING),
-    UNABLE_TO_OBTAIN_VALID_SERVER_PORT(DiagnosticMessage.WARNING_106, DiagnosticCode.MCP_106, WARNING);
+    UNABLE_TO_OBTAIN_VALID_SERVER_PORT(DiagnosticMessage.WARNING_106, DiagnosticCode.MCP_106, WARNING),
+    OPENAPI_GENERATION_FAILED(DiagnosticMessage.WARNING_107, DiagnosticCode.MCP_107, WARNING);
 
     private final String diagnostic;
     private final String diagnosticCode;

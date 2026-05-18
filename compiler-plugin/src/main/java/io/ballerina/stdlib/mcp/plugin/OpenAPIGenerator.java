@@ -71,6 +71,8 @@ import static io.ballerina.openapi.service.mapper.utils.CodegenUtils.resolveCont
 import static io.ballerina.openapi.service.mapper.utils.CodegenUtils.writeFile;
 import static io.ballerina.openapi.service.mapper.utils.MapperCommonUtils.containErrors;
 import static io.ballerina.openapi.service.mapper.utils.MapperCommonUtils.getNormalizedFileName;
+import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.OPENAPI_GENERATION_FAILED;
+import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.getDiagnostic;
 
 /**
  * Compiler-plugin analysis task that emits an OpenAPI YAML contract for each {@code mcp:Service} when
@@ -122,10 +124,16 @@ public class OpenAPIGenerator implements AnalysisTask<SyntaxNodeAnalysisContext>
         Map<Integer, String> services = new HashMap<>();
         List<Diagnostic> diagnostics = new ArrayList<>();
 
-        if (containErrors(semanticModel.diagnostics())) {
-            diagnostics.addAll(semanticModel.diagnostics());
-        } else if (isMcpService(serviceNode, semanticModel)) {
-            generateOpenAPISpec(semanticModel, serviceNode, syntaxTree, services, project, outPath, diagnostics);
+        try {
+            if (containErrors(semanticModel.diagnostics())) {
+                diagnostics.addAll(semanticModel.diagnostics());
+            } else if (isMcpService(serviceNode, semanticModel)) {
+                generateOpenAPISpec(semanticModel, serviceNode, syntaxTree, services, project, outPath, diagnostics);
+            }
+        } catch (Exception e) {
+            // Catch-all so the patch never breaks a previously-compiling build. Surface the failure as a warning
+            // and continue; the project still builds, the OpenAPI artifact is just missing.
+            diagnostics.add(getDiagnostic(OPENAPI_GENERATION_FAILED, serviceNode.location(), e.toString()));
         }
         if (!diagnostics.isEmpty()) {
             for (Diagnostic diagnostic : diagnostics) {
@@ -186,8 +194,12 @@ public class OpenAPIGenerator implements AnalysisTask<SyntaxNodeAnalysisContext>
     }
 
     private String constructFileName(SyntaxTree syntaxTree, Map<Integer, String> services, Symbol serviceSymbol) {
-        String fileName = getNormalizedFileName(services.get(serviceSymbol.hashCode()));
         String balFileName = syntaxTree.filePath().replaceAll(SLASH, UNDERSCORE).split("\\.")[0];
+        String mappedName = services.get(serviceSymbol.hashCode());
+        if (mappedName == null) {
+            return balFileName + UNDERSCORE + serviceSymbol.hashCode() + OPENAPI_SUFFIX + YAML_EXTENSION;
+        }
+        String fileName = getNormalizedFileName(mappedName);
         if (fileName.equals(SLASH)) {
             return balFileName + OPENAPI_SUFFIX + YAML_EXTENSION;
         }

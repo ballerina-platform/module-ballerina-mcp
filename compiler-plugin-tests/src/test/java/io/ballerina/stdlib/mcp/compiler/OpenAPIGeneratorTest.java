@@ -32,11 +32,14 @@ import io.ballerina.tools.diagnostics.Location;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.MessageFormat;
+import java.util.Comparator;
 import java.util.Iterator;
+import java.util.stream.Stream;
 
 import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic
         .UNABLE_TO_OBTAIN_VALID_SERVER_PORT_FROM_EXPRESSION;
@@ -78,6 +81,8 @@ public class OpenAPIGeneratorTest {
     public void testOpenAPIGenerationEmitsWarningForPortVariable() {
         String packagePath = "03_port_variable";
         DiagnosticResult diagnosticResult = getDiagnosticResult(packagePath);
+        Assert.assertEquals(diagnosticResult.errorCount(), 0,
+                "Expected no errors for package: " + packagePath);
         Assert.assertEquals(diagnosticResult.warningCount(), 1);
 
         Iterator<Diagnostic> diagnosticIterator = diagnosticResult.warnings().iterator();
@@ -108,11 +113,30 @@ public class OpenAPIGeneratorTest {
 
     private DiagnosticResult getDiagnosticResult(String path) {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve(path);
+        deleteOpenAPIArtifacts(projectDirPath);
         BuildOptions buildOptions = BuildOptions.builder().setExportOpenAPI(true).build();
         BuildProject project = BuildProject.load(getEnvironmentBuilder(), projectDirPath, buildOptions);
         project.currentPackage().runCodeGenAndModifyPlugins();
         PackageCompilation compilation = project.currentPackage().getCompilation();
         return compilation.diagnosticResult();
+    }
+
+    private static void deleteOpenAPIArtifacts(Path projectDirPath) {
+        Path openApiDir = projectDirPath.resolve("target").resolve("openapi");
+        if (!Files.exists(openApiDir)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(openApiDir)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to delete stale OpenAPI artifact: " + p, e);
+                }
+            });
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to clean OpenAPI output dir: " + openApiDir, e);
+        }
     }
 
     private static ProjectEnvironmentBuilder getEnvironmentBuilder() {

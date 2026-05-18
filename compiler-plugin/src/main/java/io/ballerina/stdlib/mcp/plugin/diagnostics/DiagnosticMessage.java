@@ -28,10 +28,12 @@ public enum DiagnosticMessage {
             "Only the first parameter can be of type 'mcp:Session'."),
     ERROR_103("Session parameter ''{1}'' in function ''{0}'' must be the first parameter."),
     ERROR_104("Session parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'."),
-    WARNING_105("unable to determine a valid port from the expression ''{0}''." +
+    WARNING_105("Unable to determine a valid port from the expression ''{0}''." +
             " Default port ''{1}'' will be used as the server port in the generated OpenAPI specification."),
-    WARNING_106("unable to determine a valid port for the 'mcp:Service'." +
-            " Default port ''{1}'' will be used as the server port in the generated OpenAPI specification.");
+    WARNING_106("Unable to determine a valid port for the 'mcp:Service'." +
+            " Default port ''{1}'' will be used as the server port in the generated OpenAPI specification."),
+    WARNING_107("Failed to generate the OpenAPI specification for the 'mcp:Service' due to an unexpected error:" +
+            " ''{0}''.");
 
     private final String message;
 

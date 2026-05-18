@@ -27,5 +27,6 @@ public enum DiagnosticCode {
     MCP_103,
     MCP_104,
     MCP_105,
-    MCP_106
+    MCP_106,
+    MCP_107
 }
