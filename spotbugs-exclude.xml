@@ -20,4 +20,8 @@
         <Class name="io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask"/>
         <Bug pattern="UWF_FIELD_NOT_INITIALIZED_IN_CONSTRUCTOR"/>
     </Match>
+    <Match>
+        <Class name="io.ballerina.stdlib.mcp.plugin.ServersMapper"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
 </FindBugsFilter>

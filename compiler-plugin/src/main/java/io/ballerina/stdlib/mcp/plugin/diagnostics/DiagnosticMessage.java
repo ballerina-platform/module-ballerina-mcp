@@ -27,7 +27,11 @@ public enum DiagnosticMessage {
     ERROR_102("Parameter ''{1}'' in function ''{0}'' must be of type 'anydata'. " +
             "Only the first parameter can be of type 'mcp:Session'."),
     ERROR_103("Session parameter ''{1}'' in function ''{0}'' must be the first parameter."),
-    ERROR_104("Session parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'.");
+    ERROR_104("Session parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'."),
+    WARNING_105("unable to determine a valid port from the expression ''{0}''." +
+            " Default port ''{1}'' will be used as the server port in the generated OpenAPI specification."),
+    WARNING_106("unable to determine a valid port for the 'mcp:Service'." +
+            " Default port ''{1}'' will be used as the server port in the generated OpenAPI specification.");
 
     private final String message;
 

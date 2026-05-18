@@ -1,0 +1,13 @@
+[package]
+org = "ballerina"
+name = "mcp_tests"
+version = "@toml.version@"
+
+[build-options]
+observabilityIncluded = true
+
+[[platform.java21.dependency]]
+groupId = "io.ballerina.stdlib"
+artifactId = "mcp-native"
+version = "@toml.version@"
+path = "../../../../../../../native/build/libs/mcp-native-@project.version@.jar"
