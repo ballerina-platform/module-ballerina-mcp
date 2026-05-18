@@ -71,7 +71,7 @@ public class ServersMapper {
     private static final String SERVER = "server";
     private static final String PORT = "port";
     private static final String HOST_FIELD_NAME = "host";
-    private static final String LISTEN_ON = "listenOn";
+    private static final String LISTEN_TO = "listenTo";
     private static final String DEFAULT_HTTP_PORT = "9090";
     private static final String PORT_443 = "443";
     private static final String HTTPS_LOCALHOST = "https://localhost";
@@ -215,7 +215,7 @@ public class ServersMapper {
                     port = getValidPort(firstArg);
                 } else if (firstArg instanceof NamedArgumentNode namedArg
                         && (namedArg.argumentName().name().text().strip().equals(PORT)
-                        || namedArg.argumentName().name().text().strip().equals(LISTEN_ON))) {
+                        || namedArg.argumentName().name().text().strip().equals(LISTEN_TO))) {
                     Optional<Symbol> symbol = semanticModel.symbol(namedArg.expression());
                     if (symbol.isPresent() && symbol.get() instanceof VariableSymbol
                             && endpoints.containsKey(namedArg.expression().toSourceCode().strip())) {

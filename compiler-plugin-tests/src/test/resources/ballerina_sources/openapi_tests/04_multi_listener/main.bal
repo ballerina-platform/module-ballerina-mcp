@@ -16,18 +16,19 @@
 
 import ballerina/mcp;
 
-listener mcp:Listener mcpListener = new (9090);
+listener mcp:Listener listenerOne = new (9095);
+listener mcp:Listener listenerTwo = new (9096);
 
 @mcp:ServiceConfig {
     info: {
-        name: "Calculator Service",
+        name: "Multi Listener Service",
         version: "1.0.0"
     },
     sessionMode: mcp:STATELESS
 }
-service mcp:Service /mcp on mcpListener {
+service mcp:Service /mcp on listenerOne, listenerTwo {
     @mcp:Tool
-    remote function add(int a, int b) returns int {
-        return a + b;
+    remote function ping() returns string {
+        return "pong";
     }
 }
