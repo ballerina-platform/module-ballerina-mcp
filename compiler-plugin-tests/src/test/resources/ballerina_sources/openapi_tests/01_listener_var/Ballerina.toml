@@ -1,0 +1,13 @@
+[package]
+org = "ballerina"
+name = "mcp_tests"
+version = "1.0.4"
+
+[build-options]
+observabilityIncluded = true
+
+[[platform.java21.dependency]]
+groupId = "io.ballerina.stdlib"
+artifactId = "mcp-native"
+version = "1.0.4"
+path = "../../../../../../../native/build/libs/mcp-native-1.0.4-SNAPSHOT.jar"

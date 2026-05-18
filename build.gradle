@@ -96,7 +96,21 @@ subprojects {
     }
 }
 
-def moduleVersion = project.version.replace("-SNAPSHOT", "")   
+def stripBallerinaExtensionVersion(String extVersion) {
+    if (extVersion.matches(project.ext.timestampedVersionRegex)) {
+        def splitVersion = extVersion.split('-')
+        if (splitVersion.length > 3) {
+            def strippedValues = splitVersion[0..-4]
+            return strippedValues.join('-')
+        } else {
+            return extVersion
+        }
+    } else {
+        return extVersion.replace("${project.ext.snapshotVersion}", "")
+    }
+}
+
+def moduleVersion = project.version.replace("-SNAPSHOT", "")
 
 release {
     failOnPublishNeeded = false
@@ -115,5 +129,6 @@ release {
 task build {
     dependsOn(':mcp-ballerina:build')
     dependsOn(':mcp-native:build')
+    dependsOn(':mcp-compiler-plugin-tests:test')
     dependsOn(':mcp-ballerina-tests:test')
 }
