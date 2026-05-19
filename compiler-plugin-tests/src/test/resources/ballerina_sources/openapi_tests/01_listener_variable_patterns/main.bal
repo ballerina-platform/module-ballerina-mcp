@@ -38,6 +38,12 @@ listener mcp:Listener mappingHostListener = new (httpListenerMappingHost);
 // mcp:Listener taking the default http:Listener.
 listener mcp:Listener defaultHttpListener = new (check http:getDefaultListener());
 
+// Port 443 — exercises the HTTPS host default branch in `buildServer`.
+listener mcp:Listener httpsListener = new (443);
+
+// Root path — exercises the `/` branch in `constructFileName`.
+listener mcp:Listener rootListener = new (9100);
+
 @mcp:ServiceConfig {info: {name: "S", version: "1.0.0"}, sessionMode: mcp:STATELESS}
 service mcp:Service /positional on positionalListener {
     @mcp:Tool remote function ping() returns string => "pong";
@@ -65,5 +71,15 @@ service mcp:Service /mapping_host on mappingHostListener {
 
 @mcp:ServiceConfig {info: {name: "S", version: "1.0.0"}, sessionMode: mcp:STATELESS}
 service mcp:Service /default_listener on defaultHttpListener {
+    @mcp:Tool remote function ping() returns string => "pong";
+}
+
+@mcp:ServiceConfig {info: {name: "S", version: "1.0.0"}, sessionMode: mcp:STATELESS}
+service mcp:Service /https_listener on httpsListener {
+    @mcp:Tool remote function ping() returns string => "pong";
+}
+
+@mcp:ServiceConfig {info: {name: "S", version: "1.0.0"}, sessionMode: mcp:STATELESS}
+service mcp:Service / on rootListener {
     @mcp:Tool remote function ping() returns string => "pong";
 }

@@ -68,7 +68,10 @@ public class OpenAPIGeneratorTest {
                 "indirection_openapi.yaml",
                 "named_host_openapi.yaml",
                 "mapping_host_openapi.yaml",
-                "default_listener_openapi.yaml"
+                "default_listener_openapi.yaml",
+                "https_listener_openapi.yaml",
+                // Root-path service falls back to the bal file name in `constructFileName`.
+                "main_openapi.yaml"
         };
         for (String yaml : expected) {
             Path file = RESOURCE_DIRECTORY.resolve(packagePath + "/target/openapi/" + yaml);
@@ -128,6 +131,21 @@ public class OpenAPIGeneratorTest {
             long yamlCount = entries.filter(p -> p.toString().endsWith(".yaml")).count();
             Assert.assertEquals(yamlCount, 2,
                     "Expected one OpenAPI file per service (with disambiguating suffix)");
+        }
+    }
+
+    @Test
+    public void testOpenAPIGenerationSkippedWhenCompileErrorsPresent() throws IOException {
+        String packagePath = "06_compile_error";
+        DiagnosticResult diagnosticResult = getDiagnosticResult(packagePath);
+        Assert.assertTrue(diagnosticResult.errorCount() > 0,
+                "Expected at least one compile error for package: " + packagePath);
+        Path openApiDir = RESOURCE_DIRECTORY.resolve(packagePath + "/target/openapi");
+        if (Files.exists(openApiDir)) {
+            try (Stream<Path> entries = Files.list(openApiDir)) {
+                Assert.assertEquals(entries.count(), 0,
+                        "No OpenAPI files should be generated when the package has compile errors");
+            }
         }
     }
 
