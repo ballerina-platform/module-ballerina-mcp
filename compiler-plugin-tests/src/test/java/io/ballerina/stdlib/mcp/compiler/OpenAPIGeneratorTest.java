@@ -39,6 +39,8 @@ import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic
@@ -56,31 +58,48 @@ public class OpenAPIGeneratorTest {
     private static final Path DISTRIBUTION_PATH = Paths.get("../", "target", "ballerina-runtime").toAbsolutePath();
 
     @Test
-    public void testOpenAPIGenerationForListenerVariablePatterns() {
+    public void testOpenAPIGenerationForListenerVariablePatterns() throws IOException {
         String packagePath = "01_listener_variable_patterns";
         DiagnosticResult diagnosticResult = getDiagnosticResult(packagePath);
         Assert.assertEquals(diagnosticResult.errorCount(), 0,
                 "Expected no errors for package: " + packagePath);
-        // One YAML per service. Each service path determines the YAML file name.
-        String[] expected = {
-                "positional_openapi.yaml",
-                "named_arg_openapi.yaml",
-                "indirection_openapi.yaml",
-                "named_host_openapi.yaml",
-                "mapping_host_openapi.yaml",
-                "default_listener_openapi.yaml",
-                "https_listener_openapi.yaml",
+
+        // For each service: assert YAML exists and carries the right port, host, and base path.
+        Map<String, ExpectedServer> expected = Map.of(
+                "positional_openapi.yaml", new ExpectedServer("9090", "http://localhost", "/positional"),
+                "named_arg_openapi.yaml", new ExpectedServer("9091", "http://localhost", "/named_arg"),
+                "indirection_openapi.yaml", new ExpectedServer("9092", "http://localhost", "/indirection"),
+                "named_host_openapi.yaml", new ExpectedServer("9093", "127.0.0.1", "/named_host"),
+                "mapping_host_openapi.yaml", new ExpectedServer("9094", "127.0.0.2", "/mapping_host"),
+                // `check http:getDefaultListener()` matches the regex heuristic → default 9090.
+                "default_listener_openapi.yaml", new ExpectedServer("9090", "http://localhost", "/default_listener"),
+                // Port 443 → HTTPS default host.
+                "https_listener_openapi.yaml", new ExpectedServer("443", "https://localhost", "/https_listener"),
                 // Root-path service falls back to the bal file name in `constructFileName`.
-                "main_openapi.yaml"
-        };
-        for (String yaml : expected) {
-            Path file = RESOURCE_DIRECTORY.resolve(packagePath + "/target/openapi/" + yaml);
-            Assert.assertTrue(Files.exists(file), "OpenAPI file not generated: " + yaml);
+                "main_openapi.yaml", new ExpectedServer("9100", "http://localhost", "/")
+        );
+        Path openApiDir = RESOURCE_DIRECTORY.resolve(packagePath + "/target/openapi");
+        for (Map.Entry<String, ExpectedServer> entry : expected.entrySet()) {
+            Path file = openApiDir.resolve(entry.getKey());
+            Assert.assertTrue(Files.exists(file), "OpenAPI file not generated: " + entry.getKey());
+            assertSingleServer(file, entry.getValue());
         }
     }
 
+    private record ExpectedServer(String port, String host, String basePath) { }
+
+    private static void assertSingleServer(Path yamlFile, ExpectedServer expected) throws IOException {
+        String content = Files.readString(yamlFile);
+        Assert.assertTrue(content.contains("url: \"{server}:{port}" + expected.basePath() + "\""),
+                "Expected base path " + expected.basePath() + " in " + yamlFile);
+        Assert.assertTrue(content.contains("default: " + expected.host()),
+                "Expected host " + expected.host() + " in " + yamlFile);
+        Assert.assertTrue(content.contains("default: \"" + expected.port() + "\""),
+                "Expected port " + expected.port() + " in " + yamlFile);
+    }
+
     @Test
-    public void testOpenAPIGenerationForAnonymousListener() {
+    public void testOpenAPIGenerationForAnonymousListener() throws IOException {
         String packagePath = "02_anonymous_listener";
         DiagnosticResult diagnosticResult = getDiagnosticResult(packagePath);
         Assert.assertEquals(diagnosticResult.errorCount(), 0,
@@ -88,10 +107,11 @@ public class OpenAPIGeneratorTest {
         Path openApiFile = RESOURCE_DIRECTORY.resolve(packagePath + "/target/openapi/api_v1_openapi.yaml");
         Assert.assertTrue(Files.exists(openApiFile),
                 "OpenAPI file not generated for package: " + packagePath);
+        assertSingleServer(openApiFile, new ExpectedServer("8080", "http://localhost", "/api/v1"));
     }
 
     @Test
-    public void testOpenAPIGenerationEmitsWarningForPortVariable() {
+    public void testOpenAPIGenerationEmitsWarningForPortVariable() throws IOException {
         String packagePath = "03_port_variable_warning";
         DiagnosticResult diagnosticResult = getDiagnosticResult(packagePath);
         Assert.assertEquals(diagnosticResult.errorCount(), 0,
@@ -106,10 +126,12 @@ public class OpenAPIGeneratorTest {
         Path openApiFile = RESOURCE_DIRECTORY.resolve(packagePath + "/target/openapi/mcp_openapi.yaml");
         Assert.assertTrue(Files.exists(openApiFile),
                 "OpenAPI file not generated for package: " + packagePath);
+        // Port could not be resolved → falls back to DEFAULT_HTTP_PORT 9090.
+        assertSingleServer(openApiFile, new ExpectedServer("9090", "http://localhost", "/mcp"));
     }
 
     @Test
-    public void testOpenAPIGenerationForMultipleListeners() {
+    public void testOpenAPIGenerationForMultipleListeners() throws IOException {
         String packagePath = "04_multi_listener";
         DiagnosticResult diagnosticResult = getDiagnosticResult(packagePath);
         Assert.assertEquals(diagnosticResult.errorCount(), 0,
@@ -117,6 +139,14 @@ public class OpenAPIGeneratorTest {
         Path openApiFile = RESOURCE_DIRECTORY.resolve(packagePath + "/target/openapi/mcp_openapi.yaml");
         Assert.assertTrue(Files.exists(openApiFile),
                 "OpenAPI file not generated for package: " + packagePath);
+        // Multiple listeners are merged into one server entry with an `enum` listing all ports.
+        String content = Files.readString(openApiFile);
+        Assert.assertTrue(content.contains("url: \"{server}:{port}/mcp\""),
+                "Expected merged server URL with /mcp base path");
+        for (String port : List.of("9095", "9096")) {
+            Assert.assertTrue(content.contains("\"" + port + "\""),
+                    "Expected port " + port + " in merged port enum");
+        }
     }
 
     @Test
