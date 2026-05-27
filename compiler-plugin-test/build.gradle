@@ -29,6 +29,7 @@ checkstyle {
 }
 
 checkstyleTest.dependsOn(":checkstyle:downloadCheckstyleRuleFiles")
+compileTestJava.dependsOn(":mcp-compiler-plugin:copyOpenApiJar")
 
 spotbugsTest {
     def classLoader = plugins["com.github.spotbugs"].class.classLoader
