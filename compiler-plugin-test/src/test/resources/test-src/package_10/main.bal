@@ -26,7 +26,7 @@ import ballerina/mcp;
     },
     sessionMode: mcp:STATELESS
 }
-service mcp:AdvancedService /mcp on mcp:Listener(9091) {
+service mcp:AdvancedService /mcp on new mcp:Listener(9091) {
 
     remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {

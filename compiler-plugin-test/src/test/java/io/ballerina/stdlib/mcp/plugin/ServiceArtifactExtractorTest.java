@@ -129,6 +129,37 @@ public class ServiceArtifactExtractorTest {
         }
     }
 
+    @Test
+    public void testExportEndpointsSkipsNonMcpServices() throws Exception {
+        Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_11");
+        try {
+            executeBallerinaCommand(projectDirPath, true);
+
+            Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
+            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
+            long mcpStampedCount;
+            try (Stream<Path> paths = Files.walk(artifactDir)) {
+                mcpStampedCount = paths
+                        .filter(p -> safeFileName(p).endsWith(ENDPOINT_SUFFIX))
+                        .filter(this::hasMcpType)
+                        .count();
+            }
+            Assert.assertEquals(mcpStampedCount, 1,
+                    "MCP plugin must emit endpoint.yaml only for the MCP service, " +
+                            "not for the co-located non-MCP service");
+        } finally {
+            deleteDirectories(projectDirPath);
+        }
+    }
+
+    private boolean hasMcpType(Path yamlFile) {
+        try (Stream<String> lines = Files.lines(yamlFile)) {
+            return lines.map(String::trim).anyMatch("type: \"mcp\""::equals);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     private String safeFileName(Path path) {
         Path fileName = path == null ? null : path.getFileName();
         return Objects.toString(fileName, "");
