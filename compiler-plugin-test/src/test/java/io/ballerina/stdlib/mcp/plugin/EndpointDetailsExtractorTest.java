@@ -20,7 +20,6 @@ package io.ballerina.stdlib.mcp.plugin;
 
 import io.ballerina.projects.BuildOptions;
 import io.ballerina.projects.DiagnosticResult;
-import io.ballerina.projects.Project;
 import io.ballerina.projects.directory.BuildProject;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -97,7 +96,7 @@ public class EndpointDetailsExtractorTest {
             Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
             long count;
             try (Stream<Path> paths = Files.list(artifactDir)) {
-                count = paths.filter(p -> p.getFileName().toString().endsWith("_endpoint.yaml")).count();
+                count = paths.filter(p -> safeFileName(p).endsWith("_endpoint.yaml")).count();
             }
             Assert.assertEquals(count, 2, "Expected 2 endpoint YAML files for multiple services");
         } finally {
@@ -137,7 +136,10 @@ public class EndpointDetailsExtractorTest {
             executeBallerinaCommand(projectDirPath, true);
             Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
             Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            long count = Files.list(artifactDir).filter(p -> p.getFileName().toString().endsWith("_endpoint.yaml")).count();
+            long count;
+            try (Stream<Path> paths = Files.list(artifactDir)) {
+                count = paths.filter(p -> safeFileName(p).endsWith("_endpoint.yaml")).count();
+            }
             Assert.assertTrue(count >= 1, "Should generate at least one endpoint YAML for named listener");
         } finally {
             deleteDirectories(projectDirPath);
@@ -151,11 +153,19 @@ public class EndpointDetailsExtractorTest {
             executeBallerinaCommand(projectDirPath, true);
             Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
             Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            long count = Files.list(artifactDir).filter(p -> p.getFileName().toString().endsWith("_endpoint.yaml")).count();
+            long count;
+            try (Stream<Path> paths = Files.list(artifactDir)) {
+                count = paths.filter(p -> safeFileName(p).endsWith("_endpoint.yaml")).count();
+            }
             Assert.assertTrue(count >= 1, "Should generate at least one endpoint YAML for implicit new listener");
         } finally {
             deleteDirectories(projectDirPath);
         }
+    }
+
+    private static String safeFileName(Path path) {
+        Path fileName = path == null ? null : path.getFileName();
+        return Objects.toString(fileName, "");
     }
 
     private static void assertEndpointPort(Path endpointYaml, int expectedPort) throws IOException {
