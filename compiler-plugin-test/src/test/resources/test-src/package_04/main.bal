@@ -21,13 +21,15 @@ import ballerina/mcp;
 
 listener mcp:Listener mcpListener = check new (9090);
 
+int badValue = "this is not an int";
+
 @mcp:ServiceConfig {
     info: {
         name: "MCP Crypto Server",
         version: "1.0.0"
-    },
+    }
 }
-service mcp:AdvancedService /mcp {
+service mcp:AdvancedService /mcp on mcpListener {
 
     remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {

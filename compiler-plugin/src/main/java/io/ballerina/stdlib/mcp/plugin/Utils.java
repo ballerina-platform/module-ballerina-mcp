@@ -29,6 +29,7 @@ import io.ballerina.compiler.api.symbols.ServiceDeclarationSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
 import io.ballerina.compiler.api.symbols.SymbolKind;
 import io.ballerina.compiler.api.symbols.TypeDescKind;
+import io.ballerina.compiler.api.symbols.TypeReferenceTypeSymbol;
 import io.ballerina.compiler.api.symbols.TypeSymbol;
 import io.ballerina.compiler.api.symbols.UnionTypeSymbol;
 import io.ballerina.compiler.api.values.ConstantValue;
@@ -47,6 +48,7 @@ import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic;
 import io.ballerina.tools.diagnostics.Diagnostic;
+import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 import io.ballerina.tools.diagnostics.Location;
 
 import java.util.Optional;
@@ -55,6 +57,7 @@ import java.util.Optional;
  * Util class for the compiler plugin.
  */
 public class Utils {
+
     public static final String BALLERINA_ORG = "ballerina";
     public static final String TOOL_ANNOTATION_NAME = "Tool";
     public static final String MCP_PACKAGE_NAME = "mcp";
@@ -128,7 +131,6 @@ public class Utils {
     public static String escapeDoubleQuotes(String input) {
         return input.replace("\"", "\\\"");
     }
-
 
     public static String addDoubleQuotes(String input) {
         return "\"" + input + "\"";
@@ -405,6 +407,52 @@ public class Utils {
         String identifier = qualifiedRef.identifier().text();
 
         return MCP_PACKAGE_NAME.equals(modulePrefix) && SERVICE_CONFIG_ANNOTATION_NAME.equals(identifier);
+    }
+
+    /**
+     * Checks whether the semantic model in the given context contains any error-severity diagnostic.
+     *
+     * @param context the analysis context
+     * @return {@code true} if at least one diagnostic is of severity {@code ERROR}
+     */
+    public static boolean hasCompilationErrors(SyntaxNodeAnalysisContext context) {
+        for (Diagnostic diagnostic : context.semanticModel().diagnostics()) {
+            if (diagnostic.diagnosticInfo().severity() == DiagnosticSeverity.ERROR) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks whether the service in the analysis context is bound to a {@code ballerina/mcp} listener.
+     *
+     * @param context the analysis context
+     * @return {@code true} if at least one listener type belongs to the {@code ballerina/mcp} module
+     */
+    public static boolean isMcpService(SyntaxNodeAnalysisContext context) {
+        if (!(context.node() instanceof ServiceDeclarationNode)) {
+            return false;
+        }
+        Optional<Symbol> symbol = context.semanticModel().symbol(context.node());
+        if (symbol.isEmpty() || !(symbol.get() instanceof ServiceDeclarationSymbol serviceSymbol)) {
+            return false;
+        }
+        return serviceSymbol.listenerTypes().stream().anyMatch(Utils::isMcpListenerType);
+    }
+
+    private static boolean isMcpListenerType(TypeSymbol listenerType) {
+        if (listenerType.typeKind() == TypeDescKind.UNION) {
+            return ((UnionTypeSymbol) listenerType).memberTypeDescriptors().stream()
+                    .filter(t -> t instanceof TypeReferenceTypeSymbol)
+                    .map(t -> (TypeReferenceTypeSymbol) t)
+                    .anyMatch(t -> t.getModule().map(Utils::isMcpModuleSymbol).orElse(false));
+        }
+        if (listenerType.typeKind() == TypeDescKind.TYPE_REFERENCE) {
+            return ((TypeReferenceTypeSymbol) listenerType).typeDescriptor().getModule()
+                    .map(Utils::isMcpModuleSymbol).orElse(false);
+        }
+        return false;
     }
 
     private static boolean isListenerFromMcpModule(TypeSymbol typeSymbol) {

@@ -18,7 +18,6 @@ import ballerina/crypto;
 import ballerina/lang.array;
 import ballerina/log;
 import ballerina/mcp;
-import ballerina/time;
 
 listener mcp:Listener mcpListener = check new (9092);
 listener mcp:Listener mcpListener1 = check new (9091);
@@ -43,81 +42,17 @@ listener mcp:Listener mcpListener1 = check new (9091);
         ]
     }
 }
-service mcp:Service /mcp on mcpListener {
+service mcp:AdvancedService /mcp on mcpListener {
 
-    @mcp:Tool {
-        description: "Add an item to the shopping cart"
-    }
-    remote function addToCart(mcp:Session session, string productName, decimal price) returns string|error {
-        log:printInfo(string `Adding ${productName} (${price}) to cart for session ${session.getSessionId()}`);
-
-        // Get current cart or create new one
-        CartItem[] currentCart = [];
-        if session.hasKey("cart") {
-            currentCart = check session.getWithType("cart");
-        }
-
-        // Add new item
-        CartItem newItem = {
-            productName: productName,
-            price: price,
-            addedAt: time:utcToString(time:utcNow())
-        };
-        currentCart.push(newItem);
-
-        // Update session
-        session.set("cart", currentCart);
-
-        return string `Added ${productName} to cart. Total items: ${currentCart.length()}`;
+    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+        return {tools: []};
     }
 
-    @mcp:Tool {
-        description: "View all items in the current shopping cart"
-    }
-    remote function viewCart(mcp:Session session) returns CartView|error {
-        log:printInfo(string `Viewing cart for session ${session.getSessionId()}`);
-
-        CartItem[] cart = [];
-        if session.hasKey("cart") {
-            cart = check session.getWithType("cart");
-        }
-
-        decimal total = 0.0;
-        foreach CartItem item in cart {
-            total += item.price;
-        }
-
-        return {
-            sessionId: session.getSessionId(),
-            items: cart,
-            totalItems: cart.length(),
-            cartTotal: total
-        };
-    }
-
-    @mcp:Tool {
-        description: "Clear all items from the shopping cart"
-    }
-    remote function clearCart(mcp:Session session) returns string|error {
-        log:printInfo(string `Clearing cart for session ${session.getSessionId()}`);
-
-        session.set("cart", <CartItem[]>[]);
-        return "Cart cleared successfully";
+    remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session)
+            returns mcp:CallToolResult|mcp:ServerError {
+        return error mcp:ServerError("not implemented");
     }
 }
-
-type CartItem record {|
-    string productName;
-    decimal price;
-    string addedAt;
-|};
-
-type CartView record {|
-    string sessionId;
-    CartItem[] items;
-    int totalItems;
-    decimal cartTotal;
-|};
 
 
 @mcp:ServiceConfig {

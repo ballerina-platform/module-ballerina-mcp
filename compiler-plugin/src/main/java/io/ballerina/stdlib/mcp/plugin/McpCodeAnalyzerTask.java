@@ -18,14 +18,6 @@
 
 package io.ballerina.stdlib.mcp.plugin;
 
-import io.ballerina.compiler.api.symbols.ModuleSymbol;
-import io.ballerina.compiler.api.symbols.ServiceDeclarationSymbol;
-import io.ballerina.compiler.api.symbols.Symbol;
-import io.ballerina.compiler.api.symbols.TypeDescKind;
-import io.ballerina.compiler.api.symbols.TypeReferenceTypeSymbol;
-import io.ballerina.compiler.api.symbols.TypeSymbol;
-import io.ballerina.compiler.api.symbols.UnionTypeSymbol;
-import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.projects.BuildOptions;
 import io.ballerina.projects.Package;
 import io.ballerina.projects.Project;
@@ -38,16 +30,16 @@ import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.Optional;
 
-import static io.ballerina.stdlib.mcp.plugin.Utils.BALLERINA_ORG;
-import static io.ballerina.stdlib.mcp.plugin.Utils.MCP_PACKAGE_NAME;
+import static io.ballerina.stdlib.mcp.plugin.Utils.hasCompilationErrors;
+import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpService;
 
 /**
- * Analysis task that writes an endpoint YAML for each MCP service when the
- * {@code --export-endpoints} build option is enabled.
+ * Analysis task that writes an endpoint YAML for each MCP service when the {@code --export-endpoints} build option is
+ * enabled.
  */
 public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
+
     private static final PrintStream outStream = System.out;
 
     /**
@@ -57,7 +49,7 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
      */
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
-        if (!isMcpService(context)) {
+        if (hasCompilationErrors(context) || !isMcpService(context)) {
             return;
         }
         Package currentPackage = context.currentPackage();
@@ -74,8 +66,8 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
     }
 
     /**
-     * Checks whether the {@code --export-endpoints} build option is enabled, reporting a warning
-     * on Ballerina versions that do not support the option.
+     * Checks whether the {@code --export-endpoints} build option is enabled, reporting a warning on Ballerina versions
+     * that do not support the option.
      *
      * @param buildOptions the project build options
      * @param context      the analysis context used to report diagnostics
@@ -99,39 +91,4 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
         return isExportEndpoints;
     }
 
-    /**
-     * Checks whether the service in the analysis context is bound to a {@code ballerina/mcp} listener.
-     *
-     * @param context the analysis context
-     * @return {@code true} if at least one listener type belongs to the {@code ballerina/mcp} module
-     */
-    private boolean isMcpService(SyntaxNodeAnalysisContext context) {
-        if (!(context.node() instanceof ServiceDeclarationNode)) {
-            return false;
-        }
-        Optional<Symbol> symbol = context.semanticModel().symbol(context.node());
-        if (symbol.isEmpty() || !(symbol.get() instanceof ServiceDeclarationSymbol serviceSymbol)) {
-            return false;
-        }
-        return serviceSymbol.listenerTypes().stream().anyMatch(McpCodeAnalyzerTask::isMcpListenerType);
-    }
-
-    private static boolean isMcpListenerType(TypeSymbol listenerType) {
-        if (listenerType.typeKind() == TypeDescKind.UNION) {
-            return ((UnionTypeSymbol) listenerType).memberTypeDescriptors().stream()
-                    .filter(t -> t instanceof TypeReferenceTypeSymbol)
-                    .map(t -> (TypeReferenceTypeSymbol) t)
-                    .anyMatch(t -> t.getModule().map(McpCodeAnalyzerTask::isMcpModule).orElse(false));
-        }
-        if (listenerType.typeKind() == TypeDescKind.TYPE_REFERENCE) {
-            return ((TypeReferenceTypeSymbol) listenerType).typeDescriptor().getModule()
-                    .map(McpCodeAnalyzerTask::isMcpModule).orElse(false);
-        }
-        return false;
-    }
-
-    private static boolean isMcpModule(ModuleSymbol moduleSymbol) {
-        return moduleSymbol.getName().map(MCP_PACKAGE_NAME::equals).orElse(false)
-                && BALLERINA_ORG.equals(moduleSymbol.id().orgName());
-    }
 }

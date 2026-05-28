@@ -68,7 +68,10 @@ public class ServiceArtifactExtractorTest {
 
             DiagnosticResult diagnostic = project.currentPackage().getCompilation().diagnosticResult();
 
-            Assert.assertTrue(diagnostic.hasErrors());
+            Assert.assertTrue(diagnostic.hasErrors(),
+                    "package_04 fixture is expected to have compilation errors");
+            Assert.assertTrue(Files.notExists(artifactDir),
+                    "Endpoint artifacts must not be emitted for a package with compilation errors");
         } finally {
             deleteDirectories(projectDirPath);
         }

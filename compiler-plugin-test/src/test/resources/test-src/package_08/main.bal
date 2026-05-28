@@ -14,7 +14,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/lang.array;
 import ballerina/log;
 import ballerina/mcp;
 import ballerina/time;

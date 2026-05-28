@@ -18,7 +18,6 @@ import ballerina/crypto;
 import ballerina/lang.array;
 import ballerina/log;
 import ballerina/mcp;
-import ballerina/time;
 
 listener mcp:Listener mcpListener1 = check new (9092);
 
