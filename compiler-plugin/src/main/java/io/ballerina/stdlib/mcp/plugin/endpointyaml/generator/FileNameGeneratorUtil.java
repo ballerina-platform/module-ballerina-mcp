@@ -42,6 +42,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * Generates normalized, collision-free output file names for the endpoint YAML artifacts,
+ * deriving the base name from the service's source file and base path.
+ */
 public class FileNameGeneratorUtil {
 
     private static final String SLASH = "/";
@@ -58,6 +62,11 @@ public class FileNameGeneratorUtil {
         this.context = context;
     }
 
+    /**
+     * Builds the base file name for the current service from its source file name and base path.
+     *
+     * @return the generated base file name
+     */
     public String getFileName() {
         SyntaxTree syntaxTree = context.syntaxTree();
         SemanticModel semanticModel = context.semanticModel();
@@ -137,6 +146,12 @@ public class FileNameGeneratorUtil {
         return basePath.toString();
     }
 
+    /**
+     * Normalizes a name by joining its alphanumeric segments with underscores.
+     *
+     * @param fileName the raw name
+     * @return the normalized name
+     */
     public static String getNormalizedFileName(String fileName) {
         String[] splitNames = fileName.split("[^a-zA-Z0-9]");
         if (splitNames.length > 0) {
@@ -147,6 +162,14 @@ public class FileNameGeneratorUtil {
         return fileName;
     }
 
+    /**
+     * Resolves the final file name within the target directory, prompting on the console or
+     * suffixing a counter when a file with the same name already exists.
+     *
+     * @param outPath  the target directory, may be {@code null}
+     * @param fileName the desired file name
+     * @return the resolved file name, possibly adjusted to avoid overwriting
+     */
     public static String resolveContractFileName(Path outPath, String fileName) {
         if (outPath != null && Files.exists(outPath)) {
             final File[] listFiles = new File(String.valueOf(outPath)).listFiles();

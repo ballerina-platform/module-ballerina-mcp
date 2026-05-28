@@ -38,11 +38,21 @@ import java.util.Optional;
 
 import static io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.EndpointYamlGenerator.unescapeIdentifier;
 
+/**
+ * Collects the listener, variable, and constant declarations of a single module so they
+ * can be resolved later while extracting endpoint details.
+ */
 public class ModuleMemberVisitor extends NodeVisitor {
     private final Map<String, VariableDeclaredValue> variableDeclarations = new LinkedHashMap<>();
     private final Map<String, ListenerDeclarationNode> listenerDeclarations = new LinkedHashMap<>();
     private final SemanticModel semanticModel;
 
+    /**
+     * The declared value of a variable or constant, along with whether it is configurable.
+     *
+     * @param value          the initializer expression as source text
+     * @param isConfigurable whether the declaration carries the {@code configurable} qualifier
+     */
     public record VariableDeclaredValue(String value, boolean isConfigurable) {
     }
 
@@ -103,6 +113,12 @@ public class ModuleMemberVisitor extends NodeVisitor {
         }
     }
 
+    /**
+     * Returns the listener declaration with the given name, if visited.
+     *
+     * @param listenerName the listener variable name
+     * @return the listener declaration, or empty if not found
+     */
     public Optional<ListenerDeclarationNode> getListenerDeclaration(String listenerName) {
         if (listenerDeclarations.containsKey(listenerName)) {
             return Optional.of(listenerDeclarations.get(listenerName));
@@ -110,6 +126,12 @@ public class ModuleMemberVisitor extends NodeVisitor {
         return Optional.empty();
     }
 
+    /**
+     * Returns the declared value of the variable or constant with the given name, if visited.
+     *
+     * @param variableName the variable or constant name
+     * @return the declared value, or empty if not found
+     */
     public Optional<VariableDeclaredValue> getVariableDeclaredValue(String variableName) {
         if (variableDeclarations.containsKey(variableName)) {
             return Optional.of(variableDeclarations.get(variableName));

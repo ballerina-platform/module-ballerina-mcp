@@ -28,14 +28,30 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Holds the {@link ModuleMemberVisitor} of each module in the package and resolves
+ * listener and variable declarations across module boundaries.
+ */
 public class PackageMemberVisitor extends NodeVisitor {
 
     private Map<String, ModuleMemberVisitor> moduleVisitors = new LinkedHashMap<>();
 
+    /**
+     * Replaces the tracked module visitors with the given mapping.
+     *
+     * @param moduleVisitors the module visitors keyed by module name
+     */
     public void setModuleVisitors(Map<String, ModuleMemberVisitor> moduleVisitors) {
         this.moduleVisitors = new LinkedHashMap<>(moduleVisitors);
     }
 
+    /**
+     * Registers a new visitor for the given module and returns the updated, unmodifiable mapping.
+     *
+     * @param moduleName    the module name
+     * @param semanticModel the semantic model of the module
+     * @return the updated module visitors keyed by module name
+     */
     public Map<String, ModuleMemberVisitor> createModuleVisitor(String moduleName,
                                                                 SemanticModel semanticModel) {
         ModuleMemberVisitor visitor = new ModuleMemberVisitor(semanticModel);
@@ -43,6 +59,12 @@ public class PackageMemberVisitor extends NodeVisitor {
         return Collections.unmodifiableMap(new LinkedHashMap<>(this.moduleVisitors));
     }
 
+    /**
+     * Returns the visitor for the given module, if present.
+     *
+     * @param moduleName the module name
+     * @return the module visitor, or empty if the module is not tracked
+     */
     public Optional<ModuleMemberVisitor> getModuleVisitor(String moduleName) {
         if (moduleVisitors.containsKey(moduleName)) {
             return Optional.of(moduleVisitors.get(moduleName));
@@ -50,11 +72,25 @@ public class PackageMemberVisitor extends NodeVisitor {
         return Optional.empty();
     }
 
+    /**
+     * Resolves a listener declaration by name within the given module.
+     *
+     * @param moduleName   the module name
+     * @param listenerName the listener variable name
+     * @return the listener declaration, or empty if not found
+     */
     public Optional<ListenerDeclarationNode> getListenerDeclaration(String moduleName, String listenerName) {
         return getModuleVisitor(moduleName)
                 .flatMap(moduleVisitor -> moduleVisitor.getListenerDeclaration(listenerName));
     }
 
+    /**
+     * Resolves the declared value of a variable or constant within the given module.
+     *
+     * @param moduleName   the module name
+     * @param variableName the variable or constant name
+     * @return the declared value, or empty if not found
+     */
     public Optional<ModuleMemberVisitor.VariableDeclaredValue> getVariableDeclaredValue(String moduleName,
                                                                                         String variableName) {
         return getModuleVisitor(moduleName)

@@ -31,8 +31,18 @@ import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 import java.io.IOException;
 import java.io.PrintStream;
 
+/**
+ * Analysis task that writes an endpoint YAML for each MCP service when the
+ * {@code --export-endpoints} build option is enabled.
+ */
 public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
     private static final PrintStream outStream = System.out;
+
+    /**
+     * Generates the endpoint YAML for the analyzed service when endpoint export is enabled.
+     *
+     * @param context the syntax node analysis context for the service declaration
+     */
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
         Package currentPackage = context.currentPackage();
@@ -48,6 +58,14 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
         }
     }
 
+    /**
+     * Checks whether the {@code --export-endpoints} build option is enabled, reporting a warning
+     * on Ballerina versions that do not support the option.
+     *
+     * @param buildOptions the project build options
+     * @param context      the analysis context used to report diagnostics
+     * @return {@code true} if endpoint export is enabled, {@code false} otherwise
+     */
     private boolean isExportEndpoints(BuildOptions buildOptions, SyntaxNodeAnalysisContext context) {
         boolean isExportEndpoints = false;
         // Ensure backward compatibility with older ballerina-lang versions

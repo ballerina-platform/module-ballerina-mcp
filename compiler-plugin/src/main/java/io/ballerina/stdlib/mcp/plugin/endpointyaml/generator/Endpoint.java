@@ -18,6 +18,9 @@
 
 package io.ballerina.stdlib.mcp.plugin.endpointyaml.generator;
 
+/**
+ * Holds the extracted metadata of an MCP service endpoint: port, base path, and type.
+ */
 public class Endpoint {
     private final int port;
     private final String basePath;

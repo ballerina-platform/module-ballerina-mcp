@@ -62,6 +62,10 @@ import java.util.Optional;
 import static io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.FileNameGeneratorUtil.resolveContractFileName;
 
 
+/**
+ * Extracts the endpoint metadata (port, base path, type) of an MCP service declaration and
+ * serializes it to an endpoint YAML file under the project's {@code target/artifact} directory.
+ */
 public class EndpointYamlGenerator {
     private final ServiceDeclarationNode node;
     private final SyntaxNodeAnalysisContext context;
@@ -83,6 +87,11 @@ public class EndpointYamlGenerator {
     private record ListenerResolution(Optional<ParenthesizedArgList> argList) {
     }
 
+    /**
+     * Creates a generator for the service declaration in the given analysis context.
+     *
+     * @param context the analysis context whose node is the service declaration
+     */
     public EndpointYamlGenerator(SyntaxNodeAnalysisContext context) {
         this.node = (ServiceDeclarationNode) context.node();
         this.context = context;
@@ -91,6 +100,11 @@ public class EndpointYamlGenerator {
         this.schemaFileName = fileNameGeneratorUtil.getFileName();
     }
 
+    /**
+     * Resolves the endpoint metadata of the service by extracting its listener port and base path.
+     *
+     * @return the extracted endpoint
+     */
     public Endpoint getEndpoint() {
         String moduleName = context.moduleId().moduleName();
         ensureModuleVisited(moduleName);
@@ -121,6 +135,13 @@ public class EndpointYamlGenerator {
 
     }
 
+    /**
+     * Resolves the listener argument list of the service, handling inline {@code new} expressions
+     * as well as references to named listener declarations.
+     *
+     * @param moduleName the module of the service declaration
+     * @return the resolved listener information
+     */
     private ListenerInfo resolveListenerInfo(String moduleName) {
         Optional<ParenthesizedArgList> argList = Optional.empty();
         SemanticModel semanticModel = context.semanticModel();
@@ -199,6 +220,13 @@ public class EndpointYamlGenerator {
         };
     }
 
+    /**
+     * Resolves the port from the listener argument list, checking the positional argument first
+     * and then any {@code port} named argument.
+     *
+     * @param argListOpt the listener argument list, if available
+     * @return the resolved port, or {@code 0} if it cannot be determined
+     */
     private int resolvePort(Optional<ParenthesizedArgList> argListOpt) {
         if (argListOpt.isEmpty()) {
             return 0;
@@ -253,6 +281,11 @@ public class EndpointYamlGenerator {
         return basePath.toString();
     }
 
+    /**
+     * Writes the endpoint metadata of the service to a YAML file under {@code target/artifact}.
+     *
+     * @throws IOException if the artifact directory cannot be created
+     */
     public void writeEndpointYaml() throws IOException {
         Endpoint ep = getEndpoint();
         Path outPath = resolveOutputPath();
@@ -298,6 +331,16 @@ public class EndpointYamlGenerator {
         return getPortValue(expression, false, semanticModel, context);
     }
 
+    /**
+     * Resolves a port expression to its literal value, following variable and constant references
+     * and reporting diagnostics for configurable ports without a usable default.
+     *
+     * @param expression         the port expression
+     * @param isConfigurablePort whether the port is reached through a configurable declaration
+     * @param semanticModel      the semantic model
+     * @param context            the analysis context used to report diagnostics
+     * @return the resolved port literal, or empty if it cannot be determined
+     */
     private Optional<String> getPortValue(ExpressionNode expression, boolean isConfigurablePort,
                                           SemanticModel semanticModel, SyntaxNodeAnalysisContext context) {
         if (expression.kind().equals(SyntaxKind.NUMERIC_LITERAL)) {
@@ -384,11 +427,24 @@ public class EndpointYamlGenerator {
         context.reportDiagnostic(DiagnosticFactory.createDiagnostic(diagnosticInfo, context.node().location()));
     }
 
+    /**
+     * Unescapes a Ballerina identifier, stripping escape characters and quoting.
+     *
+     * @param parameterName the raw identifier text
+     * @return the unescaped identifier
+     */
     public static String unescapeIdentifier(String parameterName) {
         String unescapedParamName = IdentifierUtils.unescapeBallerina(parameterName);
         return unescapedParamName.replace("\\\\", "").replace("'", "");
     }
 
+    /**
+     * Returns the name of the module that owns the symbol of the given node.
+     *
+     * @param semanticModel the semantic model
+     * @param node          the node whose owning module is resolved
+     * @return the module name, or an empty string if it cannot be resolved
+     */
     public static String getModuleName(SemanticModel semanticModel, Node node) {
         Optional<Symbol> symbol = semanticModel.symbol(node);
         if (symbol.isEmpty()) {
@@ -397,6 +453,12 @@ public class EndpointYamlGenerator {
         return getModuleName(symbol.get());
     }
 
+    /**
+     * Returns the name of the module that owns the given symbol.
+     *
+     * @param symbol the symbol whose owning module is resolved
+     * @return the module name, or an empty string if it cannot be resolved
+     */
     public static String getModuleName(Symbol symbol) {
         Optional<ModuleSymbol> module = symbol.getModule();
         if (module.isEmpty()) {

@@ -18,6 +18,9 @@
 
 package io.ballerina.stdlib.mcp.plugin.endpointyaml.generator;
 
+/**
+ * Wraps an {@link Endpoint} under a top-level {@code endpoint} key for YAML serialization.
+ */
 public class EndpointWrapper {
     private final Endpoint endpoint;
 
