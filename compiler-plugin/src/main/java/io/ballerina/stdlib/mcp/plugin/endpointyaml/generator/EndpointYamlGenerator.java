@@ -61,30 +61,26 @@ import java.util.Optional;
 
 import static io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.FileNameGeneratorUtil.resolveContractFileName;
 
-
 /**
- * Extracts the endpoint metadata (port, base path, type) of an MCP service declaration and
- * serializes it to an endpoint YAML file under the project's {@code target/artifact} directory.
+ * Extracts the endpoint metadata (port, base path, type) of an MCP service declaration and serializes it to an endpoint
+ * YAML file under the project's {@code target/artifact} directory.
  */
 public class EndpointYamlGenerator {
+
     private final ServiceDeclarationNode node;
     private final SyntaxNodeAnalysisContext context;
-    private final String schemaFileName;
+    private final String baseFileName;
 
     private int port;
     final PackageMemberVisitor packageMemberVisitor = new PackageMemberVisitor();
     private final PrintStream outStream = System.out;
 
     private static final String ARTIFACT = "artifact";
-    private static final String TARGET = "target";
-    private static final String YAML_EXTENSTION = ".yaml";
+    private static final String YAML_EXTENSION = ".yaml";
     private static final String ENDPOINT_SUFFIX = "_endpoint";
     private String type = "mcp";
 
     private record ListenerInfo(Optional<ParenthesizedArgList> argList) {
-    }
-
-    private record ListenerResolution(Optional<ParenthesizedArgList> argList) {
     }
 
     /**
@@ -97,7 +93,7 @@ public class EndpointYamlGenerator {
         this.context = context;
 
         FileNameGeneratorUtil fileNameGeneratorUtil = new FileNameGeneratorUtil(context);
-        this.schemaFileName = fileNameGeneratorUtil.getFileName();
+        this.baseFileName = fileNameGeneratorUtil.getFileName();
     }
 
     /**
@@ -136,8 +132,8 @@ public class EndpointYamlGenerator {
     }
 
     /**
-     * Resolves the listener argument list of the service, handling inline {@code new} expressions
-     * as well as references to named listener declarations.
+     * Resolves the listener argument list of the service, handling inline {@code new} expressions as well as references
+     * to named listener declarations.
      *
      * @param moduleName the module of the service declaration
      * @return the resolved listener information
@@ -156,7 +152,7 @@ public class EndpointYamlGenerator {
                 ImplicitNewExpressionNode implicit = (ImplicitNewExpressionNode) expr;
                 argList = implicit.parenthesizedArgList();
             } else if (isNameReference(expr)) {
-                ListenerResolution resolution = resolveNamedListener(expr, moduleName, semanticModel);
+                ListenerInfo resolution = resolveNamedListener(expr, moduleName, semanticModel);
                 argList = resolution.argList();
             }
         }
@@ -171,14 +167,13 @@ public class EndpointYamlGenerator {
         return expr;
     }
 
-
     private boolean isNameReference(ExpressionNode expr) {
         return expr.kind().equals(SyntaxKind.SIMPLE_NAME_REFERENCE) ||
                 expr.kind().equals(SyntaxKind.QUALIFIED_NAME_REFERENCE);
     }
 
-    private ListenerResolution resolveNamedListener(ExpressionNode expr, String moduleName,
-                                                    SemanticModel semanticModel) {
+    private ListenerInfo resolveNamedListener(ExpressionNode expr, String moduleName,
+                                              SemanticModel semanticModel) {
         String listenerModuleName = getModuleName(semanticModel, expr);
         if (listenerModuleName.isEmpty()) {
             listenerModuleName = moduleName;
@@ -196,12 +191,12 @@ public class EndpointYamlGenerator {
                 packageMemberVisitor.getListenerDeclaration(listenerModuleName, listenerName);
 
         if (declOpt.isEmpty()) {
-            return new ListenerResolution(Optional.empty());
+            return new ListenerInfo(Optional.empty());
         }
 
         ListenerDeclarationNode decl = declOpt.get();
         Optional<ParenthesizedArgList> argList = extractArgListFromListenerDecl(decl);
-        return new ListenerResolution(argList);
+        return new ListenerInfo(argList);
     }
 
     private Optional<ParenthesizedArgList> extractArgListFromListenerDecl(ListenerDeclarationNode decl) {
@@ -221,8 +216,8 @@ public class EndpointYamlGenerator {
     }
 
     /**
-     * Resolves the port from the listener argument list, checking the positional argument first
-     * and then any {@code port} named argument.
+     * Resolves the port from the listener argument list, checking the positional argument first and then any
+     * {@code port} named argument.
      *
      * @param argListOpt the listener argument list, if available
      * @return the resolved port, or {@code 0} if it cannot be determined
@@ -247,13 +242,7 @@ public class EndpointYamlGenerator {
             if (index == 0) {
                 PositionalArgumentNode portArg = (PositionalArgumentNode) arg;
                 String portVal = getPortValue(portArg.expression(), context.semanticModel(), context).orElse(null);
-                if (portVal != null) {
-                    try {
-                        port = Integer.parseInt(portVal);
-                    } catch (NumberFormatException e) {
-                        // Log or report diagnostic for invalid port value
-                    }
-                }
+                assignPortIfParseable(portVal);
             }
         }
         return index;
@@ -266,10 +255,19 @@ public class EndpointYamlGenerator {
                     namedArg.argumentName().toString().trim().equals("port")) {
                 String portValue = getPortValue(namedArg.expression(), context.semanticModel(), context)
                         .orElse(null);
-                if (portValue != null) {
-                    port = Integer.parseInt(portValue);
-                }
+                assignPortIfParseable(portValue);
             }
+        }
+    }
+
+    private void assignPortIfParseable(String portValue) {
+        if (portValue == null) {
+            return;
+        }
+        try {
+            port = Integer.parseInt(portValue);
+        } catch (NumberFormatException ignored) {
+
         }
     }
 
@@ -290,7 +288,7 @@ public class EndpointYamlGenerator {
         Endpoint ep = getEndpoint();
         Path outPath = resolveOutputPath();
         String fileName = buildEndpointFileName(outPath);
-        Path path = outPath.resolve(ARTIFACT).resolve(fileName + YAML_EXTENSTION);
+        Path path = outPath.resolve(ARTIFACT).resolve(fileName + YAML_EXTENSION);
         writeYaml(path, new EndpointWrapper(ep));
     }
 
@@ -308,7 +306,7 @@ public class EndpointYamlGenerator {
     }
 
     private String buildEndpointFileName(Path outPath) {
-        String base = schemaFileName.split("\\.")[0] + ENDPOINT_SUFFIX;
+        String base = baseFileName.split("\\.")[0] + ENDPOINT_SUFFIX;
         return resolveContractFileName(outPath.resolve(ARTIFACT), base);
     }
 
@@ -332,8 +330,8 @@ public class EndpointYamlGenerator {
     }
 
     /**
-     * Resolves a port expression to its literal value, following variable and constant references
-     * and reporting diagnostics for configurable ports without a usable default.
+     * Resolves a port expression to its literal value, following variable and constant references and reporting
+     * diagnostics for configurable ports without a usable default.
      *
      * @param expression         the port expression
      * @param isConfigurablePort whether the port is reached through a configurable declaration
@@ -397,7 +395,7 @@ public class EndpointYamlGenerator {
             return Optional.empty();
         }
         if (isConfigurable || isConfigurablePort) {
-            reportDefualtPortConfigDiagnostic(context);
+            reportDefaultPortConfigDiagnostic(context);
         }
         if (portExpr.kind().equals(SyntaxKind.NUMERIC_LITERAL)) {
             return resolveNumericLiteral(portExpr);
@@ -407,21 +405,21 @@ public class EndpointYamlGenerator {
 
     private void reportMissingPortConfigDiagnostic(SyntaxNodeAnalysisContext context) {
         DiagnosticInfo diagnosticInfo = new DiagnosticInfo(
-                "PORT_CONFIGURATION_BEING_NULL",
+                "PORT_REQUIRED_WITHOUT_DEFAULT",
                 "The configurable value provided for the port should have a " +
                         "default value to generate the server details " +
-                "when --export-endpoints flag is present",
+                        "when --export-endpoints flag is present",
                 DiagnosticSeverity.ERROR
         );
         context.reportDiagnostic(DiagnosticFactory.createDiagnostic(diagnosticInfo, context.node().location()));
     }
 
-    private void reportDefualtPortConfigDiagnostic(SyntaxNodeAnalysisContext context) {
+    private void reportDefaultPortConfigDiagnostic(SyntaxNodeAnalysisContext context) {
         DiagnosticInfo diagnosticInfo = new DiagnosticInfo(
-                "PORT_CONFIGURATION_BEING_NULL",
-                "The server port is defined as a configurable. Hence," +
+                "CONFIGURABLE_PORT_DEFAULT_USED",
+                "The server port is defined as a configurable. Hence, " +
                         "using the default value to generate the server information " +
-                "when --export-endpoints flag is present",
+                        "when --export-endpoints flag is present",
                 DiagnosticSeverity.WARNING
         );
         context.reportDiagnostic(DiagnosticFactory.createDiagnostic(diagnosticInfo, context.node().location()));

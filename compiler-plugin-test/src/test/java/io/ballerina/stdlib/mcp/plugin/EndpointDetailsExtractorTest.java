@@ -36,6 +36,7 @@ import static io.ballerina.stdlib.mcp.plugin.ServiceArtifactExtractorTest.execut
 import static io.ballerina.stdlib.mcp.plugin.ServiceArtifactExtractorTest.getEnvironmentBuilder;
 
 public class EndpointDetailsExtractorTest {
+
     private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "test-src")
             .toAbsolutePath();
     private static final Path DISTRIBUTION_PATH = Paths.get("../", "target", "ballerina-runtime")
@@ -74,7 +75,7 @@ public class EndpointDetailsExtractorTest {
     }
 
     @Test
-    public void testConfigurablePortWithRequiredValue()  throws Exception {
+    public void testConfigurablePortWithRequiredValue() throws Exception {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_03");
         try {
             executeBallerinaCommand(projectDirPath, true);
@@ -116,14 +117,8 @@ public class EndpointDetailsExtractorTest {
             DiagnosticResult diagnostic = project.currentPackage().getCompilation().diagnosticResult();
 
             Assert.assertTrue(diagnostic.diagnostics().stream()
-                    .anyMatch(diagnostic1 -> {
-                        String code = diagnostic1.diagnosticInfo().code();
-                        if (Objects.equals(code, "LISTENER_NOT_RESOLVED")) {
-                            return true;
-                        }
-                        String message = diagnostic1.message();
-                        return message.contains("undefined symbol");
-                    }));
+                            .anyMatch(d -> d.message().contains("undefined symbol")),
+                    "Expected an 'undefined symbol' diagnostic for the unresolved listener");
         } finally {
             deleteDirectories(projectDirPath);
         }

@@ -38,7 +38,7 @@ public class ServiceArtifactExtractorTest {
             Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
             Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
             assertArtifactCount(artifactDir, ENDPOINT_SUFFIX, 1,
-                    "Expected one endpoint YAML for package_20");
+                    "Expected one endpoint YAML for the single service in package_01");
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -99,7 +99,7 @@ public class ServiceArtifactExtractorTest {
             Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
             Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
             assertArtifactCount(artifactDir, ENDPOINT_SUFFIX, 2,
-                    "Expected one endpoint YAML from the single gRPC service in the file");
+                    "Expected endpoint artifacts for both MCP services in package_05");
         } finally {
             deleteDirectories(projectDirPath);
         }

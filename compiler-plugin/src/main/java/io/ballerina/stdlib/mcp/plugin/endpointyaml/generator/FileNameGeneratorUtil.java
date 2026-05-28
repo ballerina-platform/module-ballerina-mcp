@@ -53,8 +53,6 @@ public class FileNameGeneratorUtil {
     private static final String HYPHEN = "-";
     private final Map<Integer, String> services = new HashMap<>();
 
-    private static final String YAML_EXTENSION = "_yaml";
-
     private final SyntaxNodeAnalysisContext context;
     private static final String SCHEMA_EXTENSION = "";
 
