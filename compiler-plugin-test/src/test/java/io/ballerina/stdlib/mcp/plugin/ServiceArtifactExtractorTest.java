@@ -155,6 +155,32 @@ public class ServiceArtifactExtractorTest {
         }
     }
 
+    @Test
+    public void testExportEndpointsSkipsServicesInTestSources() throws Exception {
+        Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_12");
+        try {
+            executeBallerinaCommand(projectDirPath, true);
+
+            Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
+            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
+
+            Assert.assertTrue(Files.exists(artifactDir.resolve("main_main_endpoint.yaml")),
+                    "Endpoint for the production-source service should be emitted");
+
+            long testSourceArtifactCount;
+            try (Stream<Path> paths = Files.walk(artifactDir)) {
+                testSourceArtifactCount = paths
+                        .filter(p -> safeFileName(p).startsWith("tests_"))
+                        .filter(p -> safeFileName(p).endsWith(ENDPOINT_SUFFIX))
+                        .count();
+            }
+            Assert.assertEquals(testSourceArtifactCount, 0,
+                    "MCP plugin must not emit endpoint.yaml for services declared in test sources");
+        } finally {
+            deleteDirectories(projectDirPath);
+        }
+    }
+
     private boolean hasMcpType(Path yamlFile) {
         try (Stream<String> lines = Files.lines(yamlFile)) {
             return lines.map(String::trim).anyMatch("type: \"mcp\""::equals);

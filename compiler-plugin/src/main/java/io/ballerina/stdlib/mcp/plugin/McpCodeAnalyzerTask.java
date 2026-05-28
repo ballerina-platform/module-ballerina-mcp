@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 
 import static io.ballerina.stdlib.mcp.plugin.Utils.hasCompilationErrors;
+import static io.ballerina.stdlib.mcp.plugin.Utils.isInTestSource;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpService;
 
 /**
@@ -49,7 +50,7 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
      */
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
-        if (hasCompilationErrors(context) || !isMcpService(context)) {
+        if (hasCompilationErrors(context) || isInTestSource(context) || !isMcpService(context)) {
             return;
         }
         Package currentPackage = context.currentPackage();

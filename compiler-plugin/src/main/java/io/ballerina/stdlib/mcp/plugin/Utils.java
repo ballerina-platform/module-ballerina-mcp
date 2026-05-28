@@ -45,6 +45,7 @@ import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
+import io.ballerina.projects.Module;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic;
 import io.ballerina.tools.diagnostics.Diagnostic;
@@ -422,6 +423,17 @@ public class Utils {
             }
         }
         return false;
+    }
+
+    /**
+     * Checks whether the document under analysis is a test source of its module.
+     *
+     * @param context the analysis context
+     * @return {@code true} if the document is one of the module's test documents
+     */
+    public static boolean isInTestSource(SyntaxNodeAnalysisContext context) {
+        Module currentModule = context.currentPackage().module(context.moduleId());
+        return currentModule.testDocumentIds().contains(context.documentId());
     }
 
     /**
