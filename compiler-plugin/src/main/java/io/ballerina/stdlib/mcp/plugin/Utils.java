@@ -456,9 +456,7 @@ public class Utils {
     private static boolean isMcpListenerType(TypeSymbol listenerType) {
         if (listenerType.typeKind() == TypeDescKind.UNION) {
             return ((UnionTypeSymbol) listenerType).memberTypeDescriptors().stream()
-                    .filter(t -> t instanceof TypeReferenceTypeSymbol)
-                    .map(t -> (TypeReferenceTypeSymbol) t)
-                    .anyMatch(t -> t.getModule().map(Utils::isMcpModuleSymbol).orElse(false));
+                    .anyMatch(Utils::isMcpListenerType);
         }
         if (listenerType.typeKind() == TypeDescKind.TYPE_REFERENCE) {
             return ((TypeReferenceTypeSymbol) listenerType).typeDescriptor().getModule()

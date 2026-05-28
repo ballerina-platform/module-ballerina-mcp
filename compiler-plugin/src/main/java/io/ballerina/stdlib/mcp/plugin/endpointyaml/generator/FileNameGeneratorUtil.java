@@ -180,12 +180,16 @@ public class FileNameGeneratorUtil {
 
     private static String checkAvailabilityOfGivenName(String fileName, File[] listFiles) {
         for (File file : listFiles) {
-            if (System.console() != null && file.getName().equals(fileName)) {
-                String userInput = System.console().readLine("There is already a file named '" + file.getName() +
-                        "' in the target location. Do you want to overwrite the file? [y/N] ");
-                if (!Objects.equals(userInput.toLowerCase(Locale.ENGLISH), "y")) {
-                    fileName = setGeneratedFileName(listFiles, fileName);
-                }
+            if (!file.getName().equals(fileName)) {
+                continue;
+            }
+            if (System.console() == null) {
+                return setGeneratedFileName(listFiles, fileName);
+            }
+            String userInput = System.console().readLine("There is already a file named '" + file.getName() +
+                    "' in the target location. Do you want to overwrite the file? [y/N] ");
+            if (!Objects.equals(userInput.toLowerCase(Locale.ENGLISH), "y")) {
+                return setGeneratedFileName(listFiles, fileName);
             }
         }
         return fileName;
@@ -210,6 +214,6 @@ public class FileNameGeneratorUtil {
                 duplicateCount++;
             }
         }
-        return fileName.split("\\.")[0] + "." + duplicateCount;
+        return getFileNameWithoutExtension(fileName) + "." + duplicateCount;
     }
 }

@@ -100,7 +100,7 @@ public class ModuleMemberVisitor extends NodeVisitor {
         Optional<ExpressionNode> variableValue = moduleVariableDeclarationNode.initializer();
 
         variableDeclarations.put(variableName,
-                new VariableDeclaredValue(variableValue.orElse(null).toString(), isConfigurable));
+                new VariableDeclaredValue(variableValue.map(Node::toString).orElse(null), isConfigurable));
     }
 
     @Override

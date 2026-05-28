@@ -210,7 +210,7 @@ public class ServiceArtifactExtractorTest {
         return ProjectEnvironmentBuilder.getBuilder(environment);
     }
 
-    public static void executeBallerinaCommand(Path projectDirPath, boolean exportEndpoints) throws Exception {
+    public static int executeBallerinaCommand(Path projectDirPath, boolean exportEndpoints) throws Exception {
         List<String> buildArgs = new ArrayList<>();
         String balFile = "bal";
         if (System.getProperty("os.name").startsWith("Windows")) {
@@ -227,8 +227,11 @@ public class ServiceArtifactExtractorTest {
                 .redirectOutput(ProcessBuilder.Redirect.INHERIT);
         pb.directory(projectDirPath.toFile());
         Process process = pb.start();
-        boolean completed = process.waitFor(2, TimeUnit.MINUTES);
-        Assert.assertTrue(completed, "bal build timed out after 2 minutes");
+        if (!process.waitFor(2, TimeUnit.MINUTES)) {
+            process.destroyForcibly().waitFor();
+            Assert.fail("bal build timed out after 2 minutes");
+        }
+        return process.exitValue();
     }
 
     private void deleteDirectories(Path projectDirPath) throws IOException {

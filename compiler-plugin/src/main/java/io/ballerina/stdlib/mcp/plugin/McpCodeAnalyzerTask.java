@@ -30,6 +30,7 @@ import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.ballerina.stdlib.mcp.plugin.Utils.hasCompilationErrors;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isInTestSource;
@@ -42,6 +43,7 @@ import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpService;
 public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
 
     private static final PrintStream outStream = System.out;
+    private static final AtomicBoolean unsupportedVersionWarned = new AtomicBoolean(false);
 
     /**
      * Generates the endpoint YAML for the analyzed service when endpoint export is enabled.
@@ -81,13 +83,16 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
             isExportEndpoints = buildOptions.exportEndpoints();
         } catch (NoSuchMethodError e) {
             // Used to catch the buildOption not found error for earlier ballerina versions
-            DiagnosticInfo diagnosticInfo = new DiagnosticInfo(
-                    "NO_SUCH_METHOD_ERROR",
-                    "The `--export-endpoints` build option is not supported in the current ballerina version. " +
-                            "Use ballerina 2201.13.3 or higher. " + e.getMessage(),
-                    DiagnosticSeverity.WARNING
-            );
-            context.reportDiagnostic(DiagnosticFactory.createDiagnostic(diagnosticInfo, context.node().location()));
+            if (unsupportedVersionWarned.compareAndSet(false, true)) {
+                DiagnosticInfo diagnosticInfo = new DiagnosticInfo(
+                        "NO_SUCH_METHOD_ERROR",
+                        "The `--export-endpoints` build option is not supported in the current ballerina version. " +
+                                "Use ballerina 2201.13.3 or higher. " + e.getMessage(),
+                        DiagnosticSeverity.WARNING
+                );
+                context.reportDiagnostic(
+                        DiagnosticFactory.createDiagnostic(diagnosticInfo, context.node().location()));
+            }
         }
         return isExportEndpoints;
     }

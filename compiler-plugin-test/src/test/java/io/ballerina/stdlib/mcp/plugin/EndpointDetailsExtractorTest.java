@@ -111,6 +111,7 @@ public class EndpointDetailsExtractorTest {
         try {
             // Should not generate artifact if listener is not resolved
             executeBallerinaCommand(projectDirPath, true);
+            Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
             BuildOptions buildOptions = BuildOptions.builder().setExportEndpoints(true).build();
             BuildProject project = BuildProject.load(getEnvironmentBuilder(), projectDirPath, buildOptions);
 
@@ -119,6 +120,8 @@ public class EndpointDetailsExtractorTest {
             Assert.assertTrue(diagnostic.diagnostics().stream()
                             .anyMatch(d -> d.message().contains("undefined symbol")),
                     "Expected an 'undefined symbol' diagnostic for the unresolved listener");
+            Assert.assertTrue(Files.notExists(artifactDir),
+                    "Artifact directory must not be generated when the listener cannot be resolved");
         } finally {
             deleteDirectories(projectDirPath);
         }
