@@ -18,29 +18,84 @@
 
 package io.ballerina.stdlib.mcp.plugin.endpointyaml.generator;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Holds the extracted metadata of an MCP service endpoint: port, base path, and type.
+ *
+ * <p>The model is lenient about unknown fields so that the shared {@code endpoints.yaml} can carry entries written by
+ * other modules (for example HTTP's {@code schemaPath}). Such fields are captured and serialized back verbatim, so
+ * merging never drops another module's data.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonPropertyOrder({"port", "basePath", "type"})
 public class Endpoint {
-    private final int port;
-    private final String basePath;
-    private final String type;
 
-    Endpoint(int port, String basePath, String type) {
+    private int port;
+    private String basePath;
+    private String type;
+    private final Map<String, Object> additionalProperties = new LinkedHashMap<>();
+
+    public Endpoint() {
+    }
+
+    public Endpoint(int port, String basePath, String type) {
         this.port = port;
         this.basePath = basePath;
         this.type = type;
+    }
+
+    public int getPort() {
+        return port;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
     }
 
     public String getBasePath() {
         return basePath;
     }
 
+    public void setBasePath(String basePath) {
+        this.basePath = basePath;
+    }
+
     public String getType() {
         return type;
     }
 
-    public int getPort() {
-        return port;
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    /**
+     * Returns fields that are not modeled explicitly (for example another module's {@code schemaPath}), so they are
+     * preserved on serialization.
+     *
+     * @return the unmodeled fields keyed by name
+     */
+    @JsonAnyGetter
+    public Map<String, Object> getAdditionalProperties() {
+        return new LinkedHashMap<>(additionalProperties);
+    }
+
+    /**
+     * Captures a field that is not modeled explicitly so it round-trips unchanged.
+     *
+     * @param name  the field name
+     * @param value the field value
+     */
+    @JsonAnySetter
+    public void setAdditionalProperty(String name, Object value) {
+        this.additionalProperties.put(name, value);
     }
 }

@@ -19,9 +19,6 @@
 
 package io.ballerina.stdlib.mcp.plugin.endpointyaml.generator;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.api.symbols.ModuleSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
@@ -42,43 +39,28 @@ import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.compiler.syntax.tree.SyntaxTree;
-import io.ballerina.projects.Package;
-import io.ballerina.projects.Project;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import io.ballerina.runtime.api.utils.IdentifierUtils;
 import io.ballerina.tools.diagnostics.DiagnosticFactory;
 import io.ballerina.tools.diagnostics.DiagnosticInfo;
 import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 
-import java.io.IOException;
-import java.io.PrintStream;
-import java.io.Writer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Optional;
 
-import static io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.FileNameGeneratorUtil.resolveContractFileName;
-
 /**
- * Extracts the endpoint metadata (port, base path, type) of an MCP service declaration and serializes it to an endpoint
- * YAML file under the project's {@code target/artifact} directory.
+ * Extracts the endpoint metadata (port, base path, type) of an MCP service declaration. The extracted endpoints are
+ * collected and written to a single {@code endpoints.yaml} artifact by {@code McpEndpointArtifactTask}.
  */
 public class EndpointYamlGenerator {
 
     private final ServiceDeclarationNode node;
     private final SyntaxNodeAnalysisContext context;
-    private final String baseFileName;
 
     private int port;
     final PackageMemberVisitor packageMemberVisitor = new PackageMemberVisitor();
-    private final PrintStream outStream = System.out;
 
-    private static final String ARTIFACT = "artifact";
-    private static final String YAML_EXTENSION = ".yaml";
-    private static final String ENDPOINT_SUFFIX = "_endpoint";
-    private String type = "mcp";
+    private static final String TYPE = "mcp";
 
     private record ListenerInfo(Optional<ParenthesizedArgList> argList) {
     }
@@ -91,9 +73,6 @@ public class EndpointYamlGenerator {
     public EndpointYamlGenerator(SyntaxNodeAnalysisContext context) {
         this.node = (ServiceDeclarationNode) context.node();
         this.context = context;
-
-        FileNameGeneratorUtil fileNameGeneratorUtil = new FileNameGeneratorUtil(context);
-        this.baseFileName = fileNameGeneratorUtil.getFileName();
     }
 
     /**
@@ -102,14 +81,14 @@ public class EndpointYamlGenerator {
      * @return the extracted endpoint
      */
     public Endpoint getEndpoint() {
-        String moduleName = context.moduleId().moduleName();
+        String moduleName = context.currentPackage().module(context.moduleId()).moduleName().toString();
         ensureModuleVisited(moduleName);
 
         ListenerInfo listenerInfo = resolveListenerInfo(moduleName);
         port = resolvePort(listenerInfo.argList());
         String basePath = buildBasePath();
 
-        return new Endpoint(port, basePath, type);
+        return new Endpoint(port, basePath, TYPE);
     }
 
     private void ensureModuleVisited(String moduleName) {
@@ -277,51 +256,6 @@ public class EndpointYamlGenerator {
             basePath.append(identifierNode.toString().replace("\"", "").trim());
         }
         return basePath.toString();
-    }
-
-    /**
-     * Writes the endpoint metadata of the service to a YAML file under {@code target/artifact}.
-     *
-     * @throws IOException if the artifact directory cannot be created
-     */
-    public void writeEndpointYaml() throws IOException {
-        Endpoint ep = getEndpoint();
-        Path outPath = resolveOutputPath();
-        String fileName = buildEndpointFileName(outPath);
-        Path path = outPath.resolve(ARTIFACT).resolve(fileName + YAML_EXTENSION);
-        writeYaml(path, new EndpointWrapper(ep));
-    }
-
-    private Path resolveOutputPath() throws IOException {
-        Package currentPackage = this.context.currentPackage();
-        Project project = currentPackage.project();
-        Path outPath = project.targetDir();
-
-        try {
-            Files.createDirectories(Paths.get(String.valueOf(outPath), ARTIFACT));
-        } catch (IOException e) {
-            outStream.println(e.getMessage());
-        }
-        return outPath;
-    }
-
-    private String buildEndpointFileName(Path outPath) {
-        String base = baseFileName.split("\\.")[0] + ENDPOINT_SUFFIX;
-        return resolveContractFileName(outPath.resolve(ARTIFACT), base);
-    }
-
-    private void writeYaml(Path path, EndpointWrapper wrapper) {
-        YAMLFactory yamlFactory = YAMLFactory.builder()
-                .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)
-                .build();
-        ObjectMapper mapper = new ObjectMapper(yamlFactory);
-        mapper.findAndRegisterModules();
-
-        try (Writer writer = Files.newBufferedWriter(path)) {
-            mapper.writeValue(writer, wrapper);
-        } catch (IOException e) {
-            outStream.println(e.getMessage());
-        }
     }
 
     private Optional<String> getPortValue(ExpressionNode expression, SemanticModel semanticModel,

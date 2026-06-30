@@ -18,17 +18,31 @@
 
 package io.ballerina.stdlib.mcp.plugin.endpointyaml.generator;
 
-/**
- * Wraps an {@link Endpoint} under a top-level {@code endpoint} key for YAML serialization.
- */
-public class EndpointWrapper {
-    private final Endpoint endpoint;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-    public EndpointWrapper(Endpoint endpoint) {
-        this.endpoint = endpoint;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Wraps the list of {@link Endpoint} entries under a top-level {@code endpoints} key for YAML serialization.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class EndpointWrapper {
+
+    private List<Endpoint> endpoints = new ArrayList<>();
+
+    public EndpointWrapper() {
     }
 
-    public Endpoint getEndpoint() {
-        return endpoint;
+    public EndpointWrapper(List<Endpoint> endpoints) {
+        this.endpoints = new ArrayList<>(endpoints);
+    }
+
+    public List<Endpoint> getEndpoints() {
+        return new ArrayList<>(endpoints);
+    }
+
+    public void setEndpoints(List<Endpoint> endpoints) {
+        this.endpoints = new ArrayList<>(endpoints);
     }
 }

@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package io.ballerina.stdlib.mcp.plugin;
 
 import io.ballerina.projects.BuildOptions;
@@ -16,7 +34,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -27,7 +44,7 @@ public class ServiceArtifactExtractorTest {
     private static final Path DISTRIBUTION_PATH = Paths.get("../", "target", "ballerina-runtime")
             .toAbsolutePath();
     private static final String ARTIFACT_DIR = "artifact";
-    private static final String ENDPOINT_SUFFIX = "_endpoint.yaml";
+    private static final String ENDPOINTS_FILE = "endpoints.yaml";
 
     @Test
     public void testExportEndpointsForSimpleService() throws Exception {
@@ -35,10 +52,10 @@ public class ServiceArtifactExtractorTest {
         try {
             executeBallerinaCommand(projectDirPath, true);
 
-            Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            assertArtifactCount(artifactDir, ENDPOINT_SUFFIX, 1,
-                    "Expected one endpoint YAML for the single service in package_01");
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should be generated");
+            Assert.assertEquals(countEndpoints(endpointsFile), 1,
+                    "Expected one endpoint entry for the single service in package_01");
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -82,10 +99,10 @@ public class ServiceArtifactExtractorTest {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_08");
         try {
             executeBallerinaCommand(projectDirPath, true);
-            Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            assertArtifactCount(artifactDir, ENDPOINT_SUFFIX, 2,
-                    "Expected endpoint artifacts for both services in package_08");
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should be generated");
+            Assert.assertEquals(countEndpoints(endpointsFile), 2,
+                    "Expected both services in package_08 in a single endpoints.yaml");
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -96,37 +113,25 @@ public class ServiceArtifactExtractorTest {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_05");
         try {
             executeBallerinaCommand(projectDirPath, true);
-            Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            assertArtifactCount(artifactDir, ENDPOINT_SUFFIX, 2,
-                    "Expected endpoint artifacts for both MCP services in package_05");
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should be generated");
+            Assert.assertEquals(countEndpoints(endpointsFile), 2,
+                    "Expected both MCP services in package_05 in a single endpoints.yaml");
         } finally {
             deleteDirectories(projectDirPath);
         }
     }
 
     @Test
-    public void testEndpointYamlFallbackNamingForEmptyServiceNames() throws Exception {
+    public void testExportEndpointsForServicesWithEmptyNames() throws Exception {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_07");
         try {
             executeBallerinaCommand(projectDirPath, true);
 
-            Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-
-            List<String> endpointFiles;
-            try (Stream<Path> paths = Files.walk(artifactDir)) {
-                endpointFiles = paths
-                        .map(this::safeFileName)
-                        .filter(fileName -> fileName.endsWith(ENDPOINT_SUFFIX))
-                        .toList();
-            }
-
-            Assert.assertEquals(endpointFiles.size(), 2,
-                    "Expected endpoint YAML artifacts for both services with empty names");
-            Assert.assertTrue(endpointFiles.stream()
-                            .allMatch(fileName -> fileName.matches(".+_-?[0-9]+_endpoint\\.yaml")),
-                    "Endpoint YAML files should use fallback hash-based naming for empty service names");
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should be generated");
+            Assert.assertEquals(countEndpoints(endpointsFile), 2,
+                    "Expected both services with empty names in a single endpoints.yaml");
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -138,18 +143,10 @@ public class ServiceArtifactExtractorTest {
         try {
             executeBallerinaCommand(projectDirPath, true);
 
-            Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            long mcpStampedCount;
-            try (Stream<Path> paths = Files.walk(artifactDir)) {
-                mcpStampedCount = paths
-                        .filter(p -> safeFileName(p).endsWith(ENDPOINT_SUFFIX))
-                        .filter(this::hasMcpType)
-                        .count();
-            }
-            Assert.assertEquals(mcpStampedCount, 1,
-                    "MCP plugin must emit endpoint.yaml only for the MCP service, " +
-                            "not for the co-located non-MCP service");
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should be generated");
+            Assert.assertEquals(countMcpEndpoints(endpointsFile), 1,
+                    "MCP plugin must record only the MCP service, not the co-located non-MCP service");
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -161,47 +158,28 @@ public class ServiceArtifactExtractorTest {
         try {
             executeBallerinaCommand(projectDirPath, true);
 
-            Path artifactDir = projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-
-            Assert.assertTrue(Files.exists(artifactDir.resolve("main_main_endpoint.yaml")),
-                    "Endpoint for the production-source service should be emitted");
-
-            long testSourceArtifactCount;
-            try (Stream<Path> paths = Files.walk(artifactDir)) {
-                testSourceArtifactCount = paths
-                        .filter(p -> safeFileName(p).startsWith("tests_"))
-                        .filter(p -> safeFileName(p).endsWith(ENDPOINT_SUFFIX))
-                        .count();
-            }
-            Assert.assertEquals(testSourceArtifactCount, 0,
-                    "MCP plugin must not emit endpoint.yaml for services declared in test sources");
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should be generated");
+            Assert.assertEquals(countEndpoints(endpointsFile), 1,
+                    "MCP plugin must record only the production-source service, not the test-source service");
         } finally {
             deleteDirectories(projectDirPath);
         }
     }
 
-    private boolean hasMcpType(Path yamlFile) {
-        try (Stream<String> lines = Files.lines(yamlFile)) {
-            return lines.map(String::trim).anyMatch("type: \"mcp\""::equals);
-        } catch (IOException e) {
-            return false;
+    private Path endpointsFile(Path projectDirPath) {
+        return projectDirPath.resolve("target").resolve(ARTIFACT_DIR).resolve(ENDPOINTS_FILE);
+    }
+
+    private long countEndpoints(Path endpointsFile) throws IOException {
+        try (Stream<String> lines = Files.lines(endpointsFile)) {
+            return lines.map(String::trim).filter(line -> line.startsWith("type:")).count();
         }
     }
 
-    private String safeFileName(Path path) {
-        Path fileName = path == null ? null : path.getFileName();
-        return Objects.toString(fileName, "");
-    }
-
-    private void assertArtifactCount(Path artifactDir, String suffix, int expectedCount, String message)
-            throws IOException {
-        try (Stream<Path> paths = Files.walk(artifactDir)) {
-            long artifactCount = paths
-                    .map(this::safeFileName)
-                    .filter(fileName -> fileName.endsWith(suffix))
-                    .count();
-            Assert.assertEquals(artifactCount, expectedCount, message);
+    private long countMcpEndpoints(Path endpointsFile) throws IOException {
+        try (Stream<String> lines = Files.lines(endpointsFile)) {
+            return lines.map(String::trim).filter("type: \"mcp\""::equals).count();
         }
     }
 

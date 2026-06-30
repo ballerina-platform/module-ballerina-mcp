@@ -29,7 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
-import java.util.Objects;
 import java.util.stream.Stream;
 
 import static io.ballerina.stdlib.mcp.plugin.ServiceArtifactExtractorTest.executeBallerinaCommand;
@@ -39,11 +38,10 @@ public class EndpointDetailsExtractorTest {
 
     private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "test-src")
             .toAbsolutePath();
-    private static final Path DISTRIBUTION_PATH = Paths.get("../", "target", "ballerina-runtime")
-            .toAbsolutePath();
 
     private static final String TARGET_DIR = "target";
     private static final String ARTIFACT_DIR = "artifact";
+    private static final String ENDPOINTS_FILE = "endpoints.yaml";
 
     @Test
     public void testHardcodedPortExtraction() throws Exception {
@@ -51,10 +49,9 @@ public class EndpointDetailsExtractorTest {
         try {
             executeBallerinaCommand(projectDirPath, true);
 
-            Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir));
-            Path endpointYaml = artifactDir.resolve("main_mcp_endpoint.yaml");
-            assertEndpointPort(endpointYaml, 9091);
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile));
+            assertSingleEndpointPort(endpointsFile, 9091);
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -65,10 +62,9 @@ public class EndpointDetailsExtractorTest {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_02");
         try {
             executeBallerinaCommand(projectDirPath, true);
-            Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir));
-            Path endpointYaml = artifactDir.resolve("main_mcp_endpoint.yaml");
-            assertEndpointPort(endpointYaml, 9091);
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile));
+            assertSingleEndpointPort(endpointsFile, 9091);
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -79,10 +75,9 @@ public class EndpointDetailsExtractorTest {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_03");
         try {
             executeBallerinaCommand(projectDirPath, true);
-            Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir));
-            Path endpointYaml = artifactDir.resolve("main_mcp_endpoint.yaml");
-            assertEndpointPort(endpointYaml, 0);
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile));
+            assertSingleEndpointPort(endpointsFile, 0);
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -93,13 +88,10 @@ public class EndpointDetailsExtractorTest {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_05");
         try {
             executeBallerinaCommand(projectDirPath, true);
-            Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            long count;
-            try (Stream<Path> paths = Files.list(artifactDir)) {
-                count = paths.filter(p -> safeFileName(p).endsWith("_endpoint.yaml")).count();
-            }
-            Assert.assertEquals(count, 2, "Expected 2 endpoint YAML files for multiple services");
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should be generated");
+            Assert.assertEquals(countEndpoints(endpointsFile), 2,
+                    "Expected 2 endpoint entries for multiple services");
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -132,13 +124,10 @@ public class EndpointDetailsExtractorTest {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_01");
         try {
             executeBallerinaCommand(projectDirPath, true);
-            Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            long count;
-            try (Stream<Path> paths = Files.list(artifactDir)) {
-                count = paths.filter(p -> safeFileName(p).endsWith("_endpoint.yaml")).count();
-            }
-            Assert.assertTrue(count >= 1, "Should generate at least one endpoint YAML for named listener");
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should be generated");
+            Assert.assertTrue(countEndpoints(endpointsFile) >= 1,
+                    "Should record at least one endpoint for named listener");
         } finally {
             deleteDirectories(projectDirPath);
         }
@@ -149,31 +138,35 @@ public class EndpointDetailsExtractorTest {
         Path projectDirPath = RESOURCE_DIRECTORY.resolve("package_10");
         try {
             executeBallerinaCommand(projectDirPath, true);
-            Path artifactDir = projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR);
-            Assert.assertTrue(Files.exists(artifactDir), "Artifact directory should exist");
-            long count;
-            try (Stream<Path> paths = Files.list(artifactDir)) {
-                count = paths.filter(p -> safeFileName(p).endsWith("_endpoint.yaml")).count();
-            }
-            Assert.assertTrue(count >= 1, "Should generate at least one endpoint YAML for implicit new listener");
+            Path endpointsFile = endpointsFile(projectDirPath);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should be generated");
+            Assert.assertTrue(countEndpoints(endpointsFile) >= 1,
+                    "Should record at least one endpoint for implicit new listener");
         } finally {
             deleteDirectories(projectDirPath);
         }
     }
 
-    private static String safeFileName(Path path) {
-        Path fileName = path == null ? null : path.getFileName();
-        return Objects.toString(fileName, "");
+    private static Path endpointsFile(Path projectDirPath) {
+        return projectDirPath.resolve(TARGET_DIR).resolve(ARTIFACT_DIR).resolve(ENDPOINTS_FILE);
     }
 
-    private static void assertEndpointPort(Path endpointYaml, int expectedPort) throws IOException {
-        try (Stream<String> lines = Files.lines(endpointYaml)) {
+    private static long countEndpoints(Path endpointsFile) throws IOException {
+        try (Stream<String> lines = Files.lines(endpointsFile)) {
+            return lines.map(String::trim).filter(line -> line.startsWith("type:")).count();
+        }
+    }
+
+    private static void assertSingleEndpointPort(Path endpointsFile, int expectedPort) throws IOException {
+        Assert.assertEquals(countEndpoints(endpointsFile), 1,
+                "Expected a single endpoint entry in " + endpointsFile);
+        try (Stream<String> lines = Files.lines(endpointsFile)) {
             String portLine = lines.map(String::trim)
-                    .filter(line -> line.startsWith("port:"))
+                    .filter(line -> line.startsWith("port:") || line.startsWith("- port:"))
                     .findFirst()
-                    .orElseThrow(() -> new AssertionError("No port field found in: " + endpointYaml));
-            int actualPort = Integer.parseInt(portLine.substring("port:".length()).trim());
-            Assert.assertEquals(actualPort, expectedPort, "Unexpected endpoint port in " + endpointYaml);
+                    .orElseThrow(() -> new AssertionError("No port field found in: " + endpointsFile));
+            int actualPort = Integer.parseInt(portLine.replace("- ", "").substring("port:".length()).trim());
+            Assert.assertEquals(actualPort, expectedPort, "Unexpected endpoint port in " + endpointsFile);
         }
     }
 
