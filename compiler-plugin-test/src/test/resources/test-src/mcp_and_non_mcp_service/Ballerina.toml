@@ -1,0 +1,7 @@
+[package]
+org = "ballerina"
+name = "mcp_and_non_mcp_service"
+version = "0.1.0"
+
+[build-options]
+observabilityIncluded = true

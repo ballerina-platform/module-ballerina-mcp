@@ -1,8 +1,0 @@
-[package]
-org = "ballerina"
-name = "mcp_test_source_check"
-version = "0.1.0"
-
-[build-options]
-observabilityIncluded = true
-

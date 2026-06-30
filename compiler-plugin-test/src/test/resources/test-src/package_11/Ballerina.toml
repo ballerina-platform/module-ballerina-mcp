@@ -1,8 +1,0 @@
-[package]
-org = "ballerina"
-name = "mcp_mixed_services"
-version = "0.1.0"
-
-[build-options]
-observabilityIncluded = true
-

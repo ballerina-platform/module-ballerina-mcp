@@ -21,9 +21,8 @@
 <suite name="BallerinaMcpCompilerPluginTests">
     <test name="UnitTests">
         <classes>
-            <class name="io.ballerina.stdlib.mcp.plugin.EndpointDetailsExtractorTest"/>
-            <class name="io.ballerina.stdlib.mcp.plugin.ServiceArtifactExtractorTest"/>
-            <class name="io.ballerina.stdlib.mcp.plugin.FileNameGeneratorUtilTest"/>
+            <class name="io.ballerina.stdlib.mcp.plugin.EndpointExportTest"/>
+            <class name="io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.EndpointsArtifactWriterTest"/>
         </classes>
     </test>
 </suite>

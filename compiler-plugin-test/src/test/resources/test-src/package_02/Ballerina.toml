@@ -1,7 +1,0 @@
-[package]
-org = "ballerina"
-name = "mcp_crypto_server"
-version = "0.1.0"
-
-[build-options]
-observabilityIncluded = true
