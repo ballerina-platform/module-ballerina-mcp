@@ -1,13 +1,13 @@
 [package]
 org = "ballerina"
 name = "mcp"
-version = "1.0.4"
+version = "1.1.0"
 authors = ["Ballerina"]
 keywords = ["mcp"]
 repository = "https://github.com/ballerina-platform/module-ballerina-mcp"
 icon = "icon.png"
 license = ["Apache-2.0"]
-distribution = "2201.12.0"
+distribution = "2201.13.3"
 
 [platform.java21]
 graalvmCompatible = true
@@ -15,5 +15,5 @@ graalvmCompatible = true
 [[platform.java21.dependency]]
 groupId = "io.ballerina.stdlib."
 artifactId = "mcp-native"
-version = "1.0.4"
-path = "../native/build/libs/mcp-native-1.0.4-SNAPSHOT.jar"
+version = "1.1.0"
+path = "../native/build/libs/mcp-native-1.1.0-SNAPSHOT.jar"
