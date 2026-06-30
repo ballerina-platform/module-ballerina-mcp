@@ -5,7 +5,7 @@
 
 [ballerina]
 dependencies-toml-version = "2"
-distribution-version = "2201.12.0"
+distribution-version = "2201.13.3"
 
 [[package]]
 org = "ballerina"
@@ -76,7 +76,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "http"
-version = "2.14.11"
+version = "2.16.3"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "auth"},
@@ -106,7 +106,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "io"
-version = "1.8.1"
+version = "1.8.0"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
@@ -230,7 +230,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "log"
-version = "2.14.0"
+version = "2.17.0"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "io"},
@@ -242,7 +242,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "1.0.4"
+version = "1.1.0"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "http"},
@@ -256,7 +256,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "mime"
-version = "2.12.2"
+version = "2.12.1"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "io"},
@@ -268,7 +268,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "oauth2"
-version = "2.14.1"
+version = "2.15.0"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "cache"},
@@ -282,7 +282,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "observe"
-version = "1.6.0"
+version = "1.7.1"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"}
@@ -301,7 +301,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "task"
-version = "2.11.2"
+version = "2.11.1"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
@@ -356,7 +356,7 @@ dependencies = [
 [[package]]
 org = "ballerinatests"
 name = "mcp_ballerina_tests"
-version = "1.0.4"
+version = "1.1.0"
 dependencies = [
 	{org = "ballerina", name = "mcp"},
 	{org = "ballerina", name = "test"}
