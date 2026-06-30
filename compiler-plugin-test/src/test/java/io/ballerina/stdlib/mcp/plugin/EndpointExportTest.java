@@ -28,6 +28,7 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -154,12 +155,27 @@ public class EndpointExportTest {
     }
 
     @Test
-    public void testConfigurablePortRequiredFallsBackToZero() throws Exception {
-        withBuild("configurable_port_required", true, endpoints -> {
+    public void testConfigurablePortRequiredIsLenient() throws Exception {
+        Path projectDirPath = RESOURCE_DIRECTORY.resolve("configurable_port_required");
+        try {
+            deleteDirectories(projectDirPath);
+            BuildResult result = buildCapturingOutput(projectDirPath);
+
+            // Lenient: a required configurable port must not fail the build, and the warning must be accurate.
+            Assert.assertEquals(result.exitCode(), 0, "A required configurable port must not fail the build");
+            Assert.assertTrue(result.output().contains("cannot be determined at build time"),
+                    "An accurate required-configurable warning should be emitted");
+            Assert.assertFalse(result.output().contains("using the default value"),
+                    "The misleading default-value warning must not be emitted for a required configurable");
+
+            Path endpointsFile = artifactDir(projectDirPath).resolve(ENDPOINTS_FILE);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should still be generated");
+            String endpoints = Files.readString(endpointsFile);
             Assert.assertEquals(countEntries(endpoints), 1);
-            Assert.assertTrue(endpoints.contains("port: 0"),
-                    "A required configurable port cannot be resolved at build time and falls back to 0");
-        });
+            Assert.assertTrue(endpoints.contains("port: 0"), "Required configurable port falls back to 0");
+        } finally {
+            deleteDirectories(projectDirPath);
+        }
     }
 
     // --- Cases that must not produce an artifact ---
@@ -242,6 +258,27 @@ public class EndpointExportTest {
     static ProjectEnvironmentBuilder getEnvironmentBuilder() {
         Environment environment = EnvironmentBuilder.getBuilder().setBallerinaHome(DISTRIBUTION_PATH).build();
         return ProjectEnvironmentBuilder.getBuilder(environment);
+    }
+
+    private record BuildResult(int exitCode, String output) {
+    }
+
+    private static BuildResult buildCapturingOutput(Path projectDirPath) throws Exception {
+        List<String> buildArgs = new ArrayList<>();
+        String balFile = System.getProperty("os.name").startsWith("Windows") ? "bal.bat" : "bal";
+        buildArgs.add(DISTRIBUTION_PATH.resolve("bin").resolve(balFile).toString());
+        buildArgs.add("build");
+        buildArgs.add("--export-endpoints");
+
+        ProcessBuilder pb = new ProcessBuilder(buildArgs).redirectErrorStream(true);
+        pb.directory(projectDirPath.toFile());
+        Process process = pb.start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        if (!process.waitFor(2, TimeUnit.MINUTES)) {
+            process.destroyForcibly().waitFor();
+            Assert.fail("bal build timed out after 2 minutes");
+        }
+        return new BuildResult(process.exitValue(), output);
     }
 
     static int executeBallerinaCommand(Path projectDirPath, boolean exportEndpoints) throws Exception {

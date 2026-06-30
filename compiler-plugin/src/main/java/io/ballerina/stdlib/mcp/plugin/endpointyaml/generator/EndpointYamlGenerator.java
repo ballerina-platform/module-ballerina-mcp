@@ -303,6 +303,12 @@ public class EndpointYamlGenerator {
         }
 
         ModuleMemberVisitor.VariableDeclaredValue varVal = varOpt.get();
+        if (varVal.isRequired()) {
+            // A required configurable (`= ?`) has no build-time value; warn and fall back to port 0 without failing
+            // the build.
+            reportRequiredConfigurablePortDiagnostic(context);
+            return Optional.empty();
+        }
         String portValueSource = String.valueOf(varVal.value());
         ExpressionNode portExpr = portValueSource.isEmpty() ? null : NodeParser.parseExpression(portValueSource);
 
@@ -324,10 +330,6 @@ public class EndpointYamlGenerator {
                                                    boolean isConfigurablePort,
                                                    SemanticModel semanticModel,
                                                    SyntaxNodeAnalysisContext context) {
-        if (portExpr.kind().equals(SyntaxKind.REQUIRED_EXPRESSION)) {
-            reportMissingPortConfigDiagnostic(context);
-            return Optional.empty();
-        }
         if (isConfigurable || isConfigurablePort) {
             reportDefaultPortConfigDiagnostic(context);
         }
@@ -337,13 +339,12 @@ public class EndpointYamlGenerator {
         return getPortValue(portExpr, isConfigurable, semanticModel, context);
     }
 
-    private void reportMissingPortConfigDiagnostic(SyntaxNodeAnalysisContext context) {
+    private void reportRequiredConfigurablePortDiagnostic(SyntaxNodeAnalysisContext context) {
         DiagnosticInfo diagnosticInfo = new DiagnosticInfo(
                 "PORT_REQUIRED_WITHOUT_DEFAULT",
-                "The configurable value provided for the port should have a " +
-                        "default value to generate the server details " +
-                        "when --export-endpoints flag is present",
-                DiagnosticSeverity.ERROR
+                "The port is a required configurable with no default value, so it cannot be determined at build " +
+                        "time. Generating endpoint information with port 0 when the --export-endpoints flag is present",
+                DiagnosticSeverity.WARNING
         );
         context.reportDiagnostic(DiagnosticFactory.createDiagnostic(diagnosticInfo, context.node().location()));
     }

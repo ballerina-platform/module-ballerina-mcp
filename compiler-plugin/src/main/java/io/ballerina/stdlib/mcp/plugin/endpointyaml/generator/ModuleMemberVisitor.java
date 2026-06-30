@@ -52,8 +52,10 @@ public class ModuleMemberVisitor extends NodeVisitor {
      *
      * @param value          the initializer expression as source text
      * @param isConfigurable whether the declaration carries the {@code configurable} qualifier
+     * @param isRequired     whether the initializer is a required expression ({@code = ?}), i.e. a configurable with
+     *                       no default value
      */
-    public record VariableDeclaredValue(String value, boolean isConfigurable) {
+    public record VariableDeclaredValue(String value, boolean isConfigurable, boolean isRequired) {
     }
 
     public ModuleMemberVisitor(SemanticModel semanticModel) {
@@ -98,9 +100,12 @@ public class ModuleMemberVisitor extends NodeVisitor {
 
         String variableName = unescapeIdentifier(captureBindingPatternNode.variableName().text());
         Optional<ExpressionNode> variableValue = moduleVariableDeclarationNode.initializer();
+        boolean isRequired = variableValue
+                .map(value -> value.kind().equals(SyntaxKind.REQUIRED_EXPRESSION))
+                .orElse(false);
 
-        variableDeclarations.put(variableName,
-                new VariableDeclaredValue(variableValue.map(Node::toString).orElse(null), isConfigurable));
+        variableDeclarations.put(variableName, new VariableDeclaredValue(
+                variableValue.map(Node::toString).orElse(null), isConfigurable, isRequired));
     }
 
     @Override
@@ -108,8 +113,8 @@ public class ModuleMemberVisitor extends NodeVisitor {
         String variableName = unescapeIdentifier(constantDeclarationNode.variableName().text());
         Node variableValue = constantDeclarationNode.initializer();
         if (variableValue instanceof ExpressionNode valueExpression) {
-            // Constant declarations are always non-configurable
-            variableDeclarations.put(variableName, new VariableDeclaredValue(valueExpression.toString(), false));
+            // Constant declarations are always non-configurable and always have a value
+            variableDeclarations.put(variableName, new VariableDeclaredValue(valueExpression.toString(), false, false));
         }
     }
 
