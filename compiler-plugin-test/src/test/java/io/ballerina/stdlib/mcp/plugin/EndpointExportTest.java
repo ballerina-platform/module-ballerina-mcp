@@ -178,6 +178,52 @@ public class EndpointExportTest {
         }
     }
 
+    // --- Artifact cleanup and failure handling ---
+
+    @Test
+    public void testNoLiveEndpointsStillCleansUpStaleArtifact() throws Exception {
+        Path projectDirPath = RESOURCE_DIRECTORY.resolve("no_mcp_services");
+        try {
+            deleteDirectories(projectDirPath);
+            seedEndpointsFile(projectDirPath,
+                    "endpoints:\n"
+                            + "- port: 8080\n  basePath: \"/api\"\n  type: \"REST\"\n  schemaPath: \"main_api.yaml\"\n"
+                            + "- port: 1234\n  basePath: \"/stale\"\n  type: \"mcp\"\n");
+
+            executeBallerinaCommand(projectDirPath, true);
+
+            Path endpointsFile = artifactDir(projectDirPath).resolve(ENDPOINTS_FILE);
+            Assert.assertTrue(Files.exists(endpointsFile), "endpoints.yaml should still exist");
+            String endpoints = Files.readString(endpointsFile);
+            Assert.assertFalse(endpoints.contains("type: \"mcp\""),
+                    "A stale MCP entry must be removed even when the current build has no MCP services");
+            Assert.assertTrue(endpoints.contains("type: \"REST\""), "Another module's entry must be preserved");
+            Assert.assertTrue(endpoints.contains("schemaPath: \"main_api.yaml\""),
+                    "Foreign fields must be preserved on cleanup");
+        } finally {
+            deleteDirectories(projectDirPath);
+        }
+    }
+
+    @Test
+    public void testArtifactWriteFailureReportsDiagnosticAndFailsBuild() throws Exception {
+        Path projectDirPath = RESOURCE_DIRECTORY.resolve("no_mcp_services");
+        try {
+            deleteDirectories(projectDirPath);
+            // Occupy the artifact path with a plain file so the writer's Files.createDirectories(...) fails.
+            Files.createDirectories(projectDirPath.resolve("target"));
+            Files.createFile(artifactDir(projectDirPath));
+
+            BuildResult result = buildCapturingOutput(projectDirPath);
+
+            Assert.assertNotEquals(result.exitCode(), 0, "A failed artifact write must fail the build");
+            Assert.assertTrue(result.output().contains("Failed to write the endpoint export artifact"),
+                    "The write failure must be reported as a diagnostic, not just printed to stdout");
+        } finally {
+            deleteDirectories(projectDirPath);
+        }
+    }
+
     // --- Cases that must not produce an artifact ---
 
     @Test
@@ -223,6 +269,7 @@ public class EndpointExportTest {
     // --- Helpers ---
 
     private interface EndpointsAssertion {
+
         void check(String endpointsYaml);
     }
 
@@ -241,6 +288,11 @@ public class EndpointExportTest {
 
     private static Path artifactDir(Path projectDirPath) {
         return projectDirPath.resolve("target").resolve(ARTIFACT_DIR);
+    }
+
+    private static void seedEndpointsFile(Path projectDirPath, String content) throws IOException {
+        Path artifactDir = Files.createDirectories(artifactDir(projectDirPath));
+        Files.writeString(artifactDir.resolve(ENDPOINTS_FILE), content);
     }
 
     private static long countEntries(String endpointsYaml) {

@@ -18,14 +18,21 @@
 
 package io.ballerina.stdlib.mcp.plugin;
 
+import io.ballerina.projects.BuildOptions;
 import io.ballerina.projects.Project;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.CompilationAnalysisContext;
 import io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.Endpoint;
 import io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.EndpointsArtifactWriter;
+import io.ballerina.tools.diagnostics.DiagnosticFactory;
+import io.ballerina.tools.diagnostics.DiagnosticInfo;
+import io.ballerina.tools.diagnostics.DiagnosticSeverity;
+import io.ballerina.tools.diagnostics.Location;
+import io.ballerina.tools.text.LinePosition;
+import io.ballerina.tools.text.LineRange;
+import io.ballerina.tools.text.TextRange;
 
 import java.io.IOException;
-import java.io.PrintStream;
 import java.util.List;
 
 /**
@@ -34,8 +41,6 @@ import java.util.List;
  * {@link McpCodeAnalyzerTask}.
  */
 public class McpEndpointArtifactTask implements AnalysisTask<CompilationAnalysisContext> {
-
-    private static final PrintStream outStream = System.out;
 
     private final List<Endpoint> endpoints;
 
@@ -50,14 +55,54 @@ public class McpEndpointArtifactTask implements AnalysisTask<CompilationAnalysis
 
     @Override
     public void perform(CompilationAnalysisContext context) {
-        if (endpoints.isEmpty()) {
+        if (context.compilation().diagnosticResult().hasErrors()) {
             return;
         }
         Project project = context.currentPackage().project();
+        if (!isExportEndpoints(project.buildOptions())) {
+            return;
+        }
+        // Write even when no MCP endpoints were collected: an existing endpoints.yaml may still hold stale MCP
+        // entries (e.g. from a build where services were later removed) that the writer must clean up.
         try {
             new EndpointsArtifactWriter().write(project.targetDir(), endpoints, context);
         } catch (IOException e) {
-            outStream.println(e);
+            reportWriteFailureDiagnostic(context, e);
+        }
+    }
+
+    private boolean isExportEndpoints(BuildOptions buildOptions) {
+        try {
+            return buildOptions.exportEndpoints();
+        } catch (NoSuchMethodError e) {
+            // Unsupported Ballerina version; McpCodeAnalyzerTask already warns about this when MCP services are
+            // present. There is nothing to export here either way.
+            return false;
+        }
+    }
+
+    private void reportWriteFailureDiagnostic(CompilationAnalysisContext context, IOException e) {
+        DiagnosticInfo diagnosticInfo = new DiagnosticInfo(
+                "ENDPOINTS_ARTIFACT_WRITE_FAILED",
+                "Failed to write the endpoint export artifact: " + e.getMessage(),
+                DiagnosticSeverity.ERROR
+        );
+        context.reportDiagnostic(DiagnosticFactory.createDiagnostic(diagnosticInfo, new NullLocation()));
+    }
+
+    /**
+     * A {@link Location} placeholder for the write-failure diagnostic, which is not tied to a specific source node.
+     */
+    private static class NullLocation implements Location {
+
+        @Override
+        public LineRange lineRange() {
+            return LineRange.from("", LinePosition.from(0, 0), LinePosition.from(0, 0));
+        }
+
+        @Override
+        public TextRange textRange() {
+            return TextRange.from(0, 0);
         }
     }
 }
