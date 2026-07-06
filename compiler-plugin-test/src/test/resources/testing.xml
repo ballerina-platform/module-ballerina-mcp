@@ -22,7 +22,6 @@
     <test name="UnitTests">
         <classes>
             <class name="io.ballerina.stdlib.mcp.plugin.EndpointExportTest"/>
-            <class name="io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.EndpointsArtifactWriterTest"/>
         </classes>
     </test>
 </suite>

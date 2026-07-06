@@ -23,13 +23,11 @@ import io.ballerina.projects.Package;
 import io.ballerina.projects.Project;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
-import io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.Endpoint;
 import io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.EndpointYamlGenerator;
 import io.ballerina.tools.diagnostics.DiagnosticFactory;
 import io.ballerina.tools.diagnostics.DiagnosticInfo;
 import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 
-import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.ballerina.stdlib.mcp.plugin.Utils.hasCompilationErrors;
@@ -38,25 +36,14 @@ import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpService;
 
 /**
  * Analysis task that extracts the endpoint metadata of each MCP service when the {@code --export-endpoints} build
- * option is enabled, collecting it for {@link McpEndpointArtifactTask} to write to a single artifact.
+ * option is enabled.
  */
 public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
 
     private static final AtomicBoolean unsupportedVersionWarned = new AtomicBoolean(false);
 
-    private final List<Endpoint> endpoints;
-
     /**
-     * Creates the task with the shared list that collects an endpoint per analyzed service.
-     *
-     * @param endpoints the list to which extracted endpoints are added
-     */
-    McpCodeAnalyzerTask(List<Endpoint> endpoints) {
-        this.endpoints = endpoints;
-    }
-
-    /**
-     * Extracts and collects the endpoint metadata for the analyzed service when endpoint export is enabled.
+     * Extracts and registers the endpoint metadata for the analyzed service when endpoint export is enabled.
      *
      * @param context the syntax node analysis context for the service declaration
      */
@@ -70,7 +57,7 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
         BuildOptions buildOptions = project.buildOptions();
         if (isExportEndpoints(buildOptions, context)) {
             EndpointYamlGenerator endpointYamlGeneratorMcp = new EndpointYamlGenerator(context);
-            endpoints.add(endpointYamlGeneratorMcp.getEndpoint());
+            endpointYamlGeneratorMcp.addEndpointArtifact();
         }
     }
 

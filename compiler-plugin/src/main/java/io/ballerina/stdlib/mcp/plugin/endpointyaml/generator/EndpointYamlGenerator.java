@@ -39,6 +39,7 @@ import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.compiler.syntax.tree.SyntaxTree;
+import io.ballerina.projects.plugins.EndpointArtifact;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import io.ballerina.runtime.api.utils.IdentifierUtils;
 import io.ballerina.tools.diagnostics.DiagnosticFactory;
@@ -50,7 +51,7 @@ import java.util.Optional;
 
 /**
  * Extracts the endpoint metadata (port, base path, type) of an MCP service declaration. The extracted endpoints are
- * collected and written to a single {@code endpoints.yaml} artifact by {@code McpEndpointArtifactTask}.
+ * registered with the project for the shared endpoint artifact writer.
  */
 public class EndpointYamlGenerator {
 
@@ -61,6 +62,7 @@ public class EndpointYamlGenerator {
     final PackageMemberVisitor packageMemberVisitor = new PackageMemberVisitor();
 
     private static final String TYPE = "mcp";
+    private static final String SCHEMA_PATH = "";
 
     private record ListenerInfo(Optional<ParenthesizedArgList> argList) {
     }
@@ -89,6 +91,27 @@ public class EndpointYamlGenerator {
         String basePath = buildBasePath();
 
         return new Endpoint(port, basePath, TYPE);
+    }
+
+    /**
+     * Registers the extracted endpoint metadata with the project.
+     */
+    public void addEndpointArtifact() {
+        Endpoint endpoint = getEndpoint();
+        context.addEndpointArtifact(new EndpointArtifact(getEndpointName(endpoint), endpoint.getPort(),
+                endpoint.getBasePath(), endpoint.getType(), SCHEMA_PATH));
+    }
+
+    private String getEndpointName(Endpoint endpoint) {
+        String basePath = endpoint.getBasePath();
+        if (basePath == null || basePath.isBlank()) {
+            return TYPE;
+        }
+        String normalizedName = basePath.replaceFirst("^/+", "").replaceAll("[^a-zA-Z0-9]+", "_");
+        if (normalizedName.isBlank()) {
+            return TYPE;
+        }
+        return normalizedName;
     }
 
     private void ensureModuleVisited(String moduleName) {

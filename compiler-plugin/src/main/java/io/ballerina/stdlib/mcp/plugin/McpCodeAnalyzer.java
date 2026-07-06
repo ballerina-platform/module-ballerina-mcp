@@ -21,25 +21,14 @@ package io.ballerina.stdlib.mcp.plugin;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.projects.plugins.CodeAnalysisContext;
 import io.ballerina.projects.plugins.CodeAnalyzer;
-import io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.Endpoint;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 /**
- * Code analyzer that collects endpoint metadata from MCP service declarations and writes it to a single
- * {@code endpoints.yaml} artifact during the compilation phase.
+ * Code analyzer that collects endpoint metadata from MCP service declarations.
  */
 public class McpCodeAnalyzer extends CodeAnalyzer {
 
     @Override
     public void init(CodeAnalysisContext codeAnalysisContext) {
-        // Shared per compilation: the syntax-node task collects an endpoint per service, the compilation task writes
-        // them all to a single file once every service has been analyzed.
-        List<Endpoint> endpoints = Collections.synchronizedList(new ArrayList<>());
-        codeAnalysisContext.addSyntaxNodeAnalysisTask(new McpCodeAnalyzerTask(endpoints),
-                SyntaxKind.SERVICE_DECLARATION);
-        codeAnalysisContext.addCompilationAnalysisTask(new McpEndpointArtifactTask(endpoints));
+        codeAnalysisContext.addSyntaxNodeAnalysisTask(new McpCodeAnalyzerTask(), SyntaxKind.SERVICE_DECLARATION);
     }
 }
