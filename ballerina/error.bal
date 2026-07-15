@@ -80,6 +80,27 @@ public type ListToolsError distinct ClientError;
 # Error for failures during tool execution operations.
 public type ToolCallError distinct ClientError;
 
+# Error for failures during stdio transport operations.
+public type StdioTransportError distinct TransportError & ClientError;
+
+# Error when the MCP server subprocess cannot be launched.
+public type ProcessSpawnError distinct StdioTransportError;
+
+# Error when the MCP server subprocess exits or closes its stdout unexpectedly.
+public type ServerProcessExitedError distinct StdioTransportError;
+
+# Error when no message is received from the server within the configured read timeout.
+public type ReadTimeoutError distinct StdioTransportError;
+
+# Error for failures while reading from the MCP server subprocess stdout.
+public type StdioReadError distinct StdioTransportError;
+
+# Error for failures while writing to the MCP server subprocess stdin.
+public type StdioWriteError distinct StdioTransportError;
+
+# Error for failures while terminating the MCP server subprocess.
+public type ProcessTerminationError distinct StdioTransportError;
+
 # Errors for failures occurring during server operations.
 public type ServerError distinct Error;
 

@@ -44,4 +44,15 @@ public final class ModuleUtils {
     public static BError createError(String errorMessage) {
         return ErrorCreator.createError(fromString(errorMessage));
     }
+
+    /**
+     * Creates an error value of a distinct error type defined in this module.
+     *
+     * @param errorTypeName Name of the error type as declared in the module (e.g. {@code ProcessSpawnError}).
+     * @param errorMessage  The error message.
+     * @return              A {@link BError} of the requested module-defined type.
+     */
+    public static BError createTypedError(String errorTypeName, String errorMessage) {
+        return ErrorCreator.createError(getModule(), errorTypeName, fromString(errorMessage), null, null);
+    }
 }
