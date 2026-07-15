@@ -8,6 +8,7 @@ enabled via environment variables:
   MOCK_EMIT_BLANK_LINES=1     emit blank lines around every response
   MOCK_RESPONSE_DELAY=<secs>  sleep before responding
   MOCK_EXIT_AFTER_INITIALIZE=1  exit right after answering initialize
+  MOCK_PROTOCOL_VERSION=<v>   protocol version reported by initialize
 """
 import json
 import os
@@ -18,6 +19,7 @@ EMIT_NOTIFICATION = os.environ.get("MOCK_EMIT_NOTIFICATION") == "1"
 EMIT_BLANK_LINES = os.environ.get("MOCK_EMIT_BLANK_LINES") == "1"
 RESPONSE_DELAY = float(os.environ.get("MOCK_RESPONSE_DELAY", "0"))
 EXIT_AFTER_INITIALIZE = os.environ.get("MOCK_EXIT_AFTER_INITIALIZE") == "1"
+PROTOCOL_VERSION = os.environ.get("MOCK_PROTOCOL_VERSION", "2025-06-18")
 
 
 def send(payload):
@@ -48,7 +50,7 @@ def main():
                 "jsonrpc": "2.0",
                 "id": message_id,
                 "result": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": PROTOCOL_VERSION,
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "mock-stdio-server", "version": "0.1.0"},
                 },

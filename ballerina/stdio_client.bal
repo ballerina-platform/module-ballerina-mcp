@@ -1,4 +1,4 @@
-// Copyright (c) 2025 WSO2 LLC (http://www.wso2.com).
+// Copyright (c) 2026 WSO2 LLC (http://www.wso2.com).
 //
 // WSO2 LLC. licenses this file to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file except
@@ -14,39 +14,38 @@
 // specific language governing permissions and limitations
 // under the License.
 
-# Represents an MCP client built on top of the Streamable HTTP transport.
-public distinct isolated client class StreamableHttpClient {
-    # Transport for communication with the MCP server.
-    private StreamableHttpClientTransport transport;
+# Represents an MCP client built on top of the stdio transport. The MCP server is launched
+# as a subprocess and the session lasts for the lifetime of that process.
+public distinct isolated client class StdioClient {
+    # Transport for communication with the MCP server subprocess.
+    private final StdioClientTransport transport;
     # Server capabilities.
     private ServerCapabilities? serverCapabilities = ();
     # Server implementation information.
     private Implementation? serverInfo = ();
+    # Whether the MCP initialization handshake has completed.
+    private boolean initialized = false;
     # Request ID generator for tracking requests.
     private int requestId = 0;
 
-    # Creates a new MCP client with the specified transport configuration.
+    # Creates a new MCP client by launching the MCP server as a subprocess.
     #
-    # + serverUrl - MCP server URL
-    # + config - Client transport configuration
-    # + return - `ClientError` if transport creation fails, `()` on success
-    public isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config) returns ClientError? {
-        self.transport = check new (serverUrl, config);
+    # + config - Subprocess launch and transport configuration
+    # + return - `ClientError` if the server process cannot be started, `()` on success
+    public isolated function init(*StdioClientTransportConfig config) returns ClientError? {
+        self.transport = check new (config);
     }
 
     # Initializes the MCP connection by performing protocol handshake and capability exchange.
+    # Subsequent calls after a successful handshake are no-ops.
     #
     # + clientInfo - Client implementation information
     # + capabilities - Client capabilities to advertise
-    # + headers - Optional headers to include with the request
     # + return - `ClientError` if initialization fails, `()` on success
     isolated remote function initialize(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
-            ClientCapabilities capabilities = {}, map<string|string[]> headers = {}) returns ClientError? {
+            ClientCapabilities capabilities = {}) returns ClientError? {
         lock {
-            string? sessionId = self.transport.getSessionId();
-
-            // If a session ID exists, assume reconnection and skip initialization.
-            if sessionId is string {
+            if self.initialized {
                 return;
             }
         }
@@ -60,47 +59,43 @@ public distinct isolated client class StreamableHttpClient {
             }
         };
 
-        ServerResult response = check self.sendRequestMessage(initRequest, headers);
+        ServerResult response = check self.sendRequestMessage(initRequest);
         InitializeResult initializeResult = check validateInitializeResponse(response);
 
         lock {
             self.serverCapabilities = initializeResult.capabilities.cloneReadOnly();
             self.serverInfo = initializeResult.serverInfo.cloneReadOnly();
-            // Record the negotiated version so it is sent as the MCP-Protocol-Version header
-            // on all subsequent requests (including the initialized notification below).
-            self.transport.setProtocolVersion(initializeResult.protocolVersion);
+            self.initialized = true;
         }
 
         check self.sendNotificationMessage(<InitializedNotification>{});
     }
 
-    # Opens a server-sent events (SSE) stream for asynchronous server-to-client communication.
+    # Returns the server-initiated messages (notifications or requests) received so far as a
+    # stream and clears the buffer. Unlike the Streamable HTTP transport, stdio has no separate
+    # server event channel; server-initiated messages are collected while requests are in flight.
     #
-    # + return - Stream of JsonRpcMessages or a ClientError.
+    # + return - Stream of buffered JsonRpcMessages, or a ClientError.
     isolated remote function subscribeToServerMessages() returns stream<JsonRpcMessage, StreamError?>|ClientError {
-        lock {
-            return self.transport.establishEventStream();
-        }
+        readonly & JsonRpcMessage[] pendingMessages = self.transport.drainPendingServerMessages();
+        return pendingMessages.toStream();
     }
 
     # Retrieves the list of available tools from the server.
     #
-    # + headers - Optional headers to include with the request
     # + return - List of available tools or a ClientError.
-    isolated remote function listTools(map<string|string[]> headers = {}) returns ListToolsResult|ClientError {
+    isolated remote function listTools() returns ListToolsResult|ClientError {
         ListToolsRequest listToolsRequest = {};
 
-        ServerResult result = check self.sendRequestMessage(listToolsRequest, headers);
+        ServerResult result = check self.sendRequestMessage(listToolsRequest);
         return ensureListToolsResult(result);
     }
 
     # Executes a tool on the server with the given parameters.
     #
     # + params - Tool execution parameters, including name and arguments
-    # + headers - Optional headers to include with the request
     # + return - Result of the tool execution or a ClientError.
-    isolated remote function callTool(CallToolParams params, map<string|string[]> headers = {})
-            returns CallToolResult|ClientError {
+    isolated remote function callTool(CallToolParams params) returns CallToolResult|ClientError {
         // Reject task-augmented calls when the server hasn't advertised task support.
         if params.task !is () {
             lock {
@@ -114,19 +109,20 @@ public distinct isolated client class StreamableHttpClient {
             params: params
         };
 
-        ServerResult result = check self.sendRequestMessage(toolCallRequest, headers);
+        ServerResult result = check self.sendRequestMessage(toolCallRequest);
         return ensureCallToolResult(result);
     }
 
-    # Closes the session and disconnects from the server.
+    # Closes the session by terminating the MCP server subprocess.
     #
     # + return - A `ClientError` if closure fails, or `()` on success.
     isolated remote function close() returns ClientError? {
         lock {
             do {
-                check self.transport.terminateSession();
+                check self.transport.terminateProcess();
                 self.serverCapabilities = ();
                 self.serverInfo = ();
+                self.initialized = false;
                 return;
             } on fail error e {
                 return error ClientError(string `Failed to disconnect from server: ${e.message()}`, e);
@@ -137,10 +133,8 @@ public distinct isolated client class StreamableHttpClient {
     # Sends a request message to the server and returns the server's response.
     #
     # + request - The request object to send
-    # + headers - Optional headers to include with the request
-    # + return - ServerResult, a stream of results, or a ClientError.
-    private isolated function sendRequestMessage(Request request, map<string|string[]> headers = {})
-            returns ServerResult|ClientError {
+    # + return - ServerResult or a ClientError.
+    private isolated function sendRequestMessage(Request request) returns ServerResult|ClientError {
         lock {
             self.requestId += 1;
 
@@ -150,8 +144,7 @@ public distinct isolated client class StreamableHttpClient {
                 id: self.requestId
             };
 
-            JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? response =
-                self.transport.sendMessage(jsonRpcRequest, headers.cloneReadOnly());
+            JsonRpcMessage|StdioTransportError? response = self.transport.sendMessage(jsonRpcRequest);
             return processServerResponse(response).cloneReadOnly();
         }
     }
@@ -161,13 +154,11 @@ public distinct isolated client class StreamableHttpClient {
     # + notification - The notification object to send.
     # + return - A `ClientError` if sending fails, or `()` on success.
     private isolated function sendNotificationMessage(Notification notification) returns ClientError? {
-        lock {
-            JsonRpcNotification jsonRpcNotification = {
-                ...notification.cloneReadOnly(),
-                jsonrpc: JSONRPC_VERSION
-            };
+        JsonRpcNotification jsonRpcNotification = {
+            ...notification.cloneReadOnly(),
+            jsonrpc: JSONRPC_VERSION
+        };
 
-            _ = check self.transport.sendMessage(jsonRpcNotification);
-        }
+        _ = check self.transport.sendMessage(jsonRpcNotification);
     }
 }
