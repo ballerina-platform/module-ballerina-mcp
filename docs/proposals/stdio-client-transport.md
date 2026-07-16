@@ -285,11 +285,15 @@ Verified by the Phase 1 implementation (`StdioClientTransport` + `StdioProcessHe
 - ✅ EOF / server-death surfaces as `ServerProcessExitedError` (or `StdioWriteError` when the write hits the dead pipe first).
 - ✅ Shutdown is idempotent and leaves no leftover processes.
 
-Still to verify during implementation (Phase 2/3 exit criteria):
+Verified by the Phase 3 robustness suite (`ballerina/tests/stdio_robustness_test.bal`):
 
-- ⬜ Scheduler behavior under concurrent strands issuing blocking reads (stress test with N parallel `callTool`s — `yieldAndRun` is the designed mitigation, needs proof).
-- ⬜ Read-timeout race: a line arriving exactly as the timeout fires must not be dropped.
-- ⬜ `cwd` via `ProcessBuilder` (standard API, low risk, still needs a test).
+- ✅ Concurrency: 24 parallel `callTool`s (2× the machine's carrier threads) all complete with correctly correlated responses — blocked reads yield instead of starving the scheduler.
+- ✅ Read-timeout recovery: a response arriving after its request timed out is discarded on the next request's cycle; the next request still receives its own response.
+- ✅ `cwd` via `ProcessBuilder` (script resolved relative to the configured cwd, verified by a `cwd` tool).
+- ✅ Long-lived session: 60 sequential tool calls on one subprocess, each response matched to its request.
+- ✅ stderr flood (~2MB) does not backpressure the session — inherit/discard modes never create a stderr pipe.
+
+Still open (needs CI / other platforms):
+
 - ⬜ Windows: `.cmd`/`.bat` launcher resolution (`npx`), process-tree termination semantics.
 - ⬜ GraalVM native image build with the new helper (`ProcessBuilder` is supported; needs the existing native-image CI job to pass).
-- ⬜ Long-lived session stability (many sequential calls over minutes; stderr `INHERIT` mode never backpressures the child).

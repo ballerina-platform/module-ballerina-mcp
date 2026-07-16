@@ -9,6 +9,10 @@ enabled via environment variables:
   MOCK_RESPONSE_DELAY=<secs>  sleep before responding
   MOCK_EXIT_AFTER_INITIALIZE=1  exit right after answering initialize
   MOCK_PROTOCOL_VERSION=<v>   protocol version reported by initialize
+  MOCK_DELAY_ONLY_FIRST=1     apply MOCK_RESPONSE_DELAY to the first response only
+  MOCK_STDERR_SPAM=1          write ~2MB to stderr at startup
+
+Tools: "echo" echoes its arguments back; "cwd" returns the server's working directory.
 """
 import json
 import os
@@ -20,6 +24,8 @@ EMIT_BLANK_LINES = os.environ.get("MOCK_EMIT_BLANK_LINES") == "1"
 RESPONSE_DELAY = float(os.environ.get("MOCK_RESPONSE_DELAY", "0"))
 EXIT_AFTER_INITIALIZE = os.environ.get("MOCK_EXIT_AFTER_INITIALIZE") == "1"
 PROTOCOL_VERSION = os.environ.get("MOCK_PROTOCOL_VERSION", "2025-06-18")
+DELAY_ONLY_FIRST = os.environ.get("MOCK_DELAY_ONLY_FIRST") == "1"
+STDERR_SPAM = os.environ.get("MOCK_STDERR_SPAM") == "1"
 
 
 def send(payload):
@@ -32,6 +38,12 @@ def send(payload):
 
 
 def main():
+    if STDERR_SPAM:
+        spam_chunk = "x" * 65536
+        for _ in range(32):
+            sys.stderr.write(spam_chunk)
+        sys.stderr.flush()
+    responses_sent = 0
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -41,8 +53,9 @@ def main():
         message_id = message.get("id")
         if message_id is None:
             continue  # notification — nothing to send back
-        if RESPONSE_DELAY:
+        if RESPONSE_DELAY and (not DELAY_ONLY_FIRST or responses_sent == 0):
             time.sleep(RESPONSE_DELAY)
+        responses_sent += 1
         if EMIT_NOTIFICATION:
             send({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
         if method == "initialize":
@@ -70,12 +83,14 @@ def main():
                 },
             })
         elif method == "tools/call":
+            tool_name = message.get("params", {}).get("name")
             arguments = message.get("params", {}).get("arguments", {})
+            result_text = os.getcwd() if tool_name == "cwd" else json.dumps(arguments)
             send({
                 "jsonrpc": "2.0",
                 "id": message_id,
                 "result": {
-                    "content": [{"type": "text", "text": json.dumps(arguments)}],
+                    "content": [{"type": "text", "text": result_text}],
                     "isError": False,
                 },
             })
