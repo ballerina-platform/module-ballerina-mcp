@@ -1,0 +1,14 @@
+[package]
+org = "ballerina"
+name = "mcp_stdio_client"
+version = "0.1.0"
+distribution = "2201.12.3"
+
+[build-options]
+observabilityIncluded = true
+
+[[dependency]]
+org = "ballerina"
+name = "mcp"
+version = "1.2.0"
+repository = "local"

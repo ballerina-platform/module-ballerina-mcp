@@ -2,7 +2,14 @@
 
 This module offers APIs for developing MCP (Model Context Protocol) clients and servers in Ballerina.
 
-MCP is an open standard that enables seamless integration between Large Language Models (LLMs) and external data sources, tools, and services. It facilitates structured communication through JSON-RPC 2.0 over HTTP transport, allowing AI applications to access and interact with external capabilities in a standardized way. This module provides both client-side APIs for consuming MCP services and server-side APIs for exposing tools and capabilities to AI applications.
+MCP is an open standard that enables seamless integration between Large Language Models (LLMs) and external data sources, tools, and services. It facilitates structured communication through JSON-RPC 2.0, allowing AI applications to access and interact with external capabilities in a standardized way. This module provides both client-side APIs for consuming MCP services and server-side APIs for exposing tools and capabilities to AI applications.
+
+Two client transports are supported:
+
+- **Streamable HTTP** (`mcp:StreamableHttpClient`) — connects to remote MCP servers over HTTP, with support for SSE streaming and session management.
+- **stdio** (`mcp:StdioClient`) — launches an MCP server as a local subprocess and communicates over its stdin/stdout pipes, as commonly configured via `mcpServers` entries in AI tooling.
+
+Server-side APIs currently support the Streamable HTTP transport.
 
 ## Quickstart
 
@@ -263,6 +270,65 @@ public function main() returns error? {
 }
 ```
 
+### MCP Client over stdio
+
+Use `mcp:StdioClient` to launch an MCP server as a subprocess and communicate with it over stdin/stdout. A typical `mcpServers` JSON configuration maps directly onto the client configuration:
+
+```json
+{ "mcpServers": { "fetch": { "command": "uvx", "args": ["mcp-server-fetch"] } } }
+```
+
+```ballerina
+import ballerina/io;
+import ballerina/mcp;
+
+public function main() returns error? {
+    // Launch the MCP server as a subprocess.
+    mcp:StdioClient mcpClient = check new (command = "uvx", args = ["mcp-server-fetch"]);
+
+    // Perform the MCP initialization handshake.
+    check mcpClient->initialize({
+        name: "My MCP Client",
+        version: "1.0.0"
+    });
+
+    // Discover and invoke tools exactly as with the HTTP client.
+    mcp:ListToolsResult toolsResult = check mcpClient->listTools();
+    foreach mcp:ToolDefinition tool in toolsResult.tools {
+        io:println(string `Available tool: ${tool.name}`);
+    }
+
+    mcp:CallToolResult result = check mcpClient->callTool({
+        name: "fetch",
+        arguments: {"url": "https://example.com"}
+    });
+    io:println(result.content);
+
+    // Terminate the server subprocess.
+    check mcpClient->close();
+}
+```
+
+Additional configuration options:
+
+```ballerina
+mcp:StdioClient mcpClient = check new (
+    command = "npx",
+    args = ["-y", "@modelcontextprotocol/server-github"],
+    env = {GITHUB_PERSONAL_ACCESS_TOKEN: token}, // overlaid on the inherited environment
+    cwd = "/path/to/workspace",                  // working directory of the subprocess
+    readTimeout = 30,                            // seconds to wait for each server message
+    shutdownTimeout = 5,                         // grace period per shutdown stage
+    stderrMode = mcp:STDERR_DISCARD              // or mcp:STDERR_INHERIT (default) to pass server logs through
+);
+```
+
+Notes specific to the stdio transport:
+
+- The MCP session lasts for the lifetime of the subprocess; `close()` terminates it following the spec-defined shutdown sequence (close stdin → SIGTERM → SIGKILL, including descendant processes of launcher commands such as `uvx`/`npx`).
+- There is no session ID or HTTP header support; the protocol version is negotiated solely via `initialize`.
+- Server-initiated notifications received while requests are in flight are buffered and can be read via `subscribeToServerMessages()`.
+
 ## Examples
 
 The `mcp` module provides practical examples illustrating usage in various scenarios. Explore these examples in the [examples directory](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/), covering the following use cases:
@@ -276,3 +342,4 @@ The `mcp` module provides practical examples illustrating usage in various scena
 1. [Weather Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-weather-client-demo) - Shows how to build an MCP client that discovers and invokes weather tools
 2. [Crypto Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-crypto-client-demo) - Demonstrates client interaction with cryptographic MCP services
 3. [Shopping Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-shopping-client-demo) - Shows session-based client usage with parallel session execution for stateful services
+4. [Stdio Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-stdio-client) - Shows how to launch an MCP server as a subprocess and interact with it over the stdio transport

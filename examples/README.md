@@ -155,6 +155,28 @@ cd clients/mcp-shopping-client-demo
 bal run
 ```
 
+### MCP Stdio Client Demo
+
+**Location:** `clients/mcp-stdio-client/`
+
+A client example demonstrating the stdio transport: the MCP server is launched as a local subprocess instead of being reached over HTTP.
+
+**Features:**
+- Launches the reference `mcp-server-fetch` server as a subprocess via `uvx`
+- Mirrors the common `mcpServers` JSON configuration (`command` + `args`)
+- Performs the MCP initialization handshake over stdin/stdout
+- Lists available tools and fetches a web page through the `fetch` tool
+- Terminates the server subprocess on close
+
+**Prerequisites:** [`uv`/`uvx`](https://docs.astral.sh/uv/) must be installed (`brew install uv` or the platform equivalent).
+
+**How to run:**
+```bash
+# No separate server needed — the client spawns it.
+cd clients/mcp-stdio-client
+bal run
+```
+
 ## Common Testing Workflow
 
 ### Running All Examples
