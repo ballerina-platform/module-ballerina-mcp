@@ -115,19 +115,56 @@ isolated function testStdioClientSubscribeToServerMessages() returns error? {
     _ = check mcpClient->listTools();
 
     stream<JsonRpcMessage, StreamError?> serverMessageStream = check mcpClient->subscribeToServerMessages();
-    JsonRpcMessage[] serverMessages = check from JsonRpcMessage message in serverMessageStream
-        select message;
-    test:assertTrue(serverMessages.length() >= 2,
-            "Expected buffered notifications from the initialize and tools/list exchanges.");
-    JsonRpcMessage firstServerMessage = serverMessages[0];
+    record {|JsonRpcMessage value;|}|StreamError? firstStreamItem = serverMessageStream.next();
+    if firstStreamItem is StreamError {
+        return firstStreamItem;
+    }
+    if firstStreamItem is () {
+        test:assertFail("Expected a server notification.");
+    }
+    JsonRpcMessage firstServerMessage = firstStreamItem.value;
     if firstServerMessage !is JsonRpcNotification {
-        test:assertFail("Expected the buffered message to be a JsonRpcNotification.");
+        test:assertFail("Expected a streamed message to be a JsonRpcNotification.");
     }
     test:assertEquals(firstServerMessage.method, "notifications/tools/list_changed");
 
-    // The buffer is cleared by the previous subscription.
-    stream<JsonRpcMessage, StreamError?> emptyMessageStream = check mcpClient->subscribeToServerMessages();
-    test:assertTrue(emptyMessageStream.next() is (), "Expected an empty stream after draining.");
+    record {|JsonRpcMessage value;|}|StreamError? secondStreamItem = serverMessageStream.next();
+    if secondStreamItem is StreamError {
+        return secondStreamItem;
+    }
+    test:assertTrue(secondStreamItem is record {|JsonRpcMessage value;|},
+            "Expected the notification produced during tools/list.");
+
+    ClientError|stream<JsonRpcMessage, StreamError?> secondSubscription = mcpClient->subscribeToServerMessages();
+    test:assertTrue(secondSubscription is StdioTransportError,
+            "Expected a second active server-message subscription to be rejected.");
+
+    check serverMessageStream.close();
+    stream<JsonRpcMessage, StreamError?> reopenedSubscription = check mcpClient->subscribeToServerMessages();
+    check reopenedSubscription.close();
+
+    check mcpClient->close();
+}
+
+@test:Config {groups: ["stdio"]}
+isolated function testStdioClientStreamsIdleServerMessages() returns error? {
+    StdioClient mcpClient = check new (command = PYTHON_COMMAND, args = [MOCK_STDIO_SERVER],
+            env = {MOCK_EMIT_IDLE_NOTIFICATION: "1"});
+    check mcpClient->initialize();
+
+    stream<JsonRpcMessage, StreamError?> serverMessageStream = check mcpClient->subscribeToServerMessages();
+    record {|JsonRpcMessage value;|}|StreamError? streamItem = serverMessageStream.next();
+    if streamItem is StreamError {
+        return streamItem;
+    }
+    if streamItem is () {
+        test:assertFail("Expected the notification sent while the client was idle.");
+    }
+    JsonRpcMessage serverMessage = streamItem.value;
+    if serverMessage !is JsonRpcNotification {
+        test:assertFail("Expected an idle server notification.");
+    }
+    test:assertEquals(serverMessage.method, "notifications/resources/list_changed");
 
     check mcpClient->close();
 }

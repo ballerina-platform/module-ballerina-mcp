@@ -25,8 +25,6 @@ const int LONG_SESSION_CALL_COUNT = 60;
 # Stdout notifications flooded before the initialize response. Exceeds the native stdout
 # queue capacity (1024) so the reader thread must block and apply backpressure.
 const int STDOUT_FLOOD_COUNT = 3000;
-// The native line queue and the pending server-message buffer each hold 1024 entries.
-const int MAX_PENDING_SERVER_MESSAGE_COUNT = 1024;
 
 // A response arriving after its request timed out must be discarded on the next
 // request's cycle — never returned as the answer to a different request.
@@ -56,7 +54,9 @@ isolated function testStdioTransportRecoversAfterReadTimeout() returns error? {
 @test:Config {groups: ["stdio"]}
 isolated function testStdioClientConcurrentToolCalls() returns error? {
     StdioClient mcpClient = check new (command = PYTHON_COMMAND, args = [MOCK_STDIO_SERVER],
-            env = {MOCK_RESPONSE_DELAY: "0.1"});
+            env = {MOCK_CONCURRENT_RESPONSES: "1", MOCK_CONCURRENT_REQUEST_TARGET:
+                    CONCURRENT_CALL_COUNT.toString()}, readTimeout = 2,
+            maxConcurrentRequests = CONCURRENT_CALL_COUNT);
     check mcpClient->initialize();
 
     future<CallToolResult|ClientError>[] pendingCalls = [];
@@ -127,21 +127,34 @@ isolated function testStdioClientSustainsLongSession() returns error? {
     check mcpClient->close();
 }
 
-// A stdout burst larger than the pending-message capacity must fail with a typed transport
-// error rather than allowing server-initiated messages to grow in memory without bound.
+// A stdout burst with no message consumer must backpressure the child and time out rather than
+// allowing the client to accumulate an unbounded number of server-initiated messages.
 @test:Config {groups: ["stdio"]}
-isolated function testStdioTransportRejectsStdoutBurstBeyondPendingMessageCapacity() returns error? {
+isolated function testStdioTransportBackpressuresUnconsumedStdoutBurst() returns error? {
     StdioClientTransport transport = check new (command = PYTHON_COMMAND, args = [MOCK_STDIO_SERVER],
-            env = {MOCK_FLOOD_NOTIFICATIONS: STDOUT_FLOOD_COUNT.toString()});
+            env = {MOCK_FLOOD_NOTIFICATIONS: STDOUT_FLOOD_COUNT.toString()}, readTimeout = 1,
+            shutdownTimeout = 1);
 
     JsonRpcMessage|StdioTransportError? initializeResponse =
             transport.sendMessage(createInitializeJsonRpcRequest(1));
-    test:assertTrue(initializeResponse is StdioReadError,
-            "A notification burst beyond the pending-message capacity must fail with StdioReadError.");
+    test:assertTrue(initializeResponse is ReadTimeoutError,
+            "An unconsumed notification burst must not bypass the configured read timeout.");
 
-    readonly & JsonRpcMessage[] pendingMessages = transport.drainPendingServerMessages();
-    test:assertEquals(pendingMessages.length(), MAX_PENDING_SERVER_MESSAGE_COUNT,
-            "The pending buffer must remain capped at its configured capacity.");
+    check transport.terminateProcess();
+}
+
+// EOF must wake response waiters even if the server-message queue is full and its EOF sentinel
+// cannot be added until a subscriber drains it.
+@test:Config {groups: ["stdio"]}
+isolated function testStdioTransportReportsExitAfterUnconsumedStdoutBurst() returns error? {
+    StdioClientTransport transport = check new (command = PYTHON_COMMAND, args = [MOCK_STDIO_SERVER],
+            env = {MOCK_FLOOD_NOTIFICATIONS: "1024", MOCK_EXIT_AFTER_FLOOD: "1"}, readTimeout = 2,
+            shutdownTimeout = 1);
+
+    JsonRpcMessage|StdioTransportError? initializeResponse =
+            transport.sendMessage(createInitializeJsonRpcRequest(1));
+    test:assertTrue(initializeResponse is ServerProcessExitedError,
+            "A server exit behind a full message queue must not wait for the read timeout.");
 
     check transport.terminateProcess();
 }

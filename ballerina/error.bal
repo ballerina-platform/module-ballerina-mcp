@@ -95,6 +95,9 @@ public type ReadTimeoutError distinct StdioTransportError;
 # Error for failures while reading from the MCP server subprocess stdout.
 public type StdioReadError distinct StdioTransportError;
 
+# Error for failures while receiving server-initiated stdio messages.
+public type StdioMessageStreamError distinct StreamError;
+
 # Error for failures while writing to the MCP server subprocess stdin.
 public type StdioWriteError distinct StdioTransportError;
 

@@ -98,14 +98,11 @@ public distinct isolated client class StdioClient {
         }
     }
 
-    # Returns the server-initiated messages (notifications or requests) received so far as a
-    # stream and clears the buffer. Unlike the Streamable HTTP transport, stdio has no separate
-    # server event channel; server-initiated messages are collected while requests are in flight.
+    # Opens a live stream of server-initiated messages (notifications or requests).
     #
-    # + return - Stream of buffered JsonRpcMessages, or a ClientError.
+    # + return - Stream of JsonRpcMessages until the server subprocess exits, or a ClientError.
     isolated remote function subscribeToServerMessages() returns stream<JsonRpcMessage, StreamError?>|ClientError {
-        readonly & JsonRpcMessage[] pendingMessages = self.transport.drainPendingServerMessages();
-        return pendingMessages.toStream();
+        return check self.transport.establishMessageStream();
     }
 
     # Retrieves the list of available tools from the server.
@@ -162,18 +159,19 @@ public distinct isolated client class StdioClient {
     # + request - The request object to send
     # + return - ServerResult or a ClientError.
     private isolated function sendRequestMessage(Request request) returns ServerResult|ClientError {
+        int requestId;
         lock {
             self.requestId += 1;
-
-            JsonRpcRequest jsonRpcRequest = {
-                ...request.cloneReadOnly(),
-                jsonrpc: JSONRPC_VERSION,
-                id: self.requestId
-            };
-
-            JsonRpcMessage|StdioTransportError? response = self.transport.sendMessage(jsonRpcRequest);
-            return processServerResponse(response).cloneReadOnly();
+            requestId = self.requestId;
         }
+        JsonRpcRequest jsonRpcRequest = {
+            ...request.cloneReadOnly(),
+            jsonrpc: JSONRPC_VERSION,
+            id: requestId
+        };
+
+        JsonRpcMessage|StdioTransportError? response = self.transport.sendMessage(jsonRpcRequest);
+        return processServerResponse(response).cloneReadOnly();
     }
 
     # Sends a notification message to the server.

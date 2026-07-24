@@ -19,9 +19,11 @@
 package io.ballerina.stdlib.mcp;
 
 import io.ballerina.runtime.api.Environment;
+import io.ballerina.runtime.api.utils.JsonUtils;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BDecimal;
+import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BMap;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BString;
@@ -48,8 +50,8 @@ import java.util.concurrent.TimeUnit;
  * UTF-8 encoded access to its stdin/stdout pipes:
  * <ul>
  *     <li>Spawns the subprocess via {@link ProcessBuilder} and stores the process,
- *     its stdin writer, and a line queue as native data on the transport object.</li>
- *     <li>A dedicated daemon reader thread pumps stdout lines into a blocking queue so
+ *     its stdin writer, response waiters, and server-message queue as native data on the transport object.</li>
+ *     <li>A dedicated daemon reader thread routes stdout messages to blocking queues so
  *     reads support timeouts and never block Ballerina scheduler threads
  *     (all blocking calls run inside {@link Environment#yieldAndRun}).</li>
  *     <li>Termination follows the MCP stdio shutdown sequence: close stdin, wait,
@@ -65,8 +67,10 @@ public final class StdioProcessHelper {
     private static final String PROCESS_NATIVE_KEY = "stdioProcess";
     /** Native data key for the {@link BufferedWriter} wrapping the server's stdin. */
     private static final String STDIN_WRITER_NATIVE_KEY = "stdioStdinWriter";
-    /** Native data key for the {@link LinkedBlockingQueue} of stdout lines. */
-    private static final String LINE_QUEUE_NATIVE_KEY = "stdioLineQueue";
+    /** Native data key for the queue of server-initiated stdout messages. */
+    private static final String SERVER_MESSAGE_QUEUE_NATIVE_KEY = "stdioServerMessageQueue";
+    /** Native data key for response waiters, keyed by JSON-RPC request ID. */
+    private static final String RESPONSE_WAITERS_NATIVE_KEY = "stdioResponseWaiters";
     /** Native data key for the stdout reader {@link Thread}. */
     private static final String READER_THREAD_NATIVE_KEY = "stdioReaderThread";
 
@@ -148,12 +152,14 @@ public final class StdioProcessHelper {
 
         BufferedWriter stdinWriter = new BufferedWriter(
                 new OutputStreamWriter(serverProcess.getOutputStream(), StandardCharsets.UTF_8));
-        LinkedBlockingQueue<Object> lineQueue = new LinkedBlockingQueue<>(LINE_QUEUE_CAPACITY);
-        Thread readerThread = startReaderThread(serverProcess, lineQueue);
+        LinkedBlockingQueue<Object> serverMessageQueue = new LinkedBlockingQueue<>(LINE_QUEUE_CAPACITY);
+        ConcurrentHashMap<String, LinkedBlockingQueue<Object>> responseWaiters = new ConcurrentHashMap<>();
+        Thread readerThread = startReaderThread(serverProcess, serverMessageQueue, responseWaiters);
 
         transport.addNativeData(PROCESS_NATIVE_KEY, serverProcess);
         transport.addNativeData(STDIN_WRITER_NATIVE_KEY, stdinWriter);
-        transport.addNativeData(LINE_QUEUE_NATIVE_KEY, lineQueue);
+        transport.addNativeData(SERVER_MESSAGE_QUEUE_NATIVE_KEY, serverMessageQueue);
+        transport.addNativeData(RESPONSE_WAITERS_NATIVE_KEY, responseWaiters);
         transport.addNativeData(READER_THREAD_NATIVE_KEY, readerThread);
         LIVE_PROCESSES.add(serverProcess);
         return null;
@@ -187,40 +193,77 @@ public final class StdioProcessHelper {
         });
     }
 
-    /**
-     * Retrieves the next non-blank line from the server's stdout, waiting up to the given timeout.
-     *
-     * @param env            The Ballerina runtime environment.
-     * @param transport      The Ballerina transport object holding native state.
-     * @param timeoutSeconds Maximum time to wait for a line.
-     * @return               The line as a Ballerina string, null if the server closed its stdout (EOF),
-     *                       or a Ballerina error on timeout or interruption.
-     */
-    public static Object readMessageLine(Environment env, BObject transport, BDecimal timeoutSeconds) {
-        @SuppressWarnings("unchecked")
-        LinkedBlockingQueue<Object> lineQueue =
-                (LinkedBlockingQueue<Object>) transport.getNativeData(LINE_QUEUE_NATIVE_KEY);
-        if (lineQueue == null) {
+    /** Registers a response waiter before its request is written to stdin. */
+    public static Object registerResponseWaiter(BObject transport, Object requestId) {
+        ConcurrentHashMap<String, LinkedBlockingQueue<Object>> responseWaiters = getResponseWaiters(transport);
+        if (responseWaiters == null) {
             return ModuleUtils.createTypedError(STDIO_TRANSPORT_ERROR, "Server process has not been started.");
+        }
+        String requestKey = requestKey(requestId);
+        if (responseWaiters.putIfAbsent(requestKey, new LinkedBlockingQueue<>(1)) != null) {
+            return ModuleUtils.createTypedError(STDIO_TRANSPORT_ERROR,
+                    "A response waiter is already registered for request id " + requestId + ".");
+        }
+        return null;
+    }
+
+    /** Waits for the correlated response that the reader routed to the given request ID. */
+    public static Object awaitResponse(Environment env, BObject transport, Object requestId, BDecimal timeoutSeconds) {
+        ConcurrentHashMap<String, LinkedBlockingQueue<Object>> responseWaiters = getResponseWaiters(transport);
+        if (responseWaiters == null) {
+            return ModuleUtils.createTypedError(STDIO_TRANSPORT_ERROR, "Server process has not been started.");
+        }
+        LinkedBlockingQueue<Object> responseQueue = responseWaiters.get(requestKey(requestId));
+        if (responseQueue == null) {
+            return ModuleUtils.createTypedError(STDIO_TRANSPORT_ERROR,
+                    "No response waiter is registered for request id " + requestId + ".");
         }
         long timeoutMillis = (long) (timeoutSeconds.decimalValue().doubleValue() * 1000);
         return env.yieldAndRun(() -> {
             try {
-                Object queueItem = lineQueue.poll(timeoutMillis, TimeUnit.MILLISECONDS);
+                Object queueItem = responseQueue.poll(timeoutMillis, TimeUnit.MILLISECONDS);
                 if (queueItem == null) {
                     return ModuleUtils.createTypedError(READ_TIMEOUT_ERROR,
-                            "No message received from server process within " + timeoutSeconds + " seconds.");
+                            "No response received from server process within " + timeoutSeconds + " seconds.");
                 }
                 if (queueItem == EOF_SENTINEL) {
-                    // Re-enqueue so subsequent reads observe EOF as well.
-                    lineQueue.add(EOF_SENTINEL);
                     return null;
                 }
                 return StringUtils.fromString((String) queueItem);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return ModuleUtils.createTypedError(STDIO_READ_ERROR,
-                        "Interrupted while waiting for a message from the server process.");
+                        "Interrupted while waiting for a server response.");
+            }
+        });
+    }
+
+    /** Removes a response waiter after it receives a response or fails. */
+    public static void unregisterResponseWaiter(BObject transport, Object requestId) {
+        ConcurrentHashMap<String, LinkedBlockingQueue<Object>> responseWaiters = getResponseWaiters(transport);
+        if (responseWaiters != null) {
+            responseWaiters.remove(requestKey(requestId));
+        }
+    }
+
+    /** Retrieves the next server-initiated message, waiting until one arrives or stdout closes. */
+    public static Object readServerMessage(Environment env, BObject transport) {
+        LinkedBlockingQueue<Object> serverMessageQueue = getServerMessageQueue(transport);
+        if (serverMessageQueue == null) {
+            return ModuleUtils.createTypedError(STDIO_TRANSPORT_ERROR, "Server process has not been started.");
+        }
+        return env.yieldAndRun(() -> {
+            try {
+                Object queueItem = serverMessageQueue.take();
+                if (queueItem == EOF_SENTINEL) {
+                    serverMessageQueue.put(EOF_SENTINEL);
+                    return null;
+                }
+                return StringUtils.fromString((String) queueItem);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return ModuleUtils.createTypedError(STDIO_READ_ERROR,
+                        "Interrupted while waiting for a server-initiated message.");
             }
         });
     }
@@ -248,6 +291,7 @@ public final class StdioProcessHelper {
         if (readerThread != null) {
             readerThread.interrupt();
         }
+        signalEof(transport);
         long graceMillis = (long) (graceSeconds.decimalValue().doubleValue() * 1000);
         return env.yieldAndRun(() -> {
             List<ProcessHandle> descendants = serverProcess.toHandle().descendants().toList();
@@ -313,20 +357,29 @@ public final class StdioProcessHelper {
     }
 
     /**
-     * Starts and returns the daemon thread that pumps stdout lines of the given process into the
-     * queue. Blank lines are skipped (some servers emit them between messages); EOF and read
-     * failures both enqueue the EOF sentinel and end the thread. Enqueues block on a full queue,
-     * so a server producing faster than the client consumes is backpressured rather than allowed
-     * to grow heap without bound; an interrupt (issued during termination) ends the thread.
+     * Starts and returns the daemon thread that routes correlated responses to their waiters and
+     * queues server-initiated messages for subscribers. Blank lines are skipped. Enqueues block
+     * on a full server-message queue, applying backpressure instead of growing memory without bound.
      */
-    private static Thread startReaderThread(Process serverProcess, LinkedBlockingQueue<Object> lineQueue) {
+    private static Thread startReaderThread(Process serverProcess, LinkedBlockingQueue<Object> serverMessageQueue,
+                                            ConcurrentHashMap<String, LinkedBlockingQueue<Object>> responseWaiters) {
         Thread readerThread = new Thread(() -> {
             try (BufferedReader stdoutReader = new BufferedReader(
                     new InputStreamReader(serverProcess.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = stdoutReader.readLine()) != null) {
                     if (!line.isBlank()) {
-                        lineQueue.put(line);
+                        String responseKey = getResponseKey(line);
+                        if (responseKey != null) {
+                            LinkedBlockingQueue<Object> responseQueue = responseWaiters.get(responseKey);
+                            if (responseQueue != null) {
+                                if (!responseQueue.offer(line)) {
+                                    continue;
+                                }
+                            }
+                            continue;
+                        }
+                        serverMessageQueue.put(line);
                     }
                 }
             } catch (IOException ignored) {
@@ -335,14 +388,79 @@ public final class StdioProcessHelper {
                 Thread.currentThread().interrupt();
                 return;
             }
-            try {
-                lineQueue.put(EOF_SENTINEL);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            signalEof(serverMessageQueue, responseWaiters);
         }, "mcp-stdio-reader-" + serverProcess.pid());
         readerThread.setDaemon(true);
         readerThread.start();
         return readerThread;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ConcurrentHashMap<String, LinkedBlockingQueue<Object>> getResponseWaiters(BObject transport) {
+        return (ConcurrentHashMap<String, LinkedBlockingQueue<Object>>) transport.getNativeData(
+                RESPONSE_WAITERS_NATIVE_KEY);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static LinkedBlockingQueue<Object> getServerMessageQueue(BObject transport) {
+        return (LinkedBlockingQueue<Object>) transport.getNativeData(SERVER_MESSAGE_QUEUE_NATIVE_KEY);
+    }
+
+    private static String getResponseKey(String line) {
+        try {
+            Object json = JsonUtils.parse(line);
+            if (!(json instanceof BMap<?, ?> message)) {
+                return null;
+            }
+            BString resultKey = StringUtils.fromString("result");
+            BString errorKey = StringUtils.fromString("error");
+            BString idKey = StringUtils.fromString("id");
+            if (!message.containsKey(resultKey) && !message.containsKey(errorKey)) {
+                return null;
+            }
+            Object responseId = message.get(idKey);
+            return responseId == null ? null : requestKey(responseId);
+        } catch (BError ignored) {
+            return null;
+        }
+    }
+
+    private static String requestKey(Object requestId) {
+        if (requestId instanceof BString stringId) {
+            return "string:" + stringId.getValue();
+        }
+        return "number:" + requestId;
+    }
+
+    private static void signalEof(BObject transport) {
+        LinkedBlockingQueue<Object> serverMessageQueue = getServerMessageQueue(transport);
+        ConcurrentHashMap<String, LinkedBlockingQueue<Object>> responseWaiters = getResponseWaiters(transport);
+        if (serverMessageQueue != null) {
+            serverMessageQueue.clear();
+            if (!serverMessageQueue.offer(EOF_SENTINEL)) {
+                throw new IllegalStateException("Unable to signal stdio server-message EOF.");
+            }
+        }
+        if (responseWaiters != null) {
+            responseWaiters.values().forEach(StdioProcessHelper::signalResponseEof);
+        }
+    }
+
+    private static void signalEof(LinkedBlockingQueue<Object> serverMessageQueue,
+                                  ConcurrentHashMap<String, LinkedBlockingQueue<Object>> responseWaiters) {
+        // A full server-message queue must not delay requests from observing that stdout closed.
+        responseWaiters.values().forEach(StdioProcessHelper::signalResponseEof);
+        try {
+            serverMessageQueue.put(EOF_SENTINEL);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static void signalResponseEof(LinkedBlockingQueue<Object> responseQueue) {
+        if (!responseQueue.offer(EOF_SENTINEL)) {
+            // A correlated response is already queued and must be delivered before EOF.
+            return;
+        }
     }
 }

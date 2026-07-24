@@ -74,6 +74,8 @@ public type StdioClientTransportConfig record {|
     string cwd?;
     # Seconds to wait for a response line before failing the request.
     decimal readTimeout = 60;
+    # Maximum number of requests awaiting responses at the same time.
+    int maxConcurrentRequests = 32;
     # Grace period (seconds) between closing stdin / SIGTERM / SIGKILL during shutdown.
     decimal shutdownTimeout = 5;
     # How to handle the child's stderr: forward to parent stderr (default) or discard.
@@ -114,8 +116,9 @@ Differences from the HTTP client:
 - No `headers` parameters (HTTP-specific).
 - No session-ID handling; `initialize` always runs the handshake (no reconnect short-circuit).
 - `close()` performs process shutdown instead of HTTP `DELETE`.
-- `subscribeToServerMessages()` surfaces server-initiated notifications collected by the
-  transport (see §3.5) rather than opening a GET/SSE stream.
+- `subscribeToServerMessages()` exposes one live stream of server-initiated messages from the
+  transport (see §3.5), including messages received while the client is idle. The stream must be
+  closed before a subsequent subscription is opened.
 
 **Shared-logic refactor:** `initialize` handshake validation (protocol-version check, capability
 capture), request-ID generation, and result-type dispatch are copy-identical between the two
@@ -129,11 +132,11 @@ larger refactor deferred until a third transport appears.
 ```ballerina
 isolated class StdioClientTransport {
     isolated function init(*StdioClientTransportConfig config) returns StdioTransportError?;
-    // Requests: write line, then read lines until the response with the matching id arrives.
+    // Requests: write line, then await the response with the matching id.
     // Notifications: write line, return ().
     isolated function sendMessage(JsonRpcMessage message) returns JsonRpcMessage|StdioTransportError?;
-    // Drains buffered server-initiated messages (notifications / requests) as a stream.
-    isolated function establishMessageStream() returns stream<JsonRpcMessage, StreamError?>;
+    // Opens the single stream of server-initiated messages (notifications / requests).
+    isolated function establishMessageStream() returns stream<JsonRpcMessage, StreamError?>|StdioTransportError;
     // Spec shutdown sequence: close stdin → waitFor(shutdownTimeout) → destroy → destroyForcibly.
     isolated function terminateProcess() returns StdioTransportError?;
     isolated function isServerAlive() returns boolean;
@@ -146,12 +149,11 @@ Framing and correlation rules:
 - Read loop: `readLine()`; skip blank lines; parse into `JsonRpcMessage` (reuse the union +
   `fromJsonStringWithType()` pattern from `JsonRpcMessageStreamTransformer`); a parse failure is
   a recoverable `TypeConversionError` on that message, not a transport failure.
-- **Correlation (MVP):** the transport holds a `lock` for the duration of one request →
-  response cycle, exactly like `StreamableHttpClient.sendRequestMessage` serializes requests
-  today. While waiting for a response id, any interleaved message that is *not* the awaited
-  response (server notifications such as `notifications/tools/list_changed`, or server→client
-  requests like `ping`) is appended to an in-memory pending queue, drained by
-  `establishMessageStream()`. Responses with unknown ids are dropped with a warning log.
+- **Correlation:** the dedicated reader routes each JSON-RPC response to a per-request queue
+  by its ID, so up to `maxConcurrentRequests` requests may await independent responses at once.
+  Server notifications and requests are routed to a separate bounded queue consumed by one
+  `establishMessageStream()` subscriber, even while no client request is in flight. Unknown
+  responses are dropped.
 - **EOF** (`readLine()` returns null) means the server died: fail the in-flight request with
   `ServerProcessExitedError` (including the exit code) and mark the transport closed.
 
@@ -183,8 +185,8 @@ Implementation notes:
 - **Read timeout**: `readLine` cannot be interrupted portably; implement with a dedicated
   reader thread per process pumping lines into a `LinkedBlockingQueue<String>`, with the
   Ballerina-facing `readLine` doing `queue.poll(timeout, SECONDS)` inside `yieldAndRun`. The
-  reader thread also observes EOF and enqueues a sentinel. This same thread is what makes
-  *future* concurrent-request support cheap (see §6).
+  reader thread also observes EOF and enqueues sentinels for pending response waiters and the
+  server-message stream.
 - **Shutdown** (`terminateProcess`): close stdin writer → `process.waitFor(grace, SECONDS)` →
   `destroy()` (SIGTERM) → `waitFor(grace)` → `destroyForcibly()` (SIGKILL). Also interrupt/join
   the reader thread.
@@ -244,9 +246,6 @@ public type ProcessTerminationError distinct StdioTransportError;
 
 - **stdio server (listener) support** — different shape entirely (read own stdin, single
   client, no `http:Listener`); deferred per scope.
-- **Concurrent in-flight requests** — MVP serializes requests under a lock (parity with the
-  HTTP client). The reader-thread + queue design allows upgrading to an id→pending-response
-  map later without reworking the native layer.
 - **Server→client requests** (`ping`, sampling, elicitation, roots) — currently also
   unsupported over HTTP; stdio surfaces them via `subscribeToServerMessages` for now.
 - **Common `Transport` abstraction / unified `Client`** — revisit when a third transport or

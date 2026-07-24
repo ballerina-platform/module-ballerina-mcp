@@ -318,6 +318,7 @@ mcp:StdioClient mcpClient = check new (
     env = {GITHUB_PERSONAL_ACCESS_TOKEN: token}, // overlaid on the inherited environment
     cwd = "/path/to/workspace",                  // working directory of the subprocess
     readTimeout = 30,                            // seconds to wait for each server message
+    maxConcurrentRequests = 32,                  // maximum simultaneous client requests
     shutdownTimeout = 5,                         // grace period per shutdown stage
     stderrMode = mcp:STDERR_DISCARD              // or mcp:STDERR_INHERIT (default) to pass server logs through
 );
@@ -327,7 +328,8 @@ Notes specific to the stdio transport:
 
 - The MCP session lasts for the lifetime of the subprocess; `close()` terminates it following the spec-defined shutdown sequence (close stdin → SIGTERM → SIGKILL, including descendant processes of launcher commands such as `uvx`/`npx`).
 - There is no session ID or HTTP header support; the protocol version is negotiated solely via `initialize`.
-- Server-initiated notifications received while requests are in flight are buffered and can be read via `subscribeToServerMessages()`.
+- `subscribeToServerMessages()` opens one live stream of server-initiated notifications and requests, including messages received while the client is idle. Close that stream before opening another subscription.
+- Independent requests may be in flight concurrently, up to `maxConcurrentRequests` (32 by default).
 
 ## Examples
 

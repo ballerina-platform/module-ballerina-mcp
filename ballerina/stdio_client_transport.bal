@@ -16,10 +16,6 @@
 
 import ballerina/jballerina.java;
 
-// Maximum number of server-initiated messages retained while a request is in flight.
-// Once reached, the request fails with StdioReadError rather than allowing unbounded growth.
-const int MAX_PENDING_SERVER_MESSAGES = 1024;
-
 # Determines how the stderr output of the MCP server subprocess is handled.
 public enum StderrMode {
     # Forward the subprocess stderr (server logs) to the parent process stderr.
@@ -40,6 +36,8 @@ public type StdioClientTransportConfig record {|
     string cwd?;
     # Seconds to wait for a message from the server before a read times out
     decimal readTimeout = 60;
+    # Maximum number of requests that may await responses at the same time
+    int maxConcurrentRequests = 32;
     # Grace period in seconds applied at each stage of the shutdown sequence
     # (close stdin → wait → SIGTERM → wait → SIGKILL)
     decimal shutdownTimeout = 5;
@@ -50,14 +48,15 @@ public type StdioClientTransportConfig record {|
 # Provides stdio-based client transport that launches an MCP server as a subprocess and
 # communicates with it over newline-delimited JSON-RPC on its stdin/stdout pipes.
 #
-# Requests and their response correlation are serialized: one request/response cycle is
-# in flight at a time. Server-initiated messages (notifications or requests) received while
-# waiting for a response are buffered and can be drained via `drainPendingServerMessages`.
+# A dedicated reader routes each response by JSON-RPC ID, allowing independent requests to be
+# in flight concurrently. Server-initiated messages are delivered through a live message stream.
 isolated class StdioClientTransport {
     private final decimal readTimeout;
     private final decimal shutdownTimeout;
+    private final int maxConcurrentRequests;
     private boolean transportClosed = false;
-    private JsonRpcMessage[] pendingServerMessages = [];
+    private int activeRequestCount = 0;
+    private boolean serverMessageStreamOpen = false;
 
     # Initializes the transport by spawning the MCP server subprocess.
     #
@@ -66,65 +65,119 @@ isolated class StdioClientTransport {
     isolated function init(*StdioClientTransportConfig config) returns StdioTransportError? {
         self.readTimeout = config.readTimeout;
         self.shutdownTimeout = config.shutdownTimeout;
+        self.maxConcurrentRequests = config.maxConcurrentRequests;
+        if self.maxConcurrentRequests < 1 {
+            return error StdioTransportError("maxConcurrentRequests must be greater than zero.");
+        }
         return self.startServerProcess(config.command, config.args.cloneReadOnly(),
                 config.env.cloneReadOnly(), config.cwd, config.stderrMode);
     }
 
     # Sends a JSON-RPC message to the server over stdin.
     #
-    # For requests, blocks until the response with the matching id arrives on stdout and returns it.
-    # Server-initiated messages received in the meantime are buffered. For notifications, returns
-    # immediately after the write.
+    # A request waits only for its matching response, allowing other requests to proceed in parallel.
+    # Notifications return immediately after the write.
     #
     # + message - The JSON-RPC message to send.
     # + return - The correlated response for requests, nil for notifications, or a `StdioTransportError`.
     isolated function sendMessage(JsonRpcMessage message) returns JsonRpcMessage|StdioTransportError? {
         readonly & JsonRpcMessage outboundMessage = message.cloneReadOnly();
+        if outboundMessage is JsonRpcRequest {
+            return self.sendRequestMessage(outboundMessage);
+        }
         lock {
             if self.transportClosed {
                 return error StdioTransportError("Cannot send message: transport is closed.");
             }
-            check self.writeMessageLine(outboundMessage.toJsonString());
-            if outboundMessage !is JsonRpcRequest {
-                return;
-            }
-            RequestId requestId = outboundMessage.id;
-            while true {
-                string? messageLine = check self.readMessageLine(self.readTimeout);
-                if messageLine is () {
-                    return self.createServerExitedError();
-                }
-                JsonRpcMessage|error parsedMessage = messageLine.fromJsonStringWithType();
-                if parsedMessage is error {
-                    // Tolerate lines that are not valid JSON-RPC instead of failing the in-flight request.
-                    continue;
-                }
-                if parsedMessage is JsonRpcResponse|JsonRpcError {
-                    if parsedMessage.id == requestId {
-                        return parsedMessage.cloneReadOnly();
-                    }
-                    // Response to an unknown request id — drop it.
-                    continue;
-                }
-                // Server-initiated request or notification — buffer for later consumption.
-                if self.pendingServerMessages.length() >= MAX_PENDING_SERVER_MESSAGES {
-                    return error StdioReadError(string `Received more than ${MAX_PENDING_SERVER_MESSAGES} ` +
-                            "server-initiated messages while awaiting a response. Drain pending messages before " +
-                            "issuing another request.");
-                }
-                self.pendingServerMessages.push(parsedMessage);
-            }
+            return self.writeMessageLine(outboundMessage.toJsonString());
         }
     }
 
-    # Returns the server-initiated messages buffered so far and clears the buffer.
+    # Opens a live stream of server-initiated messages received on stdout.
     #
-    # + return - The buffered messages in arrival order.
-    isolated function drainPendingServerMessages() returns readonly & JsonRpcMessage[] {
+    # Only one active stream is supported because the subprocess has one stdout channel.
+    #
+    # + return - Stream of server notifications and requests until the subprocess exits, or a transport error.
+    isolated function establishMessageStream() returns stream<JsonRpcMessage, StreamError?>|StdioTransportError {
         lock {
-            readonly & JsonRpcMessage[] drainedMessages = self.pendingServerMessages.cloneReadOnly();
-            self.pendingServerMessages = [];
-            return drainedMessages;
+            if self.transportClosed {
+                return error StdioTransportError("Cannot subscribe to messages: transport is closed.");
+            }
+            if self.serverMessageStreamOpen {
+                return error StdioTransportError("A server message stream is already open.");
+            }
+            self.serverMessageStreamOpen = true;
+            StdioServerMessageStream messageStream = new (transport = self);
+            return new stream<JsonRpcMessage, StreamError?>(messageStream);
+        }
+    }
+
+    # Reserves a bounded request slot, registers its response queue, sends the request, and waits
+    # for the matching response.
+    #
+    # + request - JSON-RPC request to send.
+    # + return - The matching response or a transport error.
+    private isolated function sendRequestMessage(JsonRpcRequest request)
+            returns JsonRpcMessage|StdioTransportError? {
+        check self.acquireRequestSlot();
+        RequestId requestId = request.id;
+        StdioTransportError? registrationError = self.registerResponseWaiter(requestId = requestId);
+        if registrationError is StdioTransportError {
+            self.releaseRequestSlot();
+            return registrationError;
+        }
+
+        StdioTransportError? writeError = self.writeMessageLine(line = request.toJsonString());
+        if writeError is StdioTransportError {
+            self.unregisterResponseWaiter(requestId = requestId);
+            self.releaseRequestSlot();
+            return writeError;
+        }
+
+        string|StdioTransportError? responseLine = self.awaitResponse(requestId = requestId,
+                timeoutSeconds = self.readTimeout);
+        self.unregisterResponseWaiter(requestId = requestId);
+        self.releaseRequestSlot();
+        if responseLine is StdioTransportError {
+            return responseLine;
+        }
+        if responseLine is () {
+            return self.createServerExitedError();
+        }
+        JsonRpcMessage|error response = responseLine.fromJsonStringWithType();
+        if response is error {
+            return error StdioReadError(string `Failed to parse a correlated server response: ${response.message()}`);
+        }
+        return response.cloneReadOnly();
+    }
+
+    # Reserves a request slot while ensuring the transport remains open.
+    #
+    # + return - A transport error when closed or at the configured request limit.
+    private isolated function acquireRequestSlot() returns StdioTransportError? {
+        lock {
+            if self.transportClosed {
+                return error StdioTransportError("Cannot send message: transport is closed.");
+            }
+            if self.activeRequestCount >= self.maxConcurrentRequests {
+                return error StdioTransportError(string `Maximum concurrent request limit of ${
+                        self.maxConcurrentRequests} reached.`);
+            }
+            self.activeRequestCount += 1;
+        }
+    }
+
+    # Releases a request slot after a response, timeout, or write failure.
+    private isolated function releaseRequestSlot() {
+        lock {
+            self.activeRequestCount -= 1;
+        }
+    }
+
+    # Marks the server-message stream as closed so a later subscriber may open a new stream.
+    isolated function releaseServerMessageStream() {
+        lock {
+            self.serverMessageStreamOpen = false;
         }
     }
 
@@ -162,8 +215,20 @@ isolated class StdioClientTransport {
         'class: "io.ballerina.stdlib.mcp.StdioProcessHelper"
     } external;
 
-    private isolated function readMessageLine(decimal timeoutSeconds)
+    private isolated function registerResponseWaiter(RequestId requestId) returns StdioTransportError? = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.StdioProcessHelper"
+    } external;
+
+    private isolated function awaitResponse(RequestId requestId, decimal timeoutSeconds)
             returns string|StdioTransportError? = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.StdioProcessHelper"
+    } external;
+
+    private isolated function unregisterResponseWaiter(RequestId requestId) = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.StdioProcessHelper"
+    } external;
+
+    isolated function readServerMessage() returns string|StdioTransportError? = @java:Method {
         'class: "io.ballerina.stdlib.mcp.StdioProcessHelper"
     } external;
 

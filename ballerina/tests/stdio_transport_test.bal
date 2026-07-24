@@ -88,7 +88,7 @@ isolated function testStdioTransportRequestResponseLifecycle() returns error? {
 }
 
 @test:Config {groups: ["stdio"]}
-isolated function testStdioTransportBuffersInterleavedServerMessages() returns error? {
+isolated function testStdioTransportRoutesInterleavedServerMessages() returns error? {
     StdioClientTransport transport = check new (command = PYTHON_COMMAND, args = [MOCK_STDIO_SERVER],
             env = {MOCK_EMIT_NOTIFICATION: "1"});
 
@@ -96,15 +96,15 @@ isolated function testStdioTransportBuffersInterleavedServerMessages() returns e
     test:assertTrue(initializeResponse is JsonRpcResponse,
             "Expected the correlated response despite the interleaved notification.");
 
-    readonly & JsonRpcMessage[] pendingMessages = transport.drainPendingServerMessages();
-    test:assertEquals(pendingMessages.length(), 1, "Expected exactly one buffered server notification.");
-    JsonRpcMessage firstPendingMessage = pendingMessages[0];
-    if firstPendingMessage !is JsonRpcNotification {
-        test:assertFail("Expected the buffered message to be a JsonRpcNotification.");
+    string? serverMessageLine = check transport.readServerMessage();
+    if serverMessageLine is () {
+        test:assertFail("Expected the interleaved server notification.");
     }
-    test:assertEquals(firstPendingMessage.method, "notifications/tools/list_changed");
-    test:assertEquals(transport.drainPendingServerMessages().length(), 0,
-            "Draining should clear the pending buffer.");
+    JsonRpcMessage|error serverMessage = serverMessageLine.fromJsonStringWithType();
+    if serverMessage !is JsonRpcNotification {
+        test:assertFail("Expected the routed message to be a JsonRpcNotification.");
+    }
+    test:assertEquals(serverMessage.method, "notifications/tools/list_changed");
 
     check transport.terminateProcess();
 }
