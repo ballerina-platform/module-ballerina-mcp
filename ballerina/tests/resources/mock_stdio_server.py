@@ -11,6 +11,12 @@ enabled via environment variables:
   MOCK_PROTOCOL_VERSION=<v>   protocol version reported by initialize
   MOCK_DELAY_ONLY_FIRST=1     apply MOCK_RESPONSE_DELAY to the first response only
   MOCK_STDERR_SPAM=1          write ~2MB to stderr at startup
+  MOCK_CLOSE_STDIN_AFTER_INITIALIZE=1  close stdin (read end) around the initialize
+                              response but stay alive, so the client's write of
+                              notifications/initialized fails with a broken pipe
+  MOCK_FLOOD_NOTIFICATIONS=<n>  emit n notifications on stdout just before the
+                              initialize response (used to exceed the client's
+                              bounded stdout queue and exercise backpressure)
 
 Tools: "echo" echoes its arguments back; "cwd" returns the server's working directory.
 """
@@ -26,6 +32,8 @@ EXIT_AFTER_INITIALIZE = os.environ.get("MOCK_EXIT_AFTER_INITIALIZE") == "1"
 PROTOCOL_VERSION = os.environ.get("MOCK_PROTOCOL_VERSION", "2025-06-18")
 DELAY_ONLY_FIRST = os.environ.get("MOCK_DELAY_ONLY_FIRST") == "1"
 STDERR_SPAM = os.environ.get("MOCK_STDERR_SPAM") == "1"
+CLOSE_STDIN_AFTER_INITIALIZE = os.environ.get("MOCK_CLOSE_STDIN_AFTER_INITIALIZE") == "1"
+FLOOD_NOTIFICATIONS = int(os.environ.get("MOCK_FLOOD_NOTIFICATIONS", "0"))
 
 
 def send(payload):
@@ -59,6 +67,15 @@ def main():
         if EMIT_NOTIFICATION:
             send({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
         if method == "initialize":
+            for _ in range(FLOOD_NOTIFICATIONS):
+                send({"jsonrpc": "2.0", "method": "notifications/message"})
+            if CLOSE_STDIN_AFTER_INITIALIZE:
+                # Close the read end at the OS level before responding so that, by
+                # the time the client reads this response and writes
+                # notifications/initialized, its write fails with a broken pipe
+                # (no exit race). os.close on the fd is more forceful than
+                # sys.stdin.close(), which can leave the descriptor lingering.
+                os.close(0)
             send({
                 "jsonrpc": "2.0",
                 "id": message_id,
@@ -70,6 +87,10 @@ def main():
             })
             if EXIT_AFTER_INITIALIZE:
                 return
+            if CLOSE_STDIN_AFTER_INITIALIZE:
+                # Stay alive (stdout open) so termination is driven by the client.
+                while True:
+                    time.sleep(0.1)
         elif method == "tools/list":
             send({
                 "jsonrpc": "2.0",

@@ -22,6 +22,11 @@ import ballerina/test;
 const int CONCURRENT_CALL_COUNT = 24;
 # Number of sequential tool calls in the long-session test.
 const int LONG_SESSION_CALL_COUNT = 60;
+# Stdout notifications flooded before the initialize response. Exceeds the native stdout
+# queue capacity (1024) so the reader thread must block and apply backpressure.
+const int STDOUT_FLOOD_COUNT = 3000;
+// The native line queue and the pending server-message buffer each hold 1024 entries.
+const int MAX_PENDING_SERVER_MESSAGE_COUNT = 1024;
 
 // A response arriving after its request timed out must be discarded on the next
 // request's cycle — never returned as the answer to a different request.
@@ -120,6 +125,25 @@ isolated function testStdioClientSustainsLongSession() returns error? {
     }
 
     check mcpClient->close();
+}
+
+// A stdout burst larger than the pending-message capacity must fail with a typed transport
+// error rather than allowing server-initiated messages to grow in memory without bound.
+@test:Config {groups: ["stdio"]}
+isolated function testStdioTransportRejectsStdoutBurstBeyondPendingMessageCapacity() returns error? {
+    StdioClientTransport transport = check new (command = PYTHON_COMMAND, args = [MOCK_STDIO_SERVER],
+            env = {MOCK_FLOOD_NOTIFICATIONS: STDOUT_FLOOD_COUNT.toString()});
+
+    JsonRpcMessage|StdioTransportError? initializeResponse =
+            transport.sendMessage(createInitializeJsonRpcRequest(1));
+    test:assertTrue(initializeResponse is StdioReadError,
+            "A notification burst beyond the pending-message capacity must fail with StdioReadError.");
+
+    readonly & JsonRpcMessage[] pendingMessages = transport.drainPendingServerMessages();
+    test:assertEquals(pendingMessages.length(), MAX_PENDING_SERVER_MESSAGE_COUNT,
+            "The pending buffer must remain capped at its configured capacity.");
+
+    check transport.terminateProcess();
 }
 
 // A server flooding stderr must not block the session: inherit and discard modes

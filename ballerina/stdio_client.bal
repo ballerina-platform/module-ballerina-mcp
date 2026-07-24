@@ -25,6 +25,8 @@ public distinct isolated client class StdioClient {
     private Implementation? serverInfo = ();
     # Whether the MCP initialization handshake has completed.
     private boolean initialized = false;
+    # Whether an MCP initialization handshake is currently in progress.
+    private boolean initializing = false;
     # Request ID generator for tracking requests.
     private int requestId = 0;
 
@@ -48,6 +50,10 @@ public distinct isolated client class StdioClient {
             if self.initialized {
                 return;
             }
+            if self.initializing {
+                return error ClientInitializationError("MCP client initialization is already in progress.");
+            }
+            self.initializing = true;
         }
 
         // Prepare and send the initialization request.
@@ -59,16 +65,37 @@ public distinct isolated client class StdioClient {
             }
         };
 
-        ServerResult response = check self.sendRequestMessage(initRequest);
-        InitializeResult initializeResult = check validateInitializeResponse(response);
+        ServerResult|ClientError response = self.sendRequestMessage(initRequest);
+        if response is ClientError {
+            self.clearInitializing();
+            return response;
+        }
+        InitializeResult|ClientError initializeResult = validateInitializeResponse(response);
+        if initializeResult is ClientError {
+            self.clearInitializing();
+            return initializeResult;
+        }
+
+        // Complete the handshake only after sending notifications/initialized.
+        ClientError? notificationError = self.sendNotificationMessage(<InitializedNotification>{});
+        if notificationError is ClientError {
+            self.clearInitializing();
+            return notificationError;
+        }
 
         lock {
             self.serverCapabilities = initializeResult.capabilities.cloneReadOnly();
             self.serverInfo = initializeResult.serverInfo.cloneReadOnly();
             self.initialized = true;
+            self.initializing = false;
         }
+    }
 
-        check self.sendNotificationMessage(<InitializedNotification>{});
+    # Clears the in-progress initialization marker after a failed handshake.
+    private isolated function clearInitializing() {
+        lock {
+            self.initializing = false;
+        }
     }
 
     # Returns the server-initiated messages (notifications or requests) received so far as a

@@ -16,6 +16,10 @@
 
 import ballerina/jballerina.java;
 
+// Maximum number of server-initiated messages retained while a request is in flight.
+// Once reached, the request fails with StdioReadError rather than allowing unbounded growth.
+const int MAX_PENDING_SERVER_MESSAGES = 1024;
+
 # Determines how the stderr output of the MCP server subprocess is handled.
 public enum StderrMode {
     # Forward the subprocess stderr (server logs) to the parent process stderr.
@@ -103,6 +107,11 @@ isolated class StdioClientTransport {
                     continue;
                 }
                 // Server-initiated request or notification — buffer for later consumption.
+                if self.pendingServerMessages.length() >= MAX_PENDING_SERVER_MESSAGES {
+                    return error StdioReadError(string `Received more than ${MAX_PENDING_SERVER_MESSAGES} ` +
+                            "server-initiated messages while awaiting a response. Drain pending messages before " +
+                            "issuing another request.");
+                }
                 self.pendingServerMessages.push(parsedMessage);
             }
         }

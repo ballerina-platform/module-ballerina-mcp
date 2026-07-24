@@ -42,6 +42,47 @@ isolated function testStdioClientEndToEnd() returns error? {
     check mcpClient->close();
 }
 
+// Regression: if the notifications/initialized write fails, initialize() must not have
+// marked the client as initialized, so a retry re-attempts the handshake instead of
+// returning a silent no-op success.
+@test:Config {groups: ["stdio"]}
+isolated function testStdioClientInitializeNotMarkedWhenNotificationFails() returns error? {
+    StdioClient mcpClient = check new (command = PYTHON_COMMAND, args = [MOCK_STDIO_SERVER],
+            env = {MOCK_CLOSE_STDIN_AFTER_INITIALIZE: "1"}, readTimeout = 2, shutdownTimeout = 1);
+
+    // The server answers initialize but has closed its stdin, so sending
+    // notifications/initialized fails and initialize() surfaces that error.
+    ClientError? firstInitialize = mcpClient->initialize();
+    test:assertTrue(firstInitialize is ClientError,
+            "initialize() should fail when the notifications/initialized write fails.");
+
+    // Since the handshake never completed, a retry must not be a silent success.
+    ClientError? secondInitialize = mcpClient->initialize();
+    test:assertTrue(secondInitialize is ClientError,
+            "A retry after a failed handshake must re-attempt, not return a no-op success.");
+
+    check mcpClient->close();
+}
+
+// Only one initialization handshake may be active at a time. A concurrent attempt must
+// fail instead of sending a second initialize request before the first handshake completes.
+@test:Config {groups: ["stdio"]}
+isolated function testStdioClientRejectsConcurrentInitialization() returns error? {
+    StdioClient mcpClient = check new (command = PYTHON_COMMAND, args = [MOCK_STDIO_SERVER],
+            env = {MOCK_RESPONSE_DELAY: "0.5"});
+
+    future<ClientError?> firstInitialization = start mcpClient->initialize();
+    future<ClientError?> secondInitialization = start mcpClient->initialize();
+    ClientError? firstResult = wait firstInitialization;
+    ClientError? secondResult = wait secondInitialization;
+
+    test:assertTrue((firstResult is () && secondResult is ClientInitializationError) ||
+            (secondResult is () && firstResult is ClientInitializationError),
+            "Exactly one concurrent initialize() call must complete the handshake.");
+
+    check mcpClient->close();
+}
+
 @test:Config {groups: ["stdio"]}
 isolated function testStdioClientRejectsUnsupportedProtocolVersion() returns error? {
     StdioClient mcpClient = check new (command = PYTHON_COMMAND, args = [MOCK_STDIO_SERVER],

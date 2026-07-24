@@ -67,6 +67,15 @@ public final class StdioProcessHelper {
     private static final String STDIN_WRITER_NATIVE_KEY = "stdioStdinWriter";
     /** Native data key for the {@link LinkedBlockingQueue} of stdout lines. */
     private static final String LINE_QUEUE_NATIVE_KEY = "stdioLineQueue";
+    /** Native data key for the stdout reader {@link Thread}. */
+    private static final String READER_THREAD_NATIVE_KEY = "stdioReaderThread";
+
+    /**
+     * Maximum number of stdout lines buffered ahead of the consumer. Once full, the reader
+     * blocks, which propagates backpressure through the OS pipe to the child rather than
+     * accumulating an unbounded number of lines in this queue.
+     */
+    private static final int LINE_QUEUE_CAPACITY = 1024;
 
     /** Queue sentinel signalling that the server closed its stdout (EOF). */
     private static final Object EOF_SENTINEL = new Object();
@@ -139,12 +148,13 @@ public final class StdioProcessHelper {
 
         BufferedWriter stdinWriter = new BufferedWriter(
                 new OutputStreamWriter(serverProcess.getOutputStream(), StandardCharsets.UTF_8));
-        LinkedBlockingQueue<Object> lineQueue = new LinkedBlockingQueue<>();
-        startReaderThread(serverProcess, lineQueue);
+        LinkedBlockingQueue<Object> lineQueue = new LinkedBlockingQueue<>(LINE_QUEUE_CAPACITY);
+        Thread readerThread = startReaderThread(serverProcess, lineQueue);
 
         transport.addNativeData(PROCESS_NATIVE_KEY, serverProcess);
         transport.addNativeData(STDIN_WRITER_NATIVE_KEY, stdinWriter);
         transport.addNativeData(LINE_QUEUE_NATIVE_KEY, lineQueue);
+        transport.addNativeData(READER_THREAD_NATIVE_KEY, readerThread);
         LIVE_PROCESSES.add(serverProcess);
         return null;
     }
@@ -229,8 +239,14 @@ public final class StdioProcessHelper {
     public static Object terminateServerProcess(Environment env, BObject transport, BDecimal graceSeconds) {
         Process serverProcess = (Process) transport.getNativeData(PROCESS_NATIVE_KEY);
         BufferedWriter stdinWriter = (BufferedWriter) transport.getNativeData(STDIN_WRITER_NATIVE_KEY);
+        Thread readerThread = (Thread) transport.getNativeData(READER_THREAD_NATIVE_KEY);
         if (serverProcess == null) {
             return null;
+        }
+        // Wake the reader in case it is blocked enqueuing onto a full queue with no consumer,
+        // so it does not linger after the process is gone.
+        if (readerThread != null) {
+            readerThread.interrupt();
         }
         long graceMillis = (long) (graceSeconds.decimalValue().doubleValue() * 1000);
         return env.yieldAndRun(() -> {
@@ -297,27 +313,36 @@ public final class StdioProcessHelper {
     }
 
     /**
-     * Starts the daemon thread that pumps stdout lines of the given process into the queue.
-     * Blank lines are skipped (some servers emit them between messages); EOF and read
-     * failures both enqueue the EOF sentinel and end the thread.
+     * Starts and returns the daemon thread that pumps stdout lines of the given process into the
+     * queue. Blank lines are skipped (some servers emit them between messages); EOF and read
+     * failures both enqueue the EOF sentinel and end the thread. Enqueues block on a full queue,
+     * so a server producing faster than the client consumes is backpressured rather than allowed
+     * to grow heap without bound; an interrupt (issued during termination) ends the thread.
      */
-    private static void startReaderThread(Process serverProcess, LinkedBlockingQueue<Object> lineQueue) {
+    private static Thread startReaderThread(Process serverProcess, LinkedBlockingQueue<Object> lineQueue) {
         Thread readerThread = new Thread(() -> {
             try (BufferedReader stdoutReader = new BufferedReader(
                     new InputStreamReader(serverProcess.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = stdoutReader.readLine()) != null) {
                     if (!line.isBlank()) {
-                        lineQueue.add(line);
+                        lineQueue.put(line);
                     }
                 }
             } catch (IOException ignored) {
                 // Stream closed — treated the same as EOF.
-            } finally {
-                lineQueue.add(EOF_SENTINEL);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            try {
+                lineQueue.put(EOF_SENTINEL);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
         }, "mcp-stdio-reader-" + serverProcess.pid());
         readerThread.setDaemon(true);
         readerThread.start();
+        return readerThread;
     }
 }
