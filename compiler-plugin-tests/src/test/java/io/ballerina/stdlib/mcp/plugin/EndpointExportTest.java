@@ -75,6 +75,36 @@ public class EndpointExportTest {
     }
 
     @Test
+    public void testStreamableHttpBasicService() throws Exception {
+        withBuild("streamable_http_basic_service", true, endpoints -> {
+            Assert.assertEquals(countEntries(endpoints), 1);
+            Assert.assertTrue(endpoints.contains("port: 9092"));
+            Assert.assertTrue(endpoints.contains("basePath: \"/streamable\""));
+            Assert.assertTrue(endpoints.contains("type: \"mcp\""));
+        });
+    }
+
+    @Test
+    public void testStreamableHttpListenerWithMcpService() throws Exception {
+        withBuild("streamable_http_listener_mcp_service", true, endpoints -> {
+            Assert.assertEquals(countEntries(endpoints), 1);
+            Assert.assertTrue(endpoints.contains("port: 9095"));
+            Assert.assertTrue(endpoints.contains("basePath: \"/transportagnostic\""));
+            Assert.assertTrue(endpoints.contains("type: \"mcp\""));
+        });
+    }
+
+    @Test
+    public void testStreamableHttpAdvancedService() throws Exception {
+        withBuild("streamable_http_advanced_service", true, endpoints -> {
+            Assert.assertEquals(countEntries(endpoints), 1);
+            Assert.assertTrue(endpoints.contains("port: 9093"));
+            Assert.assertTrue(endpoints.contains("basePath: \"/advanced\""));
+            Assert.assertTrue(endpoints.contains("type: \"mcp\""));
+        });
+    }
+
+    @Test
     public void testSameListenerSamePath() throws Exception {
         withBuild("same_listener_same_path", true, endpoints -> {
             // Two services on the same listener and path produce two (identical) entries.
@@ -122,6 +152,18 @@ public class EndpointExportTest {
             Assert.assertEquals(countOccurrences(endpoints, "type: \"mcp\""), 1,
                     "MCP must export exactly one (its own) entry, not the co-located HTTP service");
             Assert.assertTrue(endpoints.contains("basePath: \"/mcp\""), "The MCP service should be exported");
+        });
+    }
+
+    @Test
+    public void testStreamableHttpMcpAndNonMcpServiceExportsOnlyMcp() throws Exception {
+        withBuild("streamable_http_mcp_and_non_mcp_service", true, endpoints -> {
+            // Assert only on MCP-typed entries so the test survives HTTP/GraphQL adding their own entries later.
+            Assert.assertEquals(countOccurrences(endpoints, "type: \"mcp\""), 1,
+                    "MCP must export exactly one of its own entries, not the co-located HTTP service");
+            Assert.assertTrue(endpoints.contains("port: 9094"));
+            Assert.assertTrue(endpoints.contains("basePath: \"/streamable\""),
+                    "The streamable MCP service should be exported");
         });
     }
 
