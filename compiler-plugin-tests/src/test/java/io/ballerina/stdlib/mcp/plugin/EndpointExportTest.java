@@ -45,7 +45,8 @@ import java.util.stream.Stream;
  */
 public class EndpointExportTest {
 
-    private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "test-src")
+    private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "ballerina_sources",
+            "endpoint_export")
             .toAbsolutePath();
     private static final Path DISTRIBUTION_PATH = Paths.get("../", "target", "ballerina-runtime")
             .toAbsolutePath();
@@ -204,6 +205,20 @@ public class EndpointExportTest {
             Assert.assertTrue(endpoints.contains("basePath: \"/main\""));
             Assert.assertFalse(endpoints.contains("/test"), "A service declared in test sources must not be exported");
         });
+    }
+
+    @Test
+    public void testPackageWithoutMcpServicesProducesNoArtifact() throws Exception {
+        Path projectDirPath = RESOURCE_DIRECTORY.resolve("no_mcp_services");
+        try {
+            deleteDirectories(projectDirPath);
+            int exitCode = executeBallerinaCommand(projectDirPath, true);
+            Assert.assertEquals(exitCode, 0, "A package without MCP services must build successfully");
+            Assert.assertTrue(Files.notExists(artifactDir(projectDirPath)),
+                    "No artifact should be emitted when a package has no MCP services");
+        } finally {
+            deleteDirectories(projectDirPath);
+        }
     }
 
     @Test

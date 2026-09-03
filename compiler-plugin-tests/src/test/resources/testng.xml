@@ -21,6 +21,7 @@
     <test name="mcp-compiler-plugin-tests" preserve-order="true" parallel="false">
         <classes>
             <class name="io.ballerina.stdlib.mcp.plugin.CompilerPluginTest"/>
+            <class name="io.ballerina.stdlib.mcp.plugin.EndpointExportTest"/>
         </classes>
     </test>
 </suite>
