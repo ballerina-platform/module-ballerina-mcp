@@ -29,14 +29,19 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         private StreamableHttpServiceConfiguration? cachedServiceConfig = ();
 
         isolated resource function delete .(http:Headers headers)
-                returns http:BadRequest|http:NotFound|http:Ok|Error {
+                returns http:BadRequest|http:NotFound|http:InternalServerError|http:Ok {
             http:authenticateResource(self, "delete", []);
             http:BadRequest? protocolVersionError =
                     validateProtocolVersionHeader(getProtocolVersionFromHeaders(headers));
             if protocolVersionError !is () {
                 return protocolVersionError;
             }
-            StreamableHttpServiceConfiguration config = check self.getCachedServiceConfiguration();
+            StreamableHttpServiceConfiguration|Error config = self.getCachedServiceConfiguration();
+            if config is Error {
+                return <http:InternalServerError>{
+                    body: createJsonRpcError(INTERNAL_ERROR, config.message())
+                };
+            }
             SessionMode sessionMode = config.sessionMode;
 
             if sessionMode == STATELESS {
@@ -72,7 +77,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         isolated resource function post .(http:Request httpRequest, http:Headers headers)
                 returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:NotFound|
-                        http:Accepted|http:Ok|Error {
+                        http:Accepted|http:Ok {
             http:authenticateResource(self, "post", []);
             http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = validateRequiredHeaders(headers);
             if headerValidationError !is () {
@@ -121,7 +126,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers)
-            returns http:BadRequest|http:NotFound|http:Ok|Error {
+            returns http:BadRequest|http:NotFound|http:Ok {
             match request.method {
                 REQUEST_INITIALIZE => {
                     return self.handleInitializeRequest(request, headers);
@@ -156,7 +161,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers)
-            returns http:Ok|Error {
+            returns http:Ok {
             JsonRpcRequest {jsonrpc: _, id, ...request} = jsonRpcRequest;
             InitializeRequest|error initRequest = request.cloneWithType();
             if initRequest is error {
@@ -164,7 +169,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                         string `Invalid request: ${initRequest.message()}`, id);
             }
 
-            StreamableHttpServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+            StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
+            if serviceConfig is Error {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), id);
+            }
             SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_INITIALIZE);
 
             string requestedVersion = initRequest.params.protocolVersion;
@@ -214,8 +222,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function handleListToolsRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers)
-            returns http:BadRequest|http:NotFound|http:Ok|Error {
-            StreamableHttpServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+            returns http:BadRequest|http:NotFound|http:Ok {
+            StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
+            if serviceConfig is Error {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
+            }
             SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_LIST_TOOLS);
 
             string? sessionId = ();
@@ -259,8 +270,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function handleCallToolRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers)
-            returns http:BadRequest|http:NotFound|http:Ok|Error {
-            StreamableHttpServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
+            returns http:BadRequest|http:NotFound|http:Ok {
+            StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
+            if serviceConfig is Error {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
+            }
             SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_CALL_TOOL);
 
             string? sessionId = ();

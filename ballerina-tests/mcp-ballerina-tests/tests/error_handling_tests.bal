@@ -283,6 +283,25 @@ function testUnknownSessionReturnsNotFound() returns error? {
 }
 
 @test:Config
+function testDeleteOnStatelessServiceReturnsBadRequest() returns error? {
+    http:Response response = check errorHandlingClient->delete("/mcp", new http:Request());
+    test:assertEquals(response.statusCode, http:STATUS_BAD_REQUEST);
+    json payload = check response.getJsonPayload();
+    test:assertEquals(check payload.'error.code, mcp:INVALID_REQUEST);
+}
+
+@test:Config
+function testListToolsSucceeds() returns error? {
+    http:Request request = new;
+    request.setJsonPayload({jsonrpc: "2.0", id: 1, method: "tools/list", params: {}});
+    request.setHeader("Accept", "application/json, text/event-stream");
+    http:Response response = check errorHandlingClient->post("/mcp", request);
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    json[] tools = check (check (check response.getJsonPayload()).result.tools).ensureType();
+    test:assertEquals(tools.length(), 4);
+}
+
+@test:Config
 function testDeleteWithUnknownSessionReturnsNotFound() returns error? {
     http:Request request = new;
     request.setHeader("mcp-session-id", "00000000-0000-0000-0000-000000000000");
