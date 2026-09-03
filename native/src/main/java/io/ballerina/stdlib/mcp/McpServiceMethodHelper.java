@@ -281,11 +281,11 @@ public final class McpServiceMethodHelper {
         try {
             Object mcpService = dispatcherService.getNativeData(MCP_SERVICE_FIELD);
             if (mcpService == null) {
-                return ModuleUtils.createError("MCP service not found in dispatcher");
+                return ModuleUtils.createError("MCP service is not available");
             }
             return mcpService;
         } catch (Exception e) {
-            return ModuleUtils.createError("Failed to get MCP service from dispatcher: " + e.getMessage());
+            return ModuleUtils.createError("MCP service is not available");
         }
     }
 

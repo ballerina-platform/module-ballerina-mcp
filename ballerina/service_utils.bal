@@ -141,6 +141,28 @@ isolated function createSessionNotFoundResponse(string sessionId, RequestId? id 
     body: createJsonRpcError(INVALID_REQUEST, string `Invalid session ID: ${sessionId}`, id)
 };
 
+# Parses the request body into a JSON-RPC message, distinguishing an unparseable body from a
+# well-formed JSON body that is not a JSON-RPC message.
+#
+# + httpRequest - The incoming HTTP request
+# + return - The parsed JSON-RPC message, or a `400 Bad Request` response carrying a JSON-RPC error
+isolated function parseJsonRpcMessage(http:Request httpRequest) returns JsonRpcMessage|http:BadRequest {
+    json|error payload = httpRequest.getJsonPayload();
+    if payload is error {
+        return <http:BadRequest>{
+            body: createJsonRpcError(PARSE_ERROR, "Parse error: request body is not valid JSON")
+        };
+    }
+
+    JsonRpcMessage|error message = payload.cloneWithType();
+    if message is error {
+        return <http:BadRequest>{
+            body: createJsonRpcError(INVALID_REQUEST, "Invalid Request: not a valid JSON-RPC message")
+        };
+    }
+    return message;
+}
+
 # Validates that required HTTP headers are present and valid.
 #
 # + headers - HTTP headers to validate

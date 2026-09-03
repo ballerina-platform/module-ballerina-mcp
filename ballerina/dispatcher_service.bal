@@ -70,14 +70,18 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             };
         }
 
-        isolated resource function post .(@http:Payload JsonRpcMessage request, http:Request httpRequest,
-                http:Headers headers)
+        isolated resource function post .(http:Request httpRequest, http:Headers headers)
                 returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:NotFound|
                         http:Accepted|http:Ok|Error {
             http:authenticateResource(self, "post", []);
             http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = validateRequiredHeaders(headers);
             if headerValidationError !is () {
                 return headerValidationError;
+            }
+
+            JsonRpcMessage|http:BadRequest request = parseJsonRpcMessage(httpRequest);
+            if request is http:BadRequest {
+                return request;
             }
 
             // The MCP-Protocol-Version header is required on all requests after initialization. The
@@ -329,7 +333,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             if mcpService is Service|StreamableHttpService {
                 return listToolsForRemoteFunctions(mcpService);
             }
-            return error DispatcherError("MCP Service is not attached");
+            return error DispatcherError("MCP service is not available");
         }
 
         private isolated function executeOnCallTool(CallToolParams params, Session? session, http:Headers headers,
@@ -354,7 +358,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 }
                 return result;
             }
-            return error DispatcherError("MCP Service is not attached");
+            return error DispatcherError("MCP service is not available");
         }
     };
 }
