@@ -3,7 +3,7 @@
   "listeners": [
     {
       "id": "$listener1",
-      "doc": "MCP listener over the Streamable HTTP transport, wrapping an http:Listener and dispatching each tool call to the matching method.",
+      "doc": "MCP listener over the Streamable HTTP transport, wrapping an http:Listener and dispatching each tool call to the matching method. Prefer this over mcp:Listener as that is deprecated.",
       "type": {
         "name": "StreamableHttpListener"
       },
@@ -43,7 +43,7 @@
             "name": "*",
             "kind": "remote",
             "addMode": "many",
-            "doc": "One remote method per MCP tool. The method name becomes the tool name and its parameters become the tool's input schema, both discovered automatically, with no explicit registration.",
+            "doc": "One remote method per MCP tool. The method name becomes the tool name and its parameters become the tool's input schema, both discovered automatically, with no explicit registration. By default the tool's description is derived from the functions docstring use this as the preferred method instead of using an annotation.",
             "annotations": [
               "$tool"
             ],
@@ -66,6 +66,15 @@
                 },
                 "presence": "optional",
                 "addMode": "many"
+              },
+              {
+                "id": "$service.tool.meta",
+                "name": "meta",
+                "doc": "The request metadata (`_meta`) the client attached to this tool call, e.g. a progress token. Injected by the runtime and excluded from the tool's input schema, so it is never a tool argument. Declare it nilable -- write `mcp:Meta? meta`; a non-nilable `mcp:Meta` is a compile error. At most one per method; its position in the signature is unconstrained.",
+                "type": {
+                  "name": "Meta"
+                },
+                "presence": "optional"
               }
             ],
             "returns": {
@@ -169,6 +178,15 @@
                 },
                 "presence": "optional",
                 "addMode": "many"
+              },
+              {
+                "id": "$streamableHttpService.tool.meta",
+                "name": "meta",
+                "doc": "The request metadata (`_meta`) the client attached to this tool call, e.g. a progress token. Injected by the runtime and excluded from the tool's input schema, so it is never a tool argument. Declare it nilable -- write `mcp:Meta? meta`; a non-nilable `mcp:Meta` is a compile error. At most one per method; its position in the signature is unconstrained.",
+                "type": {
+                  "name": "Meta"
+                },
+                "presence": "optional"
               },
               {
                 "id": "$streamableHttpService.tool.headerParam",

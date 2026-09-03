@@ -260,12 +260,7 @@
           },
           "parameters": [
             {
-              "target": {
-                "kind": "concreteParam",
-                "serviceType": "$streamableHttpService",
-                "handler": "newTool",
-                "name": "meta"
-              },
+              "target": "$streamableHttpService.tool.meta",
               "metadata": {
                 "label": "Meta",
                 "description": "Binds the MCP request metadata (e.g. a progress token) attached to the tool call."
@@ -753,12 +748,7 @@
           },
           "parameters": [
             {
-              "target": {
-                "kind": "concreteParam",
-                "serviceType": "$service",
-                "handler": "newTool",
-                "name": "meta"
-              },
+              "target": "$service.tool.meta",
               "metadata": {
                 "label": "Meta",
                 "description": "Binds the MCP request metadata (e.g. a progress token) attached to the tool call."
