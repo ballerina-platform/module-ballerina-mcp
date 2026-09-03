@@ -251,6 +251,7 @@ scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},
+	{org = "ballerina", name = "log"},
 	{org = "ballerina", name = "uuid"}
 ]
 modules = [
