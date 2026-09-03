@@ -43,6 +43,9 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
         return empty[5];
     }
 
+    @mcp:Tool {description: "Scales a fixed value by the given factor"}
+    isolated remote function scale(float factor) returns float => 2.0 * factor;
+
     @mcp:Tool {description: "Adds an item to the cart"}
     isolated remote function addItem(CartItem item, int count) returns string {
         return string `${item.name}:${item.qty}x${count}`;
@@ -160,6 +163,37 @@ function testValidNestedRecordArgument() returns error? {
     http:Response response = check callTool(errorHandlingClient, "addItem",
             {item: {name: "pen", qty: 2}, count: 3});
     test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "pen:2x3");
+}
+
+@test:Config
+function testFractionalNumberRejectedForIntParameter() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "divide", {a: 10.7, b: 2});
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [boolean, string] [isError, message] = check getToolError(check response.getJsonPayload());
+    test:assertTrue(isError);
+    test:assertEquals(message, "invalid value for argument 'a': expected an integer for 'a', found 10.7");
+}
+
+@test:Config
+function testWholeNumberAcceptedForIntParameter() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "divide", {a: 10.0, b: 2});
+    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "5");
+}
+
+@test:Config
+function testFractionalNumberRejectedForNestedIntField() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "addItem",
+            {item: {name: "pen", qty: 2.6}, count: 3});
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [boolean, string] [isError, message] = check getToolError(check response.getJsonPayload());
+    test:assertTrue(isError);
+    test:assertEquals(message, "invalid value for argument 'item': expected an integer for 'item.qty', found 2.6");
+}
+
+@test:Config
+function testFractionalNumberAcceptedForFloatParameter() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "scale", {factor: 2.5});
+    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "5.0");
 }
 
 @test:Config
