@@ -324,14 +324,14 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
-                return invokeAdvancedOnListTools(mcpService, headers, httpRequest, extractHeaderValues(headers),
-                        treatNilableAsOptional);
+                return trapListToolsFailure(trap invokeAdvancedOnListTools(mcpService, headers, httpRequest,
+                        extractHeaderValues(headers), treatNilableAsOptional));
             }
             if mcpService is AdvancedService {
-                return invokeOnListTools(mcpService);
+                return trapListToolsFailure(trap invokeOnListTools(mcpService));
             }
             if mcpService is Service|StreamableHttpService {
-                return listToolsForRemoteFunctions(mcpService);
+                return trapListToolsFailure(trap listToolsForRemoteFunctions(mcpService));
             }
             return error DispatcherError("MCP service is not available");
         }
@@ -341,20 +341,22 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
-                return invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(), session, headers, httpRequest,
-                        extractHeaderValues(headers), treatNilableAsOptional);
+                CallToolResult|error result = trap invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(),
+                        session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
+                return result is error ? toServerError(result, params.name) : result;
             }
             if mcpService is AdvancedService {
-                return invokeOnCallTool(mcpService, params.cloneReadOnly(), session);
+                CallToolResult|error result = trap invokeOnCallTool(mcpService, params.cloneReadOnly(), session);
+                return result is error ? toServerError(result, params.name) : result;
             }
             if mcpService is Service|StreamableHttpService {
-                CallToolResult|error result = callToolForRemoteFunctions(mcpService, params.cloneReadOnly(), session,
-                        headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
+                CallToolResult|error result = trap callToolForRemoteFunctions(mcpService, params.cloneReadOnly(),
+                        session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
                 if result is ParameterBindingError {
                     return result;
                 }
                 if result is error {
-                    return error DispatcherError(result.message());
+                    return toToolExecutionError(result, params.name);
                 }
                 return result;
             }

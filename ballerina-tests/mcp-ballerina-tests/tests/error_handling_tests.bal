@@ -117,7 +117,8 @@ function testPanickingToolIsReportedAsToolExecutionError() returns error? {
     test:assertEquals(response.statusCode, http:STATUS_OK);
     [boolean, string] [isError, message] = check getToolError(check response.getJsonPayload());
     test:assertTrue(isError);
-    test:assertEquals(message, "array index out of range: index: 5, size: 0");
+    test:assertEquals(message, "Tool 'panicking' failed unexpectedly.");
+    test:assertFalse(message.includes("array index out of range"), "panic detail must not reach the caller");
 }
 
 @test:Config {dependsOn: [testPanickingToolIsReportedAsToolExecutionError]}
