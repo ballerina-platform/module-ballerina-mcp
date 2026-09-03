@@ -120,6 +120,27 @@ isolated function createJsonRpcError(int code, string message, RequestId? id = (
     }
 };
 
+# Creates a `200 OK` response carrying a JSON-RPC error. A JSON-RPC error response to a request is a
+# valid response at the transport level, so it must not be sent with an HTTP error status.
+#
+# + code - Error code
+# + message - Error message
+# + id - Request ID
+# + return - A `200 OK` response with the JSON-RPC error as the body
+isolated function createJsonRpcErrorResponse(int code, string message, RequestId? id = ()) returns http:Ok => {
+    body: createJsonRpcError(code, message, id)
+};
+
+# Creates a `404 Not Found` response for an unknown or terminated session, as required by the
+# Streamable HTTP transport so that clients know to start a new session.
+#
+# + sessionId - The session ID that could not be resolved
+# + id - Request ID
+# + return - A `404 Not Found` response with the JSON-RPC error as the body
+isolated function createSessionNotFoundResponse(string sessionId, RequestId? id = ()) returns http:NotFound => {
+    body: createJsonRpcError(INVALID_REQUEST, string `Invalid session ID: ${sessionId}`, id)
+};
+
 # Validates that required HTTP headers are present and valid.
 #
 # + headers - HTTP headers to validate

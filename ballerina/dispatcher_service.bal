@@ -28,7 +28,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         private map<Session> sessionMap = {};
         private StreamableHttpServiceConfiguration? cachedServiceConfig = ();
 
-        isolated resource function delete .(http:Headers headers) returns http:BadRequest|http:Ok|Error {
+        isolated resource function delete .(http:Headers headers)
+                returns http:BadRequest|http:NotFound|http:Ok|Error {
             http:authenticateResource(self, "delete", []);
             http:BadRequest? protocolVersionError =
                     validateProtocolVersionHeader(getProtocolVersionFromHeaders(headers));
@@ -53,9 +54,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
             lock {
                 if !self.sessionMap.hasKey(sessionId) {
-                    return <http:BadRequest>{
-                        body: createJsonRpcError(INVALID_REQUEST, string `Invalid session ID: ${sessionId}`)
-                    };
+                    return createSessionNotFoundResponse(sessionId);
                 }
 
                 _ = self.sessionMap.remove(sessionId);
@@ -73,7 +72,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         isolated resource function post .(@http:Payload JsonRpcMessage request, http:Request httpRequest,
                 http:Headers headers)
-                returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:Accepted|http:Ok|Error {
+                returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:NotFound|
+                        http:Accepted|http:Ok|Error {
             http:authenticateResource(self, "post", []);
             http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = validateRequiredHeaders(headers);
             if headerValidationError !is () {
@@ -117,7 +117,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers)
-            returns http:BadRequest|http:Ok|Error {
+            returns http:BadRequest|http:NotFound|http:Ok|Error {
             match request.method {
                 REQUEST_INITIALIZE => {
                     return self.handleInitializeRequest(request, headers);
@@ -129,9 +129,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                     return self.handleCallToolRequest(request, httpRequest, headers);
                 }
                 _ => {
-                    return <http:BadRequest>{
-                        body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", request.id)
-                    };
+                    return createJsonRpcErrorResponse(METHOD_NOT_FOUND, "Method not found", request.id);
                 }
             }
         }
@@ -154,14 +152,12 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers)
-            returns http:BadRequest|http:Ok|Error {
+            returns http:Ok|Error {
             JsonRpcRequest {jsonrpc: _, id, ...request} = jsonRpcRequest;
             InitializeRequest|error initRequest = request.cloneWithType();
             if initRequest is error {
-                return <http:BadRequest>{
-                    body: createJsonRpcError(INVALID_REQUEST,
-                            string `Invalid request: ${initRequest.message()}`, id)
-                };
+                return createJsonRpcErrorResponse(INVALID_REQUEST,
+                        string `Invalid request: ${initRequest.message()}`, id);
             }
 
             StreamableHttpServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
@@ -193,10 +189,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             lock {
                 // If there's an existing session ID and it's already in the map, return error
                 if existingSessionId is string && self.sessionMap.hasKey(existingSessionId) {
-                    return <http:BadRequest>{
-                        body: createJsonRpcError(INVALID_REQUEST,
-                                string `Session already initialized: ${existingSessionId}`, id)
-                    };
+                    return createJsonRpcErrorResponse(INVALID_REQUEST,
+                            string `Session already initialized: ${existingSessionId}`, id);
                 }
 
                 string newSessionId = uuid:createRandomUuid();
@@ -216,7 +210,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function handleListToolsRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers)
-            returns http:BadRequest|http:Ok|Error {
+            returns http:BadRequest|http:NotFound|http:Ok|Error {
             StreamableHttpServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
             SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_LIST_TOOLS);
 
@@ -233,10 +227,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
                 lock {
                     if !self.sessionMap.hasKey(sessionId) {
-                        return <http:BadRequest>{
-                            body: createJsonRpcError(INVALID_REQUEST,
-                                    string `Invalid session ID: ${sessionId}`, request.id)
-                        };
+                        return createSessionNotFoundResponse(sessionId, request.id);
                     }
                 }
             }
@@ -245,16 +236,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                     serviceConfig.httpConfig.treatNilableAsOptional);
             if listToolsResult is error {
                 // Parameter binding failures are caller errors, reported as invalid params
-                if listToolsResult is ParameterBindingError {
-                    return <http:BadRequest>{
-                        body: createJsonRpcError(INVALID_PARAMS,
-                                string `Failed to list tools: ${listToolsResult.message()}`, request.id)
-                    };
-                }
-                return <http:BadRequest>{
-                    body: createJsonRpcError(INTERNAL_ERROR,
-                            string `Failed to list tools: ${listToolsResult.message()}`, request.id)
-                };
+                int errorCode = listToolsResult is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
+                return createJsonRpcErrorResponse(errorCode,
+                        string `Failed to list tools: ${listToolsResult.message()}`, request.id);
             }
 
             JsonRpcResponse responseBody = {
@@ -271,7 +255,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function handleCallToolRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers)
-            returns http:BadRequest|http:Ok|Error {
+            returns http:BadRequest|http:NotFound|http:Ok|Error {
             StreamableHttpServiceConfiguration serviceConfig = check self.getCachedServiceConfiguration();
             SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_CALL_TOOL);
 
@@ -288,28 +272,21 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
                 lock {
                     if !self.sessionMap.hasKey(sessionId) {
-                        return <http:BadRequest>{
-                            body: createJsonRpcError(INVALID_REQUEST,
-                                    string `Invalid session ID: ${sessionId}`, request.id)
-                        };
+                        return createSessionNotFoundResponse(sessionId, request.id);
                     }
                 }
             }
 
             CallToolParams|error params = request.params.cloneWithType();
             if params is error {
-                return <http:BadRequest>{
-                    body: createJsonRpcError(INVALID_PARAMS,
-                            string `Invalid parameters: ${params.message()}`, request.id)
-                };
+                return createJsonRpcErrorResponse(INVALID_PARAMS,
+                        string `Invalid parameters: ${params.message()}`, request.id);
             }
 
             // Task-augmented tool calls are not yet supported.
             if params.task !is () {
-                return <http:BadRequest>{
-                    body: createJsonRpcError(INVALID_REQUEST,
-                            "Task-augmented tool calls are not supported", request.id)
-                };
+                return createJsonRpcErrorResponse(INVALID_REQUEST,
+                        "Task-augmented tool calls are not supported", request.id);
             }
 
             Session? session;
@@ -322,10 +299,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             if callToolResult is error {
                 // Parameter binding failures are caller errors, reported as invalid params
                 int errorCode = callToolResult is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
-                return <http:BadRequest>{
-                    body: createJsonRpcError(errorCode,
-                            string `Failed to call tool '${params.name}': ${callToolResult.message()}`, request.id)
-                };
+                return createJsonRpcErrorResponse(errorCode,
+                        string `Failed to call tool '${params.name}': ${callToolResult.message()}`, request.id);
             }
 
             JsonRpcResponse responseBody = {
