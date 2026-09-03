@@ -110,7 +110,7 @@ public final class McpServiceMethodHelper {
      * @return           Result of remote method invocation.
      */
     public static Object invokeOnListTools(Environment env, BObject mcpService) {
-        return env.getRuntime().callMethod(mcpService, "onListTools", null);
+        return invokeAdvancedMethod(env, mcpService, ON_LIST_TOOLS_METHOD);
     }
 
     /**
@@ -122,7 +122,7 @@ public final class McpServiceMethodHelper {
      * @return           Result of remote method invocation.
      */
     public static Object invokeOnCallTool(Environment env, BObject mcpService, BMap<?, ?> params, Object session) {
-        return env.getRuntime().callMethod(mcpService, "onCallTool", null, params, session);
+        return invokeAdvancedMethod(env, mcpService, ON_CALL_TOOL_METHOD, params, session);
     }
 
     /**
@@ -145,14 +145,14 @@ public final class McpServiceMethodHelper {
                                                   BMap<?, ?> headerValues, boolean treatNilableAsOptional) {
         Optional<RemoteMethodType> method = getRemoteMethod(mcpService, ON_CALL_TOOL_METHOD);
         if (method.isEmpty()) {
-            return ModuleUtils.createError("Remote method '" + ON_CALL_TOOL_METHOD + "' not found");
+            return ModuleUtils.createServerError("Remote method '" + ON_CALL_TOOL_METHOD + "' not found");
         }
         Object argsOrError = buildAdvancedArgs(method.get(), params, session, headers, request, headerValues,
                 treatNilableAsOptional);
         if (argsOrError instanceof BError) {
             return argsOrError;
         }
-        return env.getRuntime().callMethod(mcpService, ON_CALL_TOOL_METHOD, null, (Object[]) argsOrError);
+        return invokeAdvancedMethod(env, mcpService, ON_CALL_TOOL_METHOD, (Object[]) argsOrError);
     }
 
     /**
@@ -173,14 +173,14 @@ public final class McpServiceMethodHelper {
                                                    boolean treatNilableAsOptional) {
         Optional<RemoteMethodType> method = getRemoteMethod(mcpService, ON_LIST_TOOLS_METHOD);
         if (method.isEmpty()) {
-            return ModuleUtils.createError("Remote method '" + ON_LIST_TOOLS_METHOD + "' not found");
+            return ModuleUtils.createServerError("Remote method '" + ON_LIST_TOOLS_METHOD + "' not found");
         }
         Object argsOrError = buildAdvancedArgs(method.get(), null, null, headers, request, headerValues,
                 treatNilableAsOptional);
         if (argsOrError instanceof BError) {
             return argsOrError;
         }
-        return env.getRuntime().callMethod(mcpService, ON_LIST_TOOLS_METHOD, null, (Object[]) argsOrError);
+        return invokeAdvancedMethod(env, mcpService, ON_LIST_TOOLS_METHOD, (Object[]) argsOrError);
     }
 
     /**
@@ -247,14 +247,7 @@ public final class McpServiceMethodHelper {
         }
 
         Object[] args = (Object[]) argsOrError;
-        Object result;
-        try {
-            result = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
-        } catch (BError panic) {
-            result = panic;
-        }
-
-        return createCallToolResult(typed, result);
+        return createCallToolResult(typed, invokeMethod(env, mcpService, toolName.getValue(), args));
     }
 
     /**
@@ -396,6 +389,28 @@ public final class McpServiceMethodHelper {
             }
         }
         return args;
+    }
+
+    /**
+     * Invokes a service method, returning a panic as an error value. A panic that escapes here would
+     * otherwise unwind past the dispatcher and be answered with an HTTP 500 instead of an MCP response.
+     */
+    private static Object invokeMethod(Environment env, BObject mcpService, String methodName, Object... args) {
+        try {
+            return env.getRuntime().callMethod(mcpService, methodName, null, args);
+        } catch (BError panic) {
+            return panic;
+        }
+    }
+
+    /**
+     * Advanced service methods are declared to return 'mcp:Error', so a panic is reported as a
+     * 'ServerError' rather than the raw error value, which would fail the interop return type check.
+     */
+    private static Object invokeAdvancedMethod(Environment env, BObject mcpService, String methodName,
+                                               Object... args) {
+        Object result = invokeMethod(env, mcpService, methodName, args);
+        return result instanceof BError panic ? ModuleUtils.createServerError(errorMessage(panic)) : result;
     }
 
     private static Object convertArgument(Object argValue, Type targetType, String paramName) {

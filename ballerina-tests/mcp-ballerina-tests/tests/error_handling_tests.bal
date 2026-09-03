@@ -67,6 +67,10 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
         if params.name == "failing" {
             return error mcp:ServerError("upstream API returned 503");
         }
+        if params.name == "panicking" {
+            int[] empty = [];
+            return {content: [{'type: "text", text: empty[5].toString()}]};
+        }
         return {content: [{'type: "text", text: "Invalid date: must be in the future"}], isError: true};
     }
 }
@@ -212,6 +216,22 @@ function testAdvancedServiceIsErrorResultIsPreserved() returns error? {
     [boolean, string] [isError, message] = check getToolError(check response.getJsonPayload());
     test:assertTrue(isError);
     test:assertEquals(message, "Invalid date: must be in the future");
+}
+
+@test:Config
+function testPanicInAdvancedServiceIsReportedAsInternalError() returns error? {
+    http:Response response = check callTool(advancedErrorClient, "panicking");
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    json payload = check response.getJsonPayload();
+    test:assertEquals(check payload.'error.code, mcp:INTERNAL_ERROR);
+}
+
+@test:Config {dependsOn: [testPanicInAdvancedServiceIsReportedAsInternalError]}
+function testAdvancedServiceSurvivesPanic() returns error? {
+    http:Response response = check callTool(advancedErrorClient, "ping");
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [boolean, string] [isError, _] = check getToolError(check response.getJsonPayload());
+    test:assertTrue(isError);
 }
 
 @test:Config
