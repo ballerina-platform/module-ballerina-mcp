@@ -240,7 +240,12 @@ public final class McpServiceMethodHelper {
         }
 
         Object[] args = (Object[]) argsOrError;
-        Object result = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
+        Object result;
+        try {
+            result = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
+        } catch (BError panic) {
+            result = panic;
+        }
 
         return createCallToolResult(typed, result);
     }
@@ -373,15 +378,30 @@ public final class McpServiceMethodHelper {
 
                 // Check if the parameter is required (non-optional) but the value is null
                 if (argValue == null && !isOptionalParameter(param)) {
-                    return ModuleUtils.createError(
-                            "Missing required argument '" + paramName + "' for parameter of type '"
-                            + param.type.getName() + "'");
+                    return ModuleUtils.createParameterBindingError(
+                            "missing required argument '" + paramName + "'");
                 }
 
-                args[i] = argValue;
+                Object convertedOrError = convertArgument(argValue, param.type, paramName);
+                if (convertedOrError instanceof BError) {
+                    return convertedOrError;
+                }
+                args[i] = convertedOrError;
             }
         }
         return args;
+    }
+
+    private static Object convertArgument(Object argValue, Type targetType, String paramName) {
+        if (argValue == null) {
+            return null;
+        }
+        try {
+            return ValueUtils.convert(argValue, targetType);
+        } catch (BError e) {
+            return ModuleUtils.createParameterBindingError(
+                    "invalid value for argument '" + paramName + "': " + e.getMessage());
+        }
     }
 
     private static boolean isOptionalParameter(Parameter param) {
