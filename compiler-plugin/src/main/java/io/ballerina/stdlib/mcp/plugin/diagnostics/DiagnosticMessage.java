@@ -42,7 +42,9 @@ public enum DiagnosticMessage {
             "parameter of type 'mcp:CallToolParams'."),
     ERROR_112("Remote method ''{0}'' in an 'mcp:StreamableHttpAdvancedService' must return ''{1}''."),
     ERROR_113("Remote method ''{0}'' is not supported in an 'mcp:StreamableHttpAdvancedService'. " +
-            "Only 'onListTools' and 'onCallTool' are allowed.");
+            "Only 'onListTools' and 'onCallTool' are allowed."),
+    WARNING_101("The Ballerina version is not supported for endpoints.yaml. " +
+            "Try using Ballerina 2201.13.6 or above.");
 
     private final String message;
 
