@@ -50,6 +50,11 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     isolated remote function addItem(CartItem item, int count) returns string {
         return string `${item.name}:${item.qty}x${count}`;
     }
+
+    @mcp:Tool {description: "Greets by name, with an optional greeting"}
+    isolated remote function greet(string name, string? greeting) returns string {
+        return string `${greeting ?: "Hello"}, ${name}`;
+    }
 }
 
 @mcp:StreamableHttpServiceConfig {
@@ -312,7 +317,7 @@ function testListToolsSucceeds() returns error? {
     http:Response response = check errorHandlingClient->post("/mcp", request);
     test:assertEquals(response.statusCode, http:STATUS_OK);
     json[] tools = check (check (check response.getJsonPayload()).result.tools).ensureType();
-    test:assertEquals(tools.length(), 4);
+    test:assertEquals(tools.length(), 5);
 }
 
 @test:Config
@@ -353,4 +358,31 @@ function testInitializeWithInvalidParamsReturnsInvalidRequest() returns error? {
     test:assertEquals(code, mcp:INVALID_REQUEST);
     test:assertEquals(message, "Invalid parameters for 'initialize'");
     test:assertFalse(message.includes("record {|"), "record definitions must not reach the caller");
+}
+
+@test:Config
+function testNullForRequiredArgumentIsDistinguishedFromMissing() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "divide", {a: (), b: 2});
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [boolean, string] [isError, message] = check getToolError(check response.getJsonPayload());
+    test:assertTrue(isError);
+    test:assertEquals(message, "invalid value for argument 'a': expected a value, found null");
+}
+
+@test:Config
+function testOmittedOptionalArgumentBindsNil() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "greet", {name: "Ada"});
+    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "Hello, Ada");
+}
+
+@test:Config
+function testNullForOptionalArgumentBindsNil() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "greet", {name: "Ada", greeting: ()});
+    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "Hello, Ada");
+}
+
+@test:Config
+function testSuppliedOptionalArgumentIsBound() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "greet", {name: "Ada", greeting: "Hi"});
+    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "Hi, Ada");
 }

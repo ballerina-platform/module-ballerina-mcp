@@ -383,11 +383,16 @@ public final class McpServiceMethodHelper {
                 args[i] = headerValueOrError;
             } else {
                 String paramName = param.name;
-                Object argValue = arguments == null ? null : arguments.get(fromString(paramName));
+                BString argumentKey = fromString(paramName);
+                boolean isPresent = arguments != null && arguments.containsKey(argumentKey);
+                Object argValue = isPresent ? arguments.get(argumentKey) : null;
 
-                // Check if the parameter is required (non-optional) but the value is null
+                // A required parameter must be present and carry a value. An explicit null is
+                // reported apart from an absent argument, so a caller can tell which to correct.
                 if (argValue == null && !isOptionalParameter(param)) {
-                    return ModuleUtils.createError("missing required argument '" + paramName + "'");
+                    return ModuleUtils.createError(isPresent
+                            ? "invalid value for argument '" + paramName + "': expected a value, found null"
+                            : "missing required argument '" + paramName + "'");
                 }
 
                 Object convertedOrError = convertArgument(argValue, param.type, paramName);
