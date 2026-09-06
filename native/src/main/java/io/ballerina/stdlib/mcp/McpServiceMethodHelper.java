@@ -41,10 +41,14 @@ import io.ballerina.runtime.api.values.BString;
 import io.ballerina.runtime.api.values.BTypedesc;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static io.ballerina.runtime.api.utils.StringUtils.fromString;
 
@@ -69,6 +73,12 @@ public final class McpServiceMethodHelper {
     private static final String IS_ERROR_FIELD_NAME = "isError";
     private static final String PARAMETER_BINDING_ERROR = "ParameterBindingError";
     private static final String MESSAGE_FIELD_NAME = "message";
+
+    // Conversion failures read "'<source>' value cannot be converted to '<target>': <reasons>".
+    // The source is the internal type of the readonly clone the argument arrived in, so only the
+    // reasons that follow are of any use to a caller.
+    private static final Pattern CONVERSION_FAILURE_PREFIX =
+            Pattern.compile("^'.*?' value cannot be converted to '.*?':\\s+", Pattern.DOTALL);
     private static final String TYPE_TEXT_CONTENT = "TextContent";
     private static final String TEXT_VALUE_NAME = "text";
     private static final String MCP_SERVICE_FIELD = "mcpService";
@@ -398,7 +408,7 @@ public final class McpServiceMethodHelper {
             return ValueUtils.convert(argValue, targetType);
         } catch (BError e) {
             return ModuleUtils.createError(
-                    "invalid value for argument '" + paramName + "': " + errorMessage(e));
+                    "invalid value for argument '" + paramName + "': " + describeConversionFailure(e));
         }
     }
 
@@ -678,6 +688,23 @@ public final class McpServiceMethodHelper {
             }
         }
         return error.getErrorMessage().getValue();
+    }
+
+    /**
+     * Strips the internal source type a conversion failure is prefixed with, keeping the reasons
+     * that follow it flattened onto a single line. Falls back to the message when there are none.
+     */
+    private static String describeConversionFailure(BError error) {
+        String message = errorMessage(error);
+        Matcher matcher = CONVERSION_FAILURE_PREFIX.matcher(message);
+        if (!matcher.find()) {
+            return message;
+        }
+        String reasons = Arrays.stream(message.substring(matcher.end()).split("\\R"))
+                .map(String::strip)
+                .filter(reason -> !reason.isEmpty())
+                .collect(Collectors.joining("; "));
+        return reasons.isEmpty() ? message : reasons;
     }
 
     private static boolean isParameterBindingError(BError error) {

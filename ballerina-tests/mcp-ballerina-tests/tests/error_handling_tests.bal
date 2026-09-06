@@ -97,6 +97,23 @@ isolated function callTool(http:Client clientEndpoint, string name, map<json> ar
     return clientEndpoint->post("/mcp", request);
 }
 
+isolated function postJsonRpc(http:Client clientEndpoint, json body, string? sessionId = ())
+        returns http:Response|error {
+    http:Request request = new;
+    request.setJsonPayload(body);
+    request.setHeader("Accept", "application/json, text/event-stream");
+    if sessionId is string {
+        request.setHeader("mcp-session-id", sessionId);
+    }
+    return clientEndpoint->post("/mcp", request);
+}
+
+isolated function getJsonRpcError(json payload) returns [int, string]|error {
+    int code = check (check payload.'error.code).ensureType();
+    string message = check (check payload.'error.message).ensureType();
+    return [code, message];
+}
+
 isolated function getToolError(json payload) returns [boolean, string]|error {
     boolean isError = check (check payload.result.isError).ensureType();
     return [isError, check getRawTextResult(payload)];
@@ -304,4 +321,36 @@ function testDeleteWithUnknownSessionReturnsNotFound() returns error? {
     request.setHeader("mcp-session-id", "00000000-0000-0000-0000-000000000000");
     http:Response response = check statefulErrorClient->delete("/mcp", request);
     test:assertEquals(response.statusCode, http:STATUS_NOT_FOUND);
+}
+
+@test:Config
+function testConversionFailureDoesNotExposeInternalTypes() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "addItem", {item: {name: "pen"}, count: 3});
+    [boolean, string] [isError, message] = check getToolError(check response.getJsonPayload());
+    test:assertTrue(isError);
+    test:assertEquals(message, "invalid value for argument 'item': " +
+            "missing required field 'qty' of type 'int' in record 'mcp_ballerina_tests:CartItem'");
+    test:assertFalse(message.includes("anydata"), message);
+    test:assertFalse(message.includes("readonly"), message);
+}
+
+@test:Config
+function testCallToolWithoutNameReturnsInvalidParams() returns error? {
+    http:Response response = check postJsonRpc(errorHandlingClient,
+            {jsonrpc: "2.0", id: 1, method: "tools/call", params: {arguments: {}}});
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
+    test:assertEquals(code, mcp:INVALID_PARAMS);
+    test:assertEquals(message, "Invalid parameters for 'tools/call'");
+}
+
+@test:Config
+function testInitializeWithInvalidParamsReturnsInvalidRequest() returns error? {
+    http:Response response = check postJsonRpc(errorHandlingClient,
+            {jsonrpc: "2.0", id: 1, method: "initialize", params: {capabilities: {}}});
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
+    test:assertEquals(code, mcp:INVALID_REQUEST);
+    test:assertEquals(message, "Invalid parameters for 'initialize'");
+    test:assertFalse(message.includes("record {|"), "record definitions must not reach the caller");
 }

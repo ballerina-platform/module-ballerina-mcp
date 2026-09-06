@@ -165,8 +165,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             JsonRpcRequest {jsonrpc: _, id, ...request} = jsonRpcRequest;
             InitializeRequest|error initRequest = request.cloneWithType();
             if initRequest is error {
+                // The conversion failure names the internal record types it walked, which describe
+                // nothing the caller sent, so the request is reported without them.
                 return createJsonRpcErrorResponse(INVALID_REQUEST,
-                        string `Invalid request: ${initRequest.message()}`, id);
+                        string `Invalid parameters for '${REQUEST_INITIALIZE}'`, id);
             }
 
             StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
@@ -298,7 +300,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             CallToolParams|error params = request.params.cloneWithType();
             if params is error {
                 return createJsonRpcErrorResponse(INVALID_PARAMS,
-                        string `Invalid parameters: ${params.message()}`, request.id);
+                        string `Invalid parameters for '${REQUEST_CALL_TOOL}'`, request.id);
             }
 
             // Task-augmented tool calls are not yet supported.
