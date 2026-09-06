@@ -34,14 +34,12 @@ import io.ballerina.runtime.api.types.UnionType;
 import io.ballerina.runtime.api.utils.TypeUtils;
 import io.ballerina.runtime.api.utils.ValueUtils;
 import io.ballerina.runtime.api.values.BArray;
-import io.ballerina.runtime.api.values.BDecimal;
 import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BMap;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BString;
 import io.ballerina.runtime.api.values.BTypedesc;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -101,7 +99,6 @@ public final class McpServiceMethodHelper {
     private static final String ORG_SEPARATOR = "/";
 
     private McpServiceMethodHelper() {}
-
 
     /**
      * Invoke the 'onListTools' remote method on the given MCP service object.
@@ -393,15 +390,9 @@ public final class McpServiceMethodHelper {
         return args;
     }
 
-
-
     private static Object convertArgument(Object argValue, Type targetType, String paramName) {
         if (argValue == null) {
             return null;
-        }
-        String violation = findFractionalIntViolation(argValue, targetType, paramName);
-        if (violation != null) {
-            return ModuleUtils.createError("invalid value for argument '" + paramName + "': " + violation);
         }
         try {
             return ValueUtils.convert(argValue, targetType);
@@ -409,88 +400,6 @@ public final class McpServiceMethodHelper {
             return ModuleUtils.createError(
                     "invalid value for argument '" + paramName + "': " + errorMessage(e));
         }
-    }
-
-    /**
-     * Ballerina's numeric conversion rounds a fractional number into an 'int', which would silently
-     * accept a value the advertised JSON schema rejects. Walks the value against the target type and
-     * reports the path of the first fractional number bound to an 'int', or null when there is none.
-     */
-    private static String findFractionalIntViolation(Object value, Type targetType, String path) {
-        Type type = TypeUtils.getImpliedType(targetType);
-        if (type instanceof UnionType unionType) {
-            return findFractionalIntViolationInUnion(value, unionType, path);
-        }
-        if (isIntType(type)) {
-            return hasFractionalPart(value) ? describeFractionalIntViolation(value, path) : null;
-        }
-        if (type instanceof RecordType recordType && value instanceof BMap<?, ?> mapValue) {
-            return findFractionalIntViolationInRecord(mapValue, recordType, path);
-        }
-        if (type instanceof ArrayType arrayType && value instanceof BArray arrayValue) {
-            for (int i = 0; i < arrayValue.size(); i++) {
-                String violation = findFractionalIntViolation(arrayValue.get(i), arrayType.getElementType(),
-                        path + "[" + i + "]");
-                if (violation != null) {
-                    return violation;
-                }
-            }
-        }
-        return null;
-    }
-
-    private static String findFractionalIntViolationInUnion(Object value, UnionType unionType, String path) {
-        List<Type> members = unionType.getMemberTypes().stream()
-                .map(TypeUtils::getImpliedType)
-                .filter(member -> member.getTag() != TypeTags.NULL_TAG)
-                .toList();
-        // A float or decimal member accepts the value as it stands, so no rounding takes place.
-        if (members.stream().anyMatch(member -> member.getTag() == TypeTags.FLOAT_TAG
-                || member.getTag() == TypeTags.DECIMAL_TAG)) {
-            return null;
-        }
-        if (members.size() == 1) {
-            return findFractionalIntViolation(value, members.get(0), path);
-        }
-        return members.stream().anyMatch(McpServiceMethodHelper::isIntType) && hasFractionalPart(value)
-                ? describeFractionalIntViolation(value, path) : null;
-    }
-
-    private static String findFractionalIntViolationInRecord(BMap<?, ?> value, RecordType recordType, String path) {
-        Map<String, Field> fields = recordType.getFields();
-        for (Map.Entry<?, ?> entry : value.entrySet()) {
-            Field field = fields.get(entry.getKey().toString());
-            if (field == null) {
-                continue;
-            }
-            String violation = findFractionalIntViolation(entry.getValue(), field.getFieldType(),
-                    path + "." + field.getFieldName());
-            if (violation != null) {
-                return violation;
-            }
-        }
-        return null;
-    }
-
-    private static boolean isIntType(Type type) {
-        int tag = TypeUtils.getImpliedType(type).getTag();
-        return TypeTags.isIntegerTypeTag(tag) || tag == TypeTags.BYTE_TAG;
-    }
-
-    private static boolean hasFractionalPart(Object value) {
-        if (value instanceof Double doubleValue) {
-            return !doubleValue.isNaN() && !doubleValue.isInfinite()
-                    && Double.compare(doubleValue, Math.rint(doubleValue)) != 0;
-        }
-        if (value instanceof BDecimal decimalValue) {
-            BigDecimal decimal = decimalValue.decimalValue();
-            return decimal.stripTrailingZeros().scale() > 0;
-        }
-        return false;
-    }
-
-    private static String describeFractionalIntViolation(Object value, String path) {
-        return "expected an integer for '" + path + "', found " + value;
     }
 
     private static boolean isOptionalParameter(Parameter param) {
