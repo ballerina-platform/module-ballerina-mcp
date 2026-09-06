@@ -90,9 +90,44 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     isolated remote function greet() returns string => "hello";
 }
 
+@mcp:ServiceConfig {
+    info: {name: "list-tools-failing-server", version: "1.0.0"},
+    sessionMode: mcp:STATELESS
+}
+isolated service mcp:AdvancedService /mcp on new mcp:Listener(8781) {
+
+    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+        return error mcp:ServerError("tool registry is unavailable");
+    }
+
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
+            returns mcp:CallToolResult|mcp:ServerError {
+        return {content: [{'type: "text", text: "unused"}]};
+    }
+}
+
+@mcp:ServiceConfig {
+    info: {name: "list-tools-panicking-server", version: "1.0.0"},
+    sessionMode: mcp:STATELESS
+}
+isolated service mcp:AdvancedService /mcp on new mcp:Listener(8782) {
+
+    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+        int[] empty = [];
+        return {tools: [{name: empty[5].toString(), inputSchema: {"type": "object"}}]};
+    }
+
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
+            returns mcp:CallToolResult|mcp:ServerError {
+        return {content: [{'type: "text", text: "unused"}]};
+    }
+}
+
 final http:Client errorHandlingClient = check new ("http://localhost:8778");
 final http:Client advancedErrorClient = check new ("http://localhost:8779");
 final http:Client statefulErrorClient = check new ("http://localhost:8780");
+final http:Client listToolsFailingClient = check new ("http://localhost:8781");
+final http:Client listToolsPanickingClient = check new ("http://localhost:8782");
 
 isolated function callTool(http:Client clientEndpoint, string name, map<json> arguments = {})
         returns http:Response|error {
@@ -111,6 +146,23 @@ isolated function postJsonRpc(http:Client clientEndpoint, json body, string? ses
         request.setHeader("mcp-session-id", sessionId);
     }
     return clientEndpoint->post("/mcp", request);
+}
+
+isolated function listTools(http:Client clientEndpoint) returns http:Response|error =>
+    postJsonRpc(clientEndpoint, {jsonrpc: "2.0", id: 1, method: "tools/list", params: {}});
+
+isolated function initializeSession(http:Client clientEndpoint) returns string|error {
+    http:Response response = check postJsonRpc(clientEndpoint, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+            protocolVersion: "2025-11-25",
+            capabilities: {},
+            clientInfo: {name: "error-handling-tests", version: "1.0.0"}
+        }
+    });
+    return response.getHeader("mcp-session-id");
 }
 
 isolated function getJsonRpcError(json payload) returns [int, string]|error {
@@ -385,4 +437,72 @@ function testNullForOptionalArgumentBindsNil() returns error? {
 function testSuppliedOptionalArgumentIsBound() returns error? {
     http:Response response = check callTool(errorHandlingClient, "greet", {name: "Ada", greeting: "Hi"});
     test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "Hi, Ada");
+}
+
+@test:Config
+function testTaskAugmentedToolCallIsRejected() returns error? {
+    http:Response response = check postJsonRpc(errorHandlingClient, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {name: "divide", arguments: {a: 10, b: 2}, task: {ttl: 60000}}
+    });
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
+    test:assertEquals(code, mcp:INVALID_REQUEST);
+    test:assertEquals(message, "Task-augmented tool calls are not supported");
+}
+
+@test:Config
+function testCallToolWithUnknownSessionReturnsNotFound() returns error? {
+    http:Response response = check postJsonRpc(statefulErrorClient,
+            {jsonrpc: "2.0", id: 1, method: "tools/call", params: {name: "greet", arguments: {}}},
+            "00000000-0000-0000-0000-000000000000");
+    test:assertEquals(response.statusCode, http:STATUS_NOT_FOUND);
+    [int, string] [code, _] = check getJsonRpcError(check response.getJsonPayload());
+    test:assertEquals(code, mcp:INVALID_REQUEST);
+}
+
+@test:Config
+function testReinitializingAnActiveSessionIsRejected() returns error? {
+    string sessionId = check initializeSession(statefulErrorClient);
+    http:Response response = check postJsonRpc(statefulErrorClient, {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "initialize",
+        params: {
+            protocolVersion: "2025-11-25",
+            capabilities: {},
+            clientInfo: {name: "error-handling-tests", version: "1.0.0"}
+        }
+    }, sessionId);
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
+    test:assertEquals(code, mcp:INVALID_REQUEST);
+    test:assertTrue(message.startsWith("Session already initialized"), message);
+}
+
+@test:Config
+function testListToolsServerErrorIsReportedAsInternalError() returns error? {
+    http:Response response = check listTools(listToolsFailingClient);
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
+    test:assertEquals(code, mcp:INTERNAL_ERROR);
+    test:assertEquals(message, "Failed to list tools: tool registry is unavailable");
+}
+
+@test:Config
+function testPanicInListToolsIsReportedAsInternalError() returns error? {
+    http:Response response = check listTools(listToolsPanickingClient);
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
+    test:assertEquals(code, mcp:INTERNAL_ERROR);
+    test:assertEquals(message, "Failed to list tools: Listing tools failed unexpectedly.");
+    test:assertFalse(message.includes("array index out of range"), "panic detail must not reach the caller");
+}
+
+@test:Config {dependsOn: [testPanicInListToolsIsReportedAsInternalError]}
+function testServiceSurvivesPanickingListTools() returns error? {
+    http:Response response = check listTools(listToolsPanickingClient);
+    test:assertEquals(response.statusCode, http:STATUS_OK);
 }
