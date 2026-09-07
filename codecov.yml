@@ -1,5 +1,9 @@
 fixes:
-  - "io/ballerina/stdlib/mcp/plugin/"
+  - "io/ballerina/stdlib/mcp/plugin/::./compiler-plugin/src/main/java/io/ballerina/stdlib/mcp/plugin/"
+  - "ballerina/mcp/**/::../ballerina/"
+
+ignore:
+  - "ballerina-tests"
 
 coverage:
   precision: 2

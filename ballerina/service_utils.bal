@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/log;
 
 # Resolves the effective Streamable HTTP configuration of an MCP service from its annotations.
 #
@@ -119,6 +120,92 @@ isolated function createJsonRpcError(int code, string message, RequestId? id = (
         message: message
     }
 };
+
+# Creates a `200 OK` response carrying a JSON-RPC error. A JSON-RPC error response to a request is a
+# valid response at the transport level, so it must not be sent with an HTTP error status.
+#
+# + code - Error code
+# + message - Error message
+# + id - Request ID
+# + return - A `200 OK` response with the JSON-RPC error as the body
+isolated function createJsonRpcErrorResponse(int code, string message, RequestId? id = ()) returns http:Ok => {
+    body: createJsonRpcError(code, message, id)
+};
+
+# Creates a `404 Not Found` response for an unknown or terminated session, as required by the
+# Streamable HTTP transport so that clients know to start a new session.
+#
+# + sessionId - The session ID that could not be resolved
+# + id - Request ID
+# + return - A `404 Not Found` response with the JSON-RPC error as the body
+isolated function createSessionNotFoundResponse(string sessionId, RequestId? id = ()) returns http:NotFound => {
+    body: createJsonRpcError(INVALID_REQUEST, string `Invalid session ID: ${sessionId}`, id)
+};
+
+# Reports a failed tool invocation as a tool execution error. The failure detail is logged rather
+# than returned, since a panic carries text from wherever it originated, such as a database driver.
+#
+# + cause - The error or trapped panic from the invocation
+# + toolName - The name of the tool that was invoked
+# + return - A `CallToolResult` marked as an error
+isolated function toToolExecutionError(error cause, string toolName) returns CallToolResult {
+    log:printError("Tool invocation failed", cause, toolName = toolName);
+    return {
+        content: [{'type: "text", text: string `Tool '${toolName}' failed unexpectedly.`}],
+        isError: true
+    };
+}
+
+# Reports a failed advanced service invocation as a server error, logging the detail. Advanced
+# services own their tool dispatch, so a failure there is a server error rather than a tool failure.
+#
+# + cause - The error or trapped panic from the invocation
+# + toolName - The name of the tool that was invoked
+# + return - A `ServerError` carrying a message safe to return to the caller
+isolated function toServerError(error cause, string toolName) returns ServerError {
+    if cause is ServerError {
+        return cause;
+    }
+    log:printError("Tool invocation failed", cause, toolName = toolName);
+    return error ServerError(string `Tool '${toolName}' failed unexpectedly.`);
+}
+
+# Reports a failed tool listing, logging the detail and returning a message safe for the caller.
+#
+# + result - The listing result, or the error or trapped panic from the invocation
+# + return - The listing result, or a `ServerError`
+isolated function trapListToolsFailure(ListToolsResult|error result) returns ListToolsResult|ServerError {
+    if result is ListToolsResult {
+        return result;
+    }
+    if result is ServerError {
+        return result;
+    }
+    log:printError("Tool listing failed", result);
+    return error ServerError("Listing tools failed unexpectedly.");
+}
+
+# Parses the request body into a JSON-RPC message, distinguishing an unparseable body from a
+# well-formed JSON body that is not a JSON-RPC message.
+#
+# + httpRequest - The incoming HTTP request
+# + return - The parsed JSON-RPC message, or a `400 Bad Request` response carrying a JSON-RPC error
+isolated function parseJsonRpcMessage(http:Request httpRequest) returns JsonRpcMessage|http:BadRequest {
+    json|error payload = httpRequest.getJsonPayload();
+    if payload is error {
+        return <http:BadRequest>{
+            body: createJsonRpcError(PARSE_ERROR, "Parse error: request body is not valid JSON")
+        };
+    }
+
+    JsonRpcMessage|error message = payload.cloneWithType();
+    if message is error {
+        return <http:BadRequest>{
+            body: createJsonRpcError(INVALID_REQUEST, "Invalid Request: not a valid JSON-RPC message")
+        };
+    }
+    return message;
+}
 
 # Validates that required HTTP headers are present and valid.
 #

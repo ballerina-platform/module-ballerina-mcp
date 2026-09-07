@@ -30,7 +30,7 @@ def ballerinaTomlFilePlaceHolder = new File("${project.rootDir}/build-config/res
 def testCommonTomlFilePlaceHolder = new File("${project.rootDir}/build-config/resources/BallerinaTestCommon.toml")
 def ballerinaDist = "${project.rootDir}/target/ballerina-runtime"
 def distributionBinPath =  "${ballerinaDist}/bin"
-def testCoverageParam = "--code-coverage --coverage-format=xml --includes=io.ballerina.stdlib.mcp.*:ballerina.*"
+def testCoverageParam = "--code-coverage --coverage-format=xml --includes=io.ballerina.stdlib.mcp.*:ballerina.mcp*"
 def testSuites = ["mcp-ballerina-tests"]
 
 def stripBallerinaExtensionVersion(String extVersion) {

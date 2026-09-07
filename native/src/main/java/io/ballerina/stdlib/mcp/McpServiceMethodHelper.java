@@ -41,10 +41,14 @@ import io.ballerina.runtime.api.values.BString;
 import io.ballerina.runtime.api.values.BTypedesc;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static io.ballerina.runtime.api.utils.StringUtils.fromString;
 
@@ -66,6 +70,15 @@ public final class McpServiceMethodHelper {
     private static final String TEXT_FIELD_NAME = "text";
 
     private static final String ANNOTATION_MCP_TOOL = "Tool";
+    private static final String IS_ERROR_FIELD_NAME = "isError";
+    private static final String PARAMETER_BINDING_ERROR = "ParameterBindingError";
+    private static final String MESSAGE_FIELD_NAME = "message";
+
+    // Conversion failures read "'<source>' value cannot be converted to '<target>': <reasons>".
+    // The source is the internal type of the readonly clone the argument arrived in, so only the
+    // reasons that follow are of any use to a caller.
+    private static final Pattern CONVERSION_FAILURE_PREFIX =
+            Pattern.compile("^'.*?' value cannot be converted to '.*?':\\s+", Pattern.DOTALL);
     private static final String TYPE_TEXT_CONTENT = "TextContent";
     private static final String TEXT_VALUE_NAME = "text";
     private static final String MCP_SERVICE_FIELD = "mcpService";
@@ -105,7 +118,7 @@ public final class McpServiceMethodHelper {
      * @return           Result of remote method invocation.
      */
     public static Object invokeOnListTools(Environment env, BObject mcpService) {
-        return env.getRuntime().callMethod(mcpService, "onListTools", null);
+        return env.getRuntime().callMethod(mcpService, ON_LIST_TOOLS_METHOD, null);
     }
 
     /**
@@ -117,7 +130,7 @@ public final class McpServiceMethodHelper {
      * @return           Result of remote method invocation.
      */
     public static Object invokeOnCallTool(Environment env, BObject mcpService, BMap<?, ?> params, Object session) {
-        return env.getRuntime().callMethod(mcpService, "onCallTool", null, params, session);
+        return env.getRuntime().callMethod(mcpService, ON_CALL_TOOL_METHOD, null, params, session);
     }
 
     /**
@@ -140,7 +153,7 @@ public final class McpServiceMethodHelper {
                                                   BMap<?, ?> headerValues, boolean treatNilableAsOptional) {
         Optional<RemoteMethodType> method = getRemoteMethod(mcpService, ON_CALL_TOOL_METHOD);
         if (method.isEmpty()) {
-            return ModuleUtils.createError("Remote method '" + ON_CALL_TOOL_METHOD + "' not found");
+            return ModuleUtils.createServerError("Remote method '" + ON_CALL_TOOL_METHOD + "' not found");
         }
         Object argsOrError = buildAdvancedArgs(method.get(), params, session, headers, request, headerValues,
                 treatNilableAsOptional);
@@ -168,7 +181,7 @@ public final class McpServiceMethodHelper {
                                                    boolean treatNilableAsOptional) {
         Optional<RemoteMethodType> method = getRemoteMethod(mcpService, ON_LIST_TOOLS_METHOD);
         if (method.isEmpty()) {
-            return ModuleUtils.createError("Remote method '" + ON_LIST_TOOLS_METHOD + "' not found");
+            return ModuleUtils.createServerError("Remote method '" + ON_LIST_TOOLS_METHOD + "' not found");
         }
         Object argsOrError = buildAdvancedArgs(method.get(), null, null, headers, request, headerValues,
                 treatNilableAsOptional);
@@ -224,8 +237,7 @@ public final class McpServiceMethodHelper {
                 .findFirst();
 
         if (method.isEmpty()) {
-            return ModuleUtils
-                    .createError("RemoteMethodType with name '" + toolName.getValue() + "' not found");
+            return createCallToolError(typed, "Unknown tool: " + toolName.getValue());
         }
 
         // Extract metadata from params
@@ -235,14 +247,16 @@ public final class McpServiceMethodHelper {
                 buildArgsForMethod(method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)), session,
                         meta, headers, request, headerValues, treatNilableAsOptional);
 
-        if (argsOrError instanceof BError) {
-            return argsOrError;
+        // Header binding failures are transport-level and stay protocol errors; anything else is an
+        // invalid tool argument, which the spec reports as a tool execution error.
+        if (argsOrError instanceof BError bindingError) {
+            return isParameterBindingError(bindingError) ? bindingError
+                    : createCallToolError(typed, bindingError.getErrorMessage().getValue());
         }
 
         Object[] args = (Object[]) argsOrError;
-        Object result = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
-
-        return createCallToolResult(typed, result);
+        return createCallToolResult(typed,
+                env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args));
     }
 
     /**
@@ -271,11 +285,11 @@ public final class McpServiceMethodHelper {
         try {
             Object mcpService = dispatcherService.getNativeData(MCP_SERVICE_FIELD);
             if (mcpService == null) {
-                return ModuleUtils.createError("MCP service not found in dispatcher");
+                return ModuleUtils.createError("MCP service is not available");
             }
             return mcpService;
         } catch (Exception e) {
-            return ModuleUtils.createError("Failed to get MCP service from dispatcher: " + e.getMessage());
+            return ModuleUtils.createError("MCP service is not available");
         }
     }
 
@@ -369,19 +383,38 @@ public final class McpServiceMethodHelper {
                 args[i] = headerValueOrError;
             } else {
                 String paramName = param.name;
-                Object argValue = arguments == null ? null : arguments.get(fromString(paramName));
+                BString argumentKey = fromString(paramName);
+                boolean isPresent = arguments != null && arguments.containsKey(argumentKey);
+                Object argValue = isPresent ? arguments.get(argumentKey) : null;
 
-                // Check if the parameter is required (non-optional) but the value is null
+                // A required parameter must be present and carry a value. An explicit null is
+                // reported apart from an absent argument, so a caller can tell which to correct.
                 if (argValue == null && !isOptionalParameter(param)) {
-                    return ModuleUtils.createError(
-                            "Missing required argument '" + paramName + "' for parameter of type '"
-                            + param.type.getName() + "'");
+                    return ModuleUtils.createError(isPresent
+                            ? "invalid value for argument '" + paramName + "': expected a value, found null"
+                            : "missing required argument '" + paramName + "'");
                 }
 
-                args[i] = argValue;
+                Object convertedOrError = convertArgument(argValue, param.type, paramName);
+                if (convertedOrError instanceof BError) {
+                    return convertedOrError;
+                }
+                args[i] = convertedOrError;
             }
         }
         return args;
+    }
+
+    private static Object convertArgument(Object argValue, Type targetType, String paramName) {
+        if (argValue == null) {
+            return null;
+        }
+        try {
+            return ValueUtils.convert(argValue, targetType);
+        } catch (BError e) {
+            return ModuleUtils.createError(
+                    "invalid value for argument '" + paramName + "': " + describeConversionFailure(e));
+        }
     }
 
     private static boolean isOptionalParameter(Parameter param) {
@@ -638,6 +671,59 @@ public final class McpServiceMethodHelper {
         return false;
     }
 
+    private static String stringifyToolResult(Object result) {
+        if (result == null) {
+            return "";
+        }
+        if (result instanceof BError error) {
+            return errorMessage(error);
+        }
+        return result.toString();
+    }
+
+    /**
+     * Panics and runtime errors carry the type reference as the message and the readable text in the
+     * 'message' detail field, so prefer the detail when it is present.
+     */
+    private static String errorMessage(BError error) {
+        if (error.getDetails() instanceof BMap<?, ?> details) {
+            Object detailMessage = details.get(fromString(MESSAGE_FIELD_NAME));
+            if (detailMessage != null) {
+                return detailMessage.toString();
+            }
+        }
+        return error.getErrorMessage().getValue();
+    }
+
+    /**
+     * Strips the internal source type a conversion failure is prefixed with, keeping the reasons
+     * that follow it flattened onto a single line. Falls back to the message when there are none.
+     */
+    private static String describeConversionFailure(BError error) {
+        String message = errorMessage(error);
+        Matcher matcher = CONVERSION_FAILURE_PREFIX.matcher(message);
+        if (!matcher.find()) {
+            return message;
+        }
+        String reasons = Arrays.stream(message.substring(matcher.end()).split("\\R"))
+                .map(String::strip)
+                .filter(reason -> !reason.isEmpty())
+                .collect(Collectors.joining("; "));
+        return reasons.isEmpty() ? message : reasons;
+    }
+
+    private static boolean isParameterBindingError(BError error) {
+        return PARAMETER_BINDING_ERROR.equals(error.getType().getName());
+    }
+
+    private static Object createCallToolError(BTypedesc typed, String message) {
+        Object result = createCallToolResult(typed, message);
+        if (result instanceof BMap<?, ?> callToolResult) {
+            ((BMap<BString, Object>) callToolResult).put(fromString(IS_ERROR_FIELD_NAME), true);
+        }
+        return result;
+    }
+
     private static Object createCallToolResult(BTypedesc typed, Object result) {
         RecordType resultRecordType = (RecordType) typed.getDescribingType();
         BMap<BString, Object> callToolResult = ValueCreator.createRecordValue(resultRecordType);
@@ -661,10 +747,13 @@ public final class McpServiceMethodHelper {
         RecordType textContentRecordType = (RecordType) TypeUtils.getImpliedType(textContentTypeOpt.get());
         BMap<BString, Object> textContent = ValueCreator.createRecordValue(textContentRecordType);
         textContent.put(fromString(TYPE_FIELD_NAME), fromString(TEXT_VALUE_NAME));
-        textContent.put(fromString(TEXT_FIELD_NAME), fromString(result == null ? "" : result.toString()));
+        textContent.put(fromString(TEXT_FIELD_NAME), fromString(stringifyToolResult(result)));
         contentArray.append(textContent);
 
         callToolResult.put(fromString(CONTENT_FIELD_NAME), contentArray);
+        if (result instanceof BError) {
+            callToolResult.put(fromString(IS_ERROR_FIELD_NAME), true);
+        }
         return callToolResult;
     }
 }

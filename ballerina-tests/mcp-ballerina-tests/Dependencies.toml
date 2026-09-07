@@ -5,7 +5,7 @@
 
 [ballerina]
 dependencies-toml-version = "2"
-distribution-version = "2201.13.5-20260805-221500-37884cac"
+distribution-version = "2201.13.6"
 
 [[package]]
 org = "ballerina"
@@ -251,6 +251,7 @@ scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},
+	{org = "ballerina", name = "log"},
 	{org = "ballerina", name = "uuid"}
 ]
 modules = [
