@@ -124,11 +124,34 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 
 **Constraints for defining MCP tools:**
 
-1. Parameters should be a subtype of `anydata` (exception: first parameter can be `mcp:Session` for stateful services).
+1. Parameters should be a subtype of `anydata`. The runtime-injected parameters are the exceptions: `mcp:Session` for stateful services, and `mcp:Meta?` for request metadata.
 2. The tool should return a subtype of `anydata|error`.
 3. The `@mcp:Tool` annotation is not required unless you want fine-grained control. If the annotation is not provided, the documentation string will be considered as the description.
 4. For session-enabled tools, the `mcp:Session` parameter must be the first parameter if present.
-5. Tools in an `mcp:StreamableHttpService` can additionally bind HTTP request information, such as `@http:Header` parameters, an `http:Headers` parameter, or an `http:Request` parameter. These require importing the `ballerina/http` module, and `@http:Header` parameters are excluded from the generated tool input schema.
+5. A tool may accept an `mcp:Meta?` parameter to read the request metadata (`_meta`) the client attached to the call. It must be declared nilable -- a non-nilable `mcp:Meta` is a compile error -- and at most one is allowed per method. Unlike `mcp:Session`, its position in the signature is unconstrained. It is injected by the runtime and excluded from the generated tool input schema, so it is never a tool argument the client supplies. `mcp:Meta` is an open record, so keys the client sent are read through member access. Its one declared field, `progressToken`, is carried for spec conformance only: progress notifications are not implemented, so a server cannot act on it.
+6. Tools in an `mcp:StreamableHttpService` can additionally bind HTTP request information, such as `@http:Header` parameters, an `http:Headers` parameter, or an `http:Request` parameter. These require importing the `ballerina/http` module, and `@http:Header` parameters are excluded from the generated tool input schema.
+
+**Request Metadata Example:**
+```ballerina
+service mcp:StreamableHttpService /mcp on mcpListener {
+
+    # Summarize a document
+    #
+    # + document - The text to summarize
+    # + meta - The request metadata attached by the client
+    # + return - The summary, or an error if the request fails
+    remote function summarize(string document, mcp:Meta? meta) returns string|error {
+        // `document` is the only argument in the tool's input schema; `meta` is injected
+        // by the runtime and is nil when the client attached no metadata.
+        // `mcp:Meta` is an open record, so any key the client sent is readable.
+        anydata requestId = meta is mcp:Meta ? meta["requestId"] : ();
+        if requestId is string {
+            return summarizeTagged(document, requestId);
+        }
+        return summarizeQuietly(document);
+    }
+}
+```
 
 #### Step 4: Advanced Service Implementation (Optional)
 
@@ -179,7 +202,7 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
 **Constraints for defining an `mcp:StreamableHttpAdvancedService`:**
 
 1. Both the `onListTools` and the `onCallTool` `remote` methods must be declared, and no other `remote` methods are allowed.
-2. `onCallTool` must accept exactly one `mcp:CallToolParams` parameter, and may accept an `mcp:Session?` parameter for stateful services.
+2. `onCallTool` must accept exactly one `mcp:CallToolParams` parameter, and may accept an `mcp:Session?` parameter for stateful services. An `mcp:Meta?` parameter is not accepted here, unlike on the tools of a basic service; read the metadata from the `_meta` field of the `mcp:CallToolParams` value instead.
 3. As with the tools of an `mcp:StreamableHttpService`, both methods can additionally bind HTTP request information, such as `@http:Header` parameters, an `http:Headers` parameter, or an `http:Request` parameter.
 
 ### MCP Client Implementation
