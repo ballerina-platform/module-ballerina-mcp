@@ -45,7 +45,8 @@ import java.util.stream.Stream;
  */
 public class EndpointExportTest {
 
-    private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "test-src")
+    private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "ballerina_sources",
+            "endpoint_export")
             .toAbsolutePath();
     private static final Path DISTRIBUTION_PATH = Paths.get("../", "target", "ballerina-runtime")
             .toAbsolutePath();
@@ -70,6 +71,36 @@ public class EndpointExportTest {
             Assert.assertEquals(countEntries(endpoints), 1);
             Assert.assertTrue(endpoints.contains("port: 9090"));
             Assert.assertTrue(endpoints.contains("basePath: \"/mcp\""));
+        });
+    }
+
+    @Test
+    public void testStreamableHttpBasicService() throws Exception {
+        withBuild("streamable_http_basic_service", true, endpoints -> {
+            Assert.assertEquals(countEntries(endpoints), 1);
+            Assert.assertTrue(endpoints.contains("port: 9092"));
+            Assert.assertTrue(endpoints.contains("basePath: \"/streamable\""));
+            Assert.assertTrue(endpoints.contains("type: \"mcp\""));
+        });
+    }
+
+    @Test
+    public void testStreamableHttpListenerWithMcpService() throws Exception {
+        withBuild("streamable_http_listener_mcp_service", true, endpoints -> {
+            Assert.assertEquals(countEntries(endpoints), 1);
+            Assert.assertTrue(endpoints.contains("port: 9095"));
+            Assert.assertTrue(endpoints.contains("basePath: \"/transportagnostic\""));
+            Assert.assertTrue(endpoints.contains("type: \"mcp\""));
+        });
+    }
+
+    @Test
+    public void testStreamableHttpAdvancedService() throws Exception {
+        withBuild("streamable_http_advanced_service", true, endpoints -> {
+            Assert.assertEquals(countEntries(endpoints), 1);
+            Assert.assertTrue(endpoints.contains("port: 9093"));
+            Assert.assertTrue(endpoints.contains("basePath: \"/advanced\""));
+            Assert.assertTrue(endpoints.contains("type: \"mcp\""));
         });
     }
 
@@ -121,6 +152,18 @@ public class EndpointExportTest {
             Assert.assertEquals(countOccurrences(endpoints, "type: \"mcp\""), 1,
                     "MCP must export exactly one (its own) entry, not the co-located HTTP service");
             Assert.assertTrue(endpoints.contains("basePath: \"/mcp\""), "The MCP service should be exported");
+        });
+    }
+
+    @Test
+    public void testStreamableHttpMcpAndNonMcpServiceExportsOnlyMcp() throws Exception {
+        withBuild("streamable_http_mcp_and_non_mcp_service", true, endpoints -> {
+            // Assert only on MCP-typed entries so the test survives HTTP/GraphQL adding their own entries later.
+            Assert.assertEquals(countOccurrences(endpoints, "type: \"mcp\""), 1,
+                    "MCP must export exactly one of its own entries, not the co-located HTTP service");
+            Assert.assertTrue(endpoints.contains("port: 9094"));
+            Assert.assertTrue(endpoints.contains("basePath: \"/streamable\""),
+                    "The streamable MCP service should be exported");
         });
     }
 
@@ -204,6 +247,20 @@ public class EndpointExportTest {
             Assert.assertTrue(endpoints.contains("basePath: \"/main\""));
             Assert.assertFalse(endpoints.contains("/test"), "A service declared in test sources must not be exported");
         });
+    }
+
+    @Test
+    public void testPackageWithoutMcpServicesProducesNoArtifact() throws Exception {
+        Path projectDirPath = RESOURCE_DIRECTORY.resolve("no_mcp_services");
+        try {
+            deleteDirectories(projectDirPath);
+            int exitCode = executeBallerinaCommand(projectDirPath, true);
+            Assert.assertEquals(exitCode, 0, "A package without MCP services must build successfully");
+            Assert.assertTrue(Files.notExists(artifactDir(projectDirPath)),
+                    "No artifact should be emitted when a package has no MCP services");
+        } finally {
+            deleteDirectories(projectDirPath);
+        }
     }
 
     @Test
