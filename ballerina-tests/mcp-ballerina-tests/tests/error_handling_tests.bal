@@ -402,12 +402,12 @@ function testCallToolWithoutNameReturnsInvalidParams() returns error? {
 }
 
 @test:Config
-function testInitializeWithInvalidParamsReturnsInvalidRequest() returns error? {
+function testInitializeWithInvalidParamsReturnsInvalidParams() returns error? {
     http:Response response = check postJsonRpc(errorHandlingClient,
             {jsonrpc: "2.0", id: 1, method: "initialize", params: {capabilities: {}}});
     test:assertEquals(response.statusCode, http:STATUS_OK);
     [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
-    test:assertEquals(code, mcp:INVALID_REQUEST);
+    test:assertEquals(code, mcp:INVALID_PARAMS);
     test:assertEquals(message, "Invalid parameters for 'initialize'");
     test:assertFalse(message.includes("record {|"), "record definitions must not reach the caller");
 }

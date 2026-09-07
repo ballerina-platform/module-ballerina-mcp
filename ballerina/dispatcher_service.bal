@@ -167,7 +167,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             if initRequest is error {
                 // The conversion failure names the internal record types it walked, which describe
                 // nothing the caller sent, so the request is reported without them.
-                return createJsonRpcErrorResponse(INVALID_REQUEST,
+                return createJsonRpcErrorResponse(INVALID_PARAMS,
                         string `Invalid parameters for '${REQUEST_INITIALIZE}'`, id);
             }
 
