@@ -38,6 +38,7 @@ isolated function getServiceConfiguration(Service|AdvancedService|StreamableHttp
     if serviceConfig is ServiceConfiguration {
         StreamableHttpServiceConfiguration config = {
             info: serviceConfig.info,
+            protocolMode: serviceConfig.protocolMode,
             httpConfig: serviceConfig.httpConfig,
             sessionMode: serviceConfig.sessionMode
         };

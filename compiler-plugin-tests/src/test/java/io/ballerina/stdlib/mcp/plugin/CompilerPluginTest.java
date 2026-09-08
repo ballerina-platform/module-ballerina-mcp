@@ -220,4 +220,19 @@ public class CompilerPluginTest {
                 "an optional mcp:Meta parameter must be accepted outside the final position: "
                         + diagnosticResult.errors().toString());
     }
+    @Test
+    public void testProtocolSessionDiagnostics() {
+        String[] codes = {"MCP_WARNING_102", "MCP_114", "MCP_WARNING_104", "MCP_WARNING_103"};
+        for (int index = 0; index < codes.length; index++) {
+            DiagnosticResult result = compile("sample_package_" + (19 + index));
+            String code = codes[index];
+            Assert.assertTrue(result.diagnostics().stream().anyMatch(d -> d.diagnosticInfo().code().equals(code)),
+                    "Expected " + code + ": " + result.diagnostics());
+            Assert.assertEquals(errorCount(result), index == 1 ? 1L : 0L);
+        }
+        DiagnosticResult legacy = compile("sample_package_23");
+        Assert.assertEquals(errorCount(legacy), 0L);
+        Assert.assertFalse(legacy.diagnostics().stream()
+                .anyMatch(d -> d.diagnosticInfo().code().startsWith("MCP_WARNING_10")));
+    }
 }

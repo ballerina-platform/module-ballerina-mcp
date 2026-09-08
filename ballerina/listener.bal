@@ -49,7 +49,11 @@ public isolated class StreamableHttpListener {
     # + name - Path(s) to mount the service on (string or string array).
     # + return - Error? if attachment fails.
     public isolated function attach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService, string[]|string? name = ()) returns Error? {
-        http:HttpServiceConfig httpServiceConfig = getServiceConfiguration(mcpService).httpConfig;
+        StreamableHttpServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
+        if serviceConfig.protocolMode == "modern" && requiresLegacySession(mcpService) {
+            return error DispatcherError("Modern MCP services cannot require mcp:Session; use explicit application state");
+        }
+        http:HttpServiceConfig httpServiceConfig = serviceConfig.httpConfig;
         DispatcherService dispatcherService = getDispatcherService(httpServiceConfig);
         check addMcpServiceToDispatcher(dispatcherService, mcpService);
         lock {

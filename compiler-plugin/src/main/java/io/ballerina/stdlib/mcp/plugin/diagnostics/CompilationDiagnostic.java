@@ -45,6 +45,10 @@ public enum CompilationDiagnostic {
     ADVANCED_ON_CALL_TOOL_PARAMS(DiagnosticMessage.ERROR_111, DiagnosticCode.MCP_111, ERROR),
     ADVANCED_INVALID_RETURN_TYPE(DiagnosticMessage.ERROR_112, DiagnosticCode.MCP_112, ERROR),
     ADVANCED_UNKNOWN_REMOTE_METHOD(DiagnosticMessage.ERROR_113, DiagnosticCode.MCP_113, ERROR),
+    REQUIRED_SESSION_IN_MODERN_MODE(DiagnosticMessage.ERROR_114, DiagnosticCode.MCP_114, ERROR),
+    REQUIRED_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_102, DiagnosticCode.MCP_WARNING_102, WARNING),
+    OPTIONAL_SESSION_IN_MODERN_MODE(DiagnosticMessage.WARNING_103, DiagnosticCode.MCP_WARNING_103, WARNING),
+    OPTIONAL_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_104, DiagnosticCode.MCP_WARNING_104, WARNING),
     UNSUPPORTED_ENDPOINT_METADATA(DiagnosticMessage.WARNING_101, DiagnosticCode.MCP_WARNING_101, WARNING);
 
     private final String diagnostic;

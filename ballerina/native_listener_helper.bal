@@ -60,3 +60,9 @@ isolated function getMcpServiceFromDispatcher(http:Service dispatcherService)
         returns Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
+
+// Runtime counterpart of the compiler diagnostic, including dynamically attached services.
+isolated function requiresLegacySession(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService)
+        returns boolean = @java:Method {
+    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+} external;

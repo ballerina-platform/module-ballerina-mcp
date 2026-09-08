@@ -374,6 +374,10 @@ public class Utils {
     }
 
     static boolean isSessionType(TypeSymbol typeSymbol) {
+        if (typeSymbol.typeKind() == TypeDescKind.UNION) {
+            return ((UnionTypeSymbol) typeSymbol).memberTypeDescriptors().stream()
+                    .filter(member -> member.typeKind() != TypeDescKind.NIL).allMatch(Utils::isSessionType);
+        }
         return SESSION_TYPE_NAME.equals(typeSymbol.getName().orElse(""))
                 && isMcpModuleSymbol(typeSymbol);
     }

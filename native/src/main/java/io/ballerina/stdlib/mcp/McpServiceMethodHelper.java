@@ -110,6 +110,18 @@ public final class McpServiceMethodHelper {
 
     private McpServiceMethodHelper() {}
 
+    /** Returns whether a service has a session parameter that cannot receive nil. */
+    public static boolean requiresLegacySession(BObject mcpService) {
+        for (RemoteMethodType method : getRemoteMethods(mcpService)) {
+            for (Parameter parameter : method.getParameters()) {
+                if (isSessionParameter(parameter) && !parameter.type.isNilable()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /**
      * Invoke the 'onListTools' remote method on the given MCP service object.
      *

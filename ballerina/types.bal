@@ -40,6 +40,9 @@ public enum RequestMethod {
     REQUEST_CALL_TOOL = "tools/call"
 };
 
+# Selects protocol behavior independently of legacy HTTP session management.
+public type ProtocolMode "legacy"|"auto"|"modern";
+
 # Represents the session management modes supported by the MCP server transport.
 public enum SessionMode {
     # Stateful mode - sessions are managed by the transport
@@ -602,6 +605,8 @@ public type ServerOptions record {|
 public type ServiceConfiguration record {|
     # Server implementation information
     Implementation info;
+    # Protocol selection. Auto preserves legacy requests and accepts modern requests when the service supports them.
+    ProtocolMode protocolMode = "auto";
     # Optional server configuration options
     ServerOptions options?;
     # HTTP service configuration for the underlying transport.
@@ -630,6 +635,8 @@ public annotation ServiceConfiguration ServiceConfig on service;
 public type StreamableHttpServiceConfiguration record {|
     # Server implementation information
     Implementation info;
+    # Protocol selection. Auto preserves legacy requests and accepts modern requests when the service supports them.
+    ProtocolMode protocolMode = "auto";
     # Optional server configuration options
     ServerOptions options?;
     # HTTP service configuration for the underlying transport
