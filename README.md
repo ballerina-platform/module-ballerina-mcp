@@ -6,11 +6,7 @@
 
 ## Overview
 
-This module provides APIs for building MCP (Model Context Protocol) clients and servers in Ballerina.
-
-MCP is an open standard that enables seamless integration between Large Language Models (LLMs) and external data sources, tools, and services. It facilitates structured communication through JSON-RPC 2.0 over HTTP transport, allowing AI applications to access and interact with external capabilities in a standardized way.
-
-The Ballerina MCP library implements both client and server-side functionality, supporting automatic tool discovery, type-safe schema generation, flexible session management (STATEFUL, STATELESS, AUTO modes), and streamable HTTP transport with Server-Sent Events (SSE) for bidirectional communication.
+This module provides APIs for building MCP (Model Context Protocol) clients and servers in Ballerina, enabling standardized integration between LLMs and external data sources, tools, and services via JSON-RPC 2.0 over HTTP. It supports automatic tool discovery, type-safe schema generation, flexible session management, and streamable HTTP transport with Server-Sent Events for bidirectional communication.
 
 ## Issues and projects
 
