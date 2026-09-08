@@ -22,6 +22,12 @@ import ballerina/http;
 public type StreamableHttpClientTransportConfig record {|
     *http:ClientConfiguration;
     string sessionId?;
+    # Auto probes discovery and falls back to the legacy handshake.
+    ProtocolMode protocolMode = "auto";
+    # Maximum number of input-required continuations per call.
+    int maxInputRounds = 8;
+    # Optional application callback for embedded input requests.
+    InputHandler inputHandler?;
 |};
 
 # Provides HTTP-based client transport with support for streaming.
@@ -41,7 +47,7 @@ isolated class StreamableHttpClientTransport {
             returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
 
-        StreamableHttpClientTransportConfig {sessionId, ...clientConfig} = config;
+        StreamableHttpClientTransportConfig {sessionId, protocolMode: _, maxInputRounds: _, inputHandler: _, ...clientConfig} = config;
         clientConfig.followRedirects = clientConfig.followRedirects ?: {
             enabled: true
         };
@@ -111,6 +117,41 @@ isolated class StreamableHttpClientTransport {
         } on fail error e {
             return error HttpClientError(string `Failed to send message to server: ${e.message()}`);
         }
+    }
+
+    isolated function sendProtocolRequest(JsonRpcRequest requestMessage, map<string|string[]> additionalHeaders,
+            map<string> parameterHeaders = {}) returns Result|ClientError {
+        map<string|string[]> requestHeaders = {
+            [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
+            [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
+            [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+            [METHOD_HEADER]: requestMessage.method
+        };
+        if requestMessage.method == REQUEST_CALL_TOOL {
+            RequestParams requestParams = requestMessage.params ?: {};
+            anydata toolName = requestParams["name"];
+            if toolName is string {
+                requestHeaders[NAME_HEADER] = encodeProtocolHeader(toolName);
+            }
+        }
+        foreach var [headerName, headerValue] in parameterHeaders.entries() {
+            requestHeaders[headerName.toLowerAscii()] = headerValue;
+        }
+        foreach var [headerName, headerValue] in additionalHeaders.entries() {
+            string lowerName = headerName.toLowerAscii();
+            if lowerName == SESSION_ID_HEADER || lowerName == "last-event-id" {
+                continue;
+            }
+            if requestHeaders.hasKey(lowerName) && requestHeaders[lowerName] != headerValue {
+                return error HttpClientError("Additional header conflicts with generated protocol header: " + headerName);
+            }
+            requestHeaders[lowerName] = headerValue;
+        }
+        http:Response|error httpResponse = self.httpClient->post("", requestMessage, headers = requestHeaders);
+        if httpResponse is error {
+            return error HttpClientError("Failed to send modern MCP request", httpResponse);
+        }
+        return readProtocolResponse(httpResponse, requestMessage.id);
     }
 
     # Establishes a Server-Sent Events (SSE) stream with the server.

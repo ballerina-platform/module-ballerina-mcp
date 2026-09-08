@@ -19,9 +19,10 @@ import ballerina/http;
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcError|JsonRpcResponse;
 
-public const LATEST_PROTOCOL_VERSION = "2025-11-25";
+public const LATEST_PROTOCOL_VERSION = "2026-07-28";
 public const SUPPORTED_PROTOCOL_VERSIONS = [
     LATEST_PROTOCOL_VERSION,
+    LATEST_LEGACY_PROTOCOL_VERSION,
     "2025-06-18",
     "2025-03-26",
     "2024-11-05",
@@ -213,6 +214,8 @@ public type InitializedNotification record {|
 # Capabilities a client may support. Known capabilities are defined here, in this schema,
 # but this is not a closed set: any client can define its own, additional capabilities.
 public type ClientCapabilities record {
+    # Optional protocol extensions supported by this implementation.
+    map<record {}> extensions?;
     # Experimental, non-standard capabilities that the client supports.
     map<anydata> experimental?;
     # Present if the client supports listing roots.
@@ -258,6 +261,8 @@ public type ClientCapabilities record {
 # Capabilities that a server may support. Known capabilities are defined here, in this schema,
 # but this is not a closed set: any server can define its own, additional capabilities.
 public type ServerCapabilities record {
+    # Optional protocol extensions supported by this implementation.
+    map<record {}> extensions?;
     # Experimental, non-standard capabilities that the server supports.
     map<anydata> experimental?;
     # Present if the server supports sending log messages to the client.
@@ -450,6 +455,10 @@ public type CallToolParams record {|
     *RequestParams;
     # The name of the tool to invoke
     string name;
+    # Responses to embedded input requests on a continuation.
+    map<InputResponse> inputResponses?;
+    # Opaque state echoed exactly from an input-required result.
+    string requestState?;
     # Optional arguments to pass to the tool
     record {} arguments?;
     # If present, this is a task-augmented request (MCP 2025-11-25 TaskAugmentedRequestParams).

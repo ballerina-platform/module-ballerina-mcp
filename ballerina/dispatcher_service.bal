@@ -89,6 +89,22 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 return request;
             }
 
+            StreamableHttpServiceConfiguration|Error routeConfig = self.getCachedServiceConfiguration();
+            if routeConfig is Error {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, routeConfig.message());
+            }
+            if request is JsonRpcRequest && isModernRequest(request, headers) {
+                var mcpService = getMcpServiceFromDispatcher(self);
+                if mcpService is Error {
+                    return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), request.id);
+                }
+                return handleModernRequest(mcpService, request, httpRequest, headers, routeConfig);
+            }
+            if routeConfig.protocolMode == "modern" {
+                return unsupportedProtocolResponse(getProtocolVersionFromHeaders(headers) ?: "legacy",
+                        [MODERN_PROTOCOL_VERSION], request is JsonRpcRequest ? request.id : ());
+            }
+
             // The MCP-Protocol-Version header is required on all requests after initialization. The
             // initialize request itself establishes the version, so it is exempt from this validation.
             boolean isInitializeRequest = request is JsonRpcRequest && request.method == REQUEST_INITIALIZE;
@@ -116,7 +132,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         private isolated function getCachedServiceConfiguration() returns StreamableHttpServiceConfiguration|Error {
             lock {
                 if self.cachedServiceConfig is () {
-                    Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
+                    Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService =
                             check getMcpServiceFromDispatcher(self);
                     self.cachedServiceConfig = getServiceConfiguration(mcpService);
                 }
@@ -337,8 +353,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function executeOnListTools(http:Headers headers, http:Request httpRequest,
                 boolean treatNilableAsOptional) returns ListToolsResult|Error {
-            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
+            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService =
                     check getMcpServiceFromDispatcher(self);
+            if mcpService is ProtocolService {
+                return error DispatcherError("Use modern protocol mode for this service");
+            }
             if mcpService is StreamableHttpAdvancedService {
                 return trapListToolsFailure(trap invokeAdvancedOnListTools(mcpService, headers, httpRequest,
                         extractHeaderValues(headers), treatNilableAsOptional));
@@ -354,8 +373,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function executeOnCallTool(CallToolParams params, Session? session, http:Headers headers,
                 http:Request httpRequest, boolean treatNilableAsOptional) returns CallToolResult|Error {
-            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
+            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService =
                     check getMcpServiceFromDispatcher(self);
+            if mcpService is ProtocolService {
+                return error DispatcherError("Use modern protocol mode for this service");
+            }
             if mcpService is StreamableHttpAdvancedService {
                 CallToolResult|error result = trap invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(),
                         session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional);

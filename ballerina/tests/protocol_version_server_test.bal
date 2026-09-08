@@ -83,7 +83,7 @@ function testServerFallsBackToLatestForUnsupportedVersion() returns error? {
     json body = check response.getJsonPayload();
     json result = check body.result;
     string negotiated = check result.protocolVersion.ensureType();
-    test:assertEquals(negotiated, LATEST_PROTOCOL_VERSION);
+    test:assertEquals(negotiated, LATEST_LEGACY_PROTOCOL_VERSION);
 }
 
 // Transport: initialize is exempt from header validation even if an invalid header is present.

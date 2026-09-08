@@ -21,7 +21,7 @@ import ballerina/log;
 #
 # + mcpService - The MCP service instance
 # + return - The resolved Streamable HTTP service configuration
-isolated function getServiceConfiguration(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService)
+isolated function getServiceConfiguration(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService)
         returns StreamableHttpServiceConfiguration {
     typedesc mcpServiceType = typeof mcpService;
 
@@ -254,11 +254,11 @@ isolated function validateRequiredHeaders(http:Headers headers) returns http:Not
 # + return - The negotiated protocol version
 isolated function selectProtocolVersion(string requestedVersion) returns string {
     foreach string supportedVersion in SUPPORTED_PROTOCOL_VERSIONS {
-        if supportedVersion == requestedVersion {
+        if supportedVersion == requestedVersion && supportedVersion != MODERN_PROTOCOL_VERSION {
             return requestedVersion;
         }
     }
-    return LATEST_PROTOCOL_VERSION;
+    return LATEST_LEGACY_PROTOCOL_VERSION;
 }
 
 # Extracts the `MCP-Protocol-Version` header value from the request headers, if present.

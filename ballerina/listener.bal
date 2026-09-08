@@ -48,7 +48,7 @@ public isolated class StreamableHttpListener {
     # + mcpService - Service to attach.
     # + name - Path(s) to mount the service on (string or string array).
     # + return - Error? if attachment fails.
-    public isolated function attach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService, string[]|string? name = ()) returns Error? {
+    public isolated function attach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService, string[]|string? name = ()) returns Error? {
         StreamableHttpServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
         if serviceConfig.protocolMode == "modern" && requiresLegacySession(mcpService) {
             return error DispatcherError("Modern MCP services cannot require mcp:Session; use explicit application state");
@@ -69,10 +69,10 @@ public isolated class StreamableHttpListener {
     #
     # + mcpService - Service to detach.
     # + return - Error? if detachment fails.
-    public isolated function detach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService) returns Error? {
+    public isolated function detach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService) returns Error? {
         lock {
             foreach [int, DispatcherService] [index, dispatcherService] in self.dispatcherServices.enumerate() {
-                Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|Error attachedService = getMcpServiceFromDispatcher(dispatcherService);
+                Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService|Error attachedService = getMcpServiceFromDispatcher(dispatcherService);
                 if attachedService === mcpService {
                     error? result = self.httpListener.detach(dispatcherService);
                     if result is error {
@@ -144,14 +144,14 @@ public isolated class Listener {
     # + mcpService - Service to attach.
     # + name - Path(s) to mount the service on (string or string array).
     # + return - Error? if attachment fails.
-    public isolated function attach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService, string[]|string? name = ()) returns Error? =>
+    public isolated function attach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService, string[]|string? name = ()) returns Error? =>
         self.inner.attach(mcpService, name);
 
     # Detaches the MCP service from the listener.
     #
     # + mcpService - Service to detach.
     # + return - Error? if detachment fails.
-    public isolated function detach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService) returns Error? => self.inner.detach(mcpService);
+    public isolated function detach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService) returns Error? => self.inner.detach(mcpService);
 
     # Starts the listener (begin accepting connections).
     #

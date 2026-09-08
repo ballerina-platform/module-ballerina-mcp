@@ -110,6 +110,14 @@ public final class McpServiceMethodHelper {
 
     private McpServiceMethodHelper() {}
 
+    public static Object invokeProtocolOnListTools(Environment env, BObject mcpService) {
+        return env.getRuntime().callMethod(mcpService, ON_LIST_TOOLS_METHOD, null);
+    }
+
+    public static Object invokeProtocolOnCallTool(Environment env, BObject mcpService, BMap<?, ?> callParams) {
+        return env.getRuntime().callMethod(mcpService, ON_CALL_TOOL_METHOD, null, callParams);
+    }
+
     /** Returns whether a service has a session parameter that cannot receive nil. */
     public static boolean requiresLegacySession(BObject mcpService) {
         for (RemoteMethodType method : getRemoteMethods(mcpService)) {
