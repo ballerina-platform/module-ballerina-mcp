@@ -616,6 +616,8 @@ public type ServiceConfiguration record {|
     Implementation info;
     # Protocol selection. Auto preserves legacy requests and accepts modern requests when the service supports them.
     ProtocolMode protocolMode = "auto";
+    # Origins permitted on modern HTTP requests. Requests without Origin are accepted.
+    string[] allowedOrigins = [];
     # Optional server configuration options
     ServerOptions options?;
     # HTTP service configuration for the underlying transport.
@@ -646,6 +648,8 @@ public type StreamableHttpServiceConfiguration record {|
     Implementation info;
     # Protocol selection. Auto preserves legacy requests and accepts modern requests when the service supports them.
     ProtocolMode protocolMode = "auto";
+    # Origins permitted on modern HTTP requests. Requests without Origin are accepted.
+    string[] allowedOrigins = [];
     # Optional server configuration options
     ServerOptions options?;
     # HTTP service configuration for the underlying transport

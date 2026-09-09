@@ -17,13 +17,20 @@
 
 plugins {
     id 'java'
+    id 'com.gradleup.shadow'
     id 'com.github.spotbugs'
     id 'checkstyle'
 }
 
 description = 'Ballerina - MCP package Java Utils'
 
+configurations {
+    schemaValidation
+    implementation.extendsFrom(schemaValidation)
+}
+
 dependencies {
+    schemaValidation "com.networknt:json-schema-validator:${jsonSchemaValidatorVersion}"
     implementation group: 'org.ballerinalang', name: 'ballerina-lang', version: "${ballerinaLangVersion}"
     implementation group: 'org.ballerinalang', name: 'ballerina-runtime', version: "${ballerinaLangVersion}"
     implementation group: 'org.ballerinalang', name: 'value', version: "${ballerinaLangVersion}"
@@ -86,3 +93,20 @@ compileJava {
         classpath = files()
     }
 }
+
+// Keep validation dependencies private to the native library to avoid collisions with application libraries.
+jar {
+    archiveClassifier = 'thin'
+}
+shadowJar {
+    archiveClassifier = ''
+    configurations = [project.configurations.schemaValidation]
+    mergeServiceFiles()
+    exclude 'module-info.class', 'META-INF/versions/**/module-info.class'
+    relocate 'com.networknt', 'io.ballerina.stdlib.mcp.internal.networknt'
+    relocate 'com.fasterxml.jackson', 'io.ballerina.stdlib.mcp.internal.jackson'
+    relocate 'com.ethlo', 'io.ballerina.stdlib.mcp.internal.ethlo'
+    relocate 'org.yaml', 'io.ballerina.stdlib.mcp.internal.yaml'
+    relocate 'org.slf4j', 'io.ballerina.stdlib.mcp.internal.slf4j'
+}
+build.dependsOn shadowJar

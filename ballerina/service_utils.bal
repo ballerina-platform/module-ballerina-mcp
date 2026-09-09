@@ -39,6 +39,7 @@ isolated function getServiceConfiguration(Service|AdvancedService|StreamableHttp
         StreamableHttpServiceConfiguration config = {
             info: serviceConfig.info,
             protocolMode: serviceConfig.protocolMode,
+            allowedOrigins: serviceConfig.allowedOrigins,
             httpConfig: serviceConfig.httpConfig,
             sessionMode: serviceConfig.sessionMode
         };

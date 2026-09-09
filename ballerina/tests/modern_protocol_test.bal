@@ -92,3 +92,24 @@ function testProtocolHeaderEncoding() returns error? {
         second: {'type: "string", "x-mcp-header": "region"}
     }}, {}) is Error);
 }
+
+@test:Config {}
+function testModernSchemaValidation() returns error? {
+    string localSchema = string `{"type":"object","properties":{"count":{"$ref":"#/$defs/count"}},"$defs":{"count":{"type":"integer","minimum":1}},"required":["count"]}`;
+    check validateProtocolSchema(localSchema, string `{"count":2}`, true);
+    test:assertTrue(validateProtocolSchema(localSchema, string `{"count":0}`, true) is Error);
+    test:assertTrue(validateProtocolSchema(string `{"type":42}`, "null", false) is Error);
+    test:assertTrue(validateProtocolSchema(string `{"$schema":"https://example.invalid/schema"}`, "null", false) is Error);
+    test:assertTrue(validateProtocolSchema(string `{"$ref":"http://127.0.0.1:9/private"}`, "null", true) is Error);
+    check validateProtocolSchema(string `{"type":["integer","null"]}`, "null", true);
+}
+
+@test:Config {}
+function testModernOriginAndDelete() returns error? {
+    http:Response originResponse = check modernPost("server/discover", {}, {"origin": "https://untrusted.example"});
+    test:assertEquals(originResponse.statusCode, 403);
+    http:Response deleteResponse = check modernHttpClient->delete("/mcp", headers = {
+        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION
+    });
+    test:assertEquals(deleteResponse.statusCode, 405);
+}

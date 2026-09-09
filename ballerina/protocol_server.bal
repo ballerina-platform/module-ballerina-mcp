@@ -72,7 +72,20 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
 
 isolated function handleModernRequest(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpServiceConfiguration serviceConfig) returns http:Ok|http:BadRequest|http:NotFound {
+        StreamableHttpServiceConfiguration serviceConfig) returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden {
+    string|http:HeaderNotFoundError originHeader = requestHeaders.getHeader("origin");
+    if originHeader is string {
+        boolean allowedOrigin = false;
+        foreach string allowedValue in serviceConfig.allowedOrigins {
+            if allowedValue == originHeader {
+                allowedOrigin = true;
+                break;
+            }
+        }
+        if !allowedOrigin {
+            return <http:Forbidden>{body: createJsonRpcError(INVALID_REQUEST, "Origin is not allowed", requestMessage.id)};
+        }
+    }
     string requestedVersion = getProtocolVersionFromHeaders(requestHeaders) ?: "";
     if serviceConfig.protocolMode == "legacy" || requiresLegacySession(mcpService) {
         return unsupportedProtocolResponse(requestedVersion,
@@ -115,6 +128,20 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     if toolList is error {
         return createJsonRpcErrorResponse(INTERNAL_ERROR, toolList.message(), requestMessage.id);
     }
+    foreach ProtocolToolDefinition toolInfo in toolList.tools {
+        _ = toolInfo.removeIfHasKey("execution");
+        Error? schemaError = validateToolSchema(toolInfo);
+        if schemaError is Error {
+            return createJsonRpcErrorResponse(INTERNAL_ERROR, schemaError.message(), requestMessage.id);
+        }
+        var headerDefinition = toolParameterHeaders(toolInfo.inputSchema, {});
+        if headerDefinition is Error {
+            return createJsonRpcErrorResponse(INTERNAL_ERROR, headerDefinition.message(), requestMessage.id);
+        }
+    }
+    if toolList.ttlMs < 0 {
+        return createJsonRpcErrorResponse(INTERNAL_ERROR, "ttlMs must be non-negative", requestMessage.id);
+    }
     if requestMessage.method == REQUEST_LIST_TOOLS {
         toolList.tools = toolList.tools.sort(key = isolated function(ProtocolToolDefinition toolInfo) returns string => toolInfo.name);
         return modernResult(toolList, serviceConfig.info, requestMessage.id, cacheable = true);
@@ -145,6 +172,11 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     if headerError is Error {
         return modernError(HEADER_MISMATCH, headerError.message(), requestMessage.id);
     }
+    Error? inputSchemaError = validateProtocolSchema(selectedTool.inputSchema.toJsonString(),
+            (callParams.arguments ?: {}).toJsonString(), true);
+    if inputSchemaError is Error {
+        return modernResult(toToolExecutionError(inputSchemaError, callParams.name), serviceConfig.info, requestMessage.id);
+    }
     if callParams.task !is () {
         return createJsonRpcErrorResponse(INVALID_PARAMS, "Legacy task parameters are not supported in modern MCP",
                 requestMessage.id);
@@ -158,6 +190,20 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
         Error? inputError = validateInputRequired(callResult, requestMeta.io\.modelcontextprotocol\/clientCapabilities);
         if inputError is Error {
             return modernError(MISSING_REQUIRED_CLIENT_CAPABILITY, inputError.message(), requestMessage.id);
+        }
+    }
+    if callResult is ProtocolCallToolResult && callResult.isError != true {
+        OutputSchema? outputSchema = selectedTool.outputSchema;
+        if outputSchema is OutputSchema {
+            if !callResult.hasKey("structuredContent") {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, "Missing structured output for declared outputSchema",
+                        requestMessage.id);
+            }
+            Error? outputError = validateProtocolSchema(outputSchema.toJsonString(),
+                    callResult?.structuredContent.toJsonString(), true);
+            if outputError is Error {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, outputError.message(), requestMessage.id);
+            }
         }
     }
     return modernResult(callResult, serviceConfig.info, requestMessage.id);
