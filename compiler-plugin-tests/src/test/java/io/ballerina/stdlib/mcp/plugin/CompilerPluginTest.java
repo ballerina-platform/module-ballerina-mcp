@@ -235,4 +235,11 @@ public class CompilerPluginTest {
         Assert.assertFalse(legacy.diagnostics().stream()
                 .anyMatch(d -> d.diagnosticInfo().code().startsWith("MCP_WARNING_10")));
     }
+    @Test
+    public void testOptionalSessionAliasInModernStatelessService() {
+        DiagnosticResult result = compile("sample_package_24");
+        Assert.assertEquals(errorCount(result), 0L);
+        Assert.assertEquals(result.diagnostics().stream()
+                .filter(d -> d.diagnosticInfo().code().equals("MCP_WARNING_103")).count(), 1L);
+    }
 }

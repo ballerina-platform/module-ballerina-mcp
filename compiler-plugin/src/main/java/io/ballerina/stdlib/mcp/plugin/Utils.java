@@ -329,7 +329,7 @@ public class Utils {
                     return false;
                 }
 
-                if (sessionMode == SessionMode.STATELESS) {
+                if (sessionMode == SessionMode.STATELESS && !isOptionalType(parameterType)) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
                             CompilationDiagnostic.SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
@@ -378,8 +378,10 @@ public class Utils {
             return ((UnionTypeSymbol) typeSymbol).memberTypeDescriptors().stream()
                     .filter(member -> member.typeKind() != TypeDescKind.NIL).allMatch(Utils::isSessionType);
         }
-        return SESSION_TYPE_NAME.equals(typeSymbol.getName().orElse(""))
-                && isMcpModuleSymbol(typeSymbol);
+        if (SESSION_TYPE_NAME.equals(typeSymbol.getName().orElse("")) && isMcpModuleSymbol(typeSymbol)) {
+            return true;
+        }
+        return typeSymbol instanceof TypeReferenceTypeSymbol reference && isSessionType(reference.typeDescriptor());
     }
 
     static boolean isCallToolParamsType(TypeSymbol typeSymbol) {
@@ -400,6 +402,9 @@ public class Utils {
      * @return true if the type is optional/nullable, false otherwise
      */
     static boolean isOptionalType(TypeSymbol typeSymbol) {
+        if (typeSymbol instanceof TypeReferenceTypeSymbol reference) {
+            return isOptionalType(reference.typeDescriptor());
+        }
         if (typeSymbol.typeKind() != TypeDescKind.UNION) {
             return false;
         }

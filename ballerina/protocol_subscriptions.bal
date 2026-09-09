@@ -62,10 +62,14 @@ isolated class ServerSubscriptionStream {
             }
             if !self.acknowledged {
                 self.acknowledged = true;
+                record {} acceptedNotifications = {};
+                if self.acceptedFilter.toolsListChanged {
+                    acceptedNotifications["toolsListChanged"] = true;
+                }
                 JsonRpcNotification acknowledgement = {
                     jsonrpc: JSONRPC_VERSION, method: "notifications/subscriptions/acknowledged",
                     params: {_meta: {"io.modelcontextprotocol/subscriptionId": self.subscriptionId},
-                        "notifications": self.acceptedFilter}
+                        "notifications": acceptedNotifications}
                 };
                 return {value: {data: acknowledgement.toJsonString()}};
             }
@@ -113,18 +117,33 @@ isolated class ServerSubscriptionStream {
 
 isolated class ClientSubscriptionStream {
     private final ProtocolMessageStream messageStream;
+    private final StreamableHttpClientTransport ownerTransport;
     private final RequestId subscriptionId;
     private SubscriptionFilter? acknowledgedFilter = ();
     private final SubscriptionFilter & readonly requestedFilter;
     private boolean finished = false;
+    private boolean released = false;
 
-    isolated function init(ProtocolMessageStream messageStream, RequestId subscriptionId, SubscriptionFilter requestedFilter) {
+    isolated function init(ProtocolMessageStream messageStream, RequestId subscriptionId,
+            SubscriptionFilter requestedFilter, StreamableHttpClientTransport ownerTransport) {
+        self.ownerTransport = ownerTransport;
         self.messageStream = messageStream;
         self.subscriptionId = subscriptionId;
         self.requestedFilter = requestedFilter.cloneReadOnly();
     }
 
     public isolated function next() returns record {|JsonRpcNotification value;|}|StreamError? {
+        var nextItem = self.readNext();
+        if nextItem is StreamError || nextItem is () {
+            StreamError? closeError = self.close();
+            if closeError is StreamError {
+                return closeError;
+            }
+        }
+        return nextItem;
+    }
+
+    private isolated function readNext() returns record {|JsonRpcNotification value;|}|StreamError? {
         lock {
             if self.finished {
                 return;
@@ -145,7 +164,6 @@ isolated class ClientSubscriptionStream {
             lock {
                 self.finished = true;
             }
-            check self.messageStream.close();
             return;
         }
         if messageValue !is JsonRpcNotification {
@@ -176,8 +194,13 @@ isolated class ClientSubscriptionStream {
 
     public isolated function close() returns StreamError? {
         lock {
+            if self.released {
+                return;
+            }
             self.finished = true;
+            self.released = true;
         }
+        self.ownerTransport.removeSubscription(self.subscriptionId);
         return self.messageStream.close();
     }
 }

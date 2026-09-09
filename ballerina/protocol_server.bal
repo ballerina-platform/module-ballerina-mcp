@@ -16,13 +16,13 @@
 
 import ballerina/http;
 
-isolated function isModernRequest(JsonRpcRequest requestMessage, http:Headers requestHeaders) returns boolean {
+isolated function isModernRequest(JsonRpcRequest|JsonRpcNotification requestMessage, http:Headers requestHeaders) returns boolean {
     // initialize always belongs to the legacy handshake, including older clients with a version header.
     if requestMessage.method == REQUEST_INITIALIZE {
         return false;
     }
-    Meta? requestMeta = requestMessage.params?._meta;
-    if requestMeta is Meta && requestMeta.hasKey(PROTOCOL_META_KEY) {
+    record {}? requestMeta = requestMessage.params?._meta;
+    if requestMeta is record {} && requestMeta.hasKey(PROTOCOL_META_KEY) {
         return true;
     }
     string? headerVersion = getProtocolVersionFromHeaders(requestHeaders);
@@ -198,7 +198,13 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     if callResult is InputRequiredResult {
         Error? inputError = validateInputRequired(callResult, requestMeta.io\.modelcontextprotocol\/clientCapabilities);
         if inputError is Error {
-            return modernError(MISSING_REQUIRED_CLIENT_CAPABILITY, inputError.message(), requestMessage.id);
+            var requiredCapabilities = inputError.detail()["requiredCapabilities"];
+            if requiredCapabilities is anydata && requiredCapabilities is map<anydata> {
+                return <http:BadRequest>{body: {jsonrpc: JSONRPC_VERSION, id: requestMessage.id,
+                    'error: {code: MISSING_REQUIRED_CLIENT_CAPABILITY, message: inputError.message(),
+                        data: {requiredCapabilities: requiredCapabilities}}}};
+            }
+            return createJsonRpcErrorResponse(INTERNAL_ERROR, inputError.message(), requestMessage.id);
         }
     }
     if callResult is ProtocolCallToolResult && callResult.isError != true {
@@ -240,14 +246,24 @@ isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService
     if mcpService is ProtocolService {
         return trap invokeProtocolOnCallTool(mcpService, callParams);
     }
+    CallToolParams applicationParams = callParams.clone();
+    Meta applicationMeta = {...(callParams._meta ?: {})};
+    foreach string metaKey in [PROTOCOL_META_KEY, CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LOG_LEVEL_META_KEY] {
+        _ = applicationMeta.removeIfHasKey(metaKey);
+    }
+    if applicationMeta.length() == 0 {
+        _ = applicationParams.removeIfHasKey("_meta");
+    } else {
+        applicationParams._meta = applicationMeta;
+    }
     CallToolResult|error callResult;
     if mcpService is StreamableHttpAdvancedService {
-        callResult = trap invokeAdvancedOnCallTool(mcpService, callParams, (), requestHeaders, httpRequest,
+        callResult = trap invokeAdvancedOnCallTool(mcpService, applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
     } else if mcpService is AdvancedService {
-        callResult = trap invokeOnCallTool(mcpService, callParams, ());
+        callResult = trap invokeOnCallTool(mcpService, applicationParams, ());
     } else if mcpService is Service|StreamableHttpService {
-        callResult = trap callToolForRemoteFunctions(mcpService, callParams, (), requestHeaders, httpRequest,
+        callResult = trap callToolForRemoteFunctions(mcpService, applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
         if callResult is error {
             callResult = toToolExecutionError(callResult, callParams.name);
@@ -267,7 +283,8 @@ isolated function validateInputRequired(InputRequiredResult inputResult, ClientC
         string capabilityName = inputRequest.method == "elicitation/create" ? "elicitation" :
                 inputRequest.method == "sampling/createMessage" ? "sampling" : "roots";
         if !clientCapabilities.hasKey(capabilityName) {
-            return error("Client did not declare the required capability: " + capabilityName);
+            return error("Client did not declare the required capability: " + capabilityName,
+                    requiredCapabilities = {[capabilityName]: {}});
         }
     }
 }

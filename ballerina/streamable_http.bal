@@ -37,6 +37,7 @@ isolated class StreamableHttpClientTransport {
     private string? sessionId;
     # Protocol version negotiated during initialization, sent on all subsequent requests.
     private string? protocolVersion = ();
+    private map<ClientSubscriptionStream> activeSubscriptions = {};
 
     # Initializes the HTTP client transport with the provided server URL.
     #
@@ -145,8 +146,38 @@ isolated class StreamableHttpClientTransport {
             return error SseStreamEstablishmentError(eventStream.message());
         }
         ProtocolMessageStream messageStream = new (eventStream);
-        ClientSubscriptionStream streamIterator = new (messageStream, requestMessage.id, requestedFilter);
+        ClientSubscriptionStream streamIterator = new (messageStream, requestMessage.id, requestedFilter, self);
+        lock {
+            self.activeSubscriptions[requestMessage.id.toString()] = streamIterator;
+        }
         return new stream<JsonRpcNotification, StreamError?>(streamIterator);
+    }
+
+    isolated function removeSubscription(RequestId subscriptionId) {
+        lock {
+            _ = self.activeSubscriptions.removeIfHasKey(subscriptionId.toString());
+        }
+    }
+
+    isolated function closeSubscriptions() returns StreamError? {
+        string[] & readonly subscriptionIds;
+        lock {
+            subscriptionIds = self.activeSubscriptions.keys().cloneReadOnly();
+        }
+        StreamError? firstError = ();
+        foreach string subscriptionId in subscriptionIds {
+            ClientSubscriptionStream? eventSource;
+            lock {
+                eventSource = self.activeSubscriptions[subscriptionId];
+            }
+            if eventSource is ClientSubscriptionStream {
+                StreamError? closeError = eventSource.close();
+                if firstError is () {
+                    firstError = closeError;
+                }
+            }
+        }
+        return firstError;
     }
 
     # Establishes a Server-Sent Events (SSE) stream with the server.
@@ -174,6 +205,7 @@ isolated class StreamableHttpClientTransport {
     isolated function terminateSession() returns StreamableHttpTransportError? {
         lock {
             if self.sessionId is () {
+                self.protocolVersion = ();
                 return;
             }
 

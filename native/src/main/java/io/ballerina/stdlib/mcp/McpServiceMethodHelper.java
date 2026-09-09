@@ -465,6 +465,10 @@ public final class McpServiceMethodHelper {
     }
 
     private static boolean isMcpSessionType(Type type) {
+        Type impliedType = TypeUtils.getImpliedType(type);
+        if (impliedType != type) {
+            return isMcpSessionType(impliedType);
+        }
         if (type instanceof UnionType unionType) {
             return unionType.getMemberTypes().stream().anyMatch(McpServiceMethodHelper::isMcpSessionType);
         }

@@ -32,6 +32,7 @@ public distinct isolated client class StreamableHttpClient {
     private Implementation clientInfo = {name: "MCP Client", version: "1.0.0"};
     private ClientCapabilities clientCapabilities = {};
     private map<ProtocolToolDefinition> toolSchemas = {};
+    private map<string|string[]> schemaHeaders = {};
     private DiscoverResult? discovery = ();
 
     # Creates a new MCP client with the specified transport configuration.
@@ -158,7 +159,7 @@ public distinct isolated client class StreamableHttpClient {
         check self.ensureInitialized(headers);
         if self.isModern() {
             ProtocolListToolsResult protocolResult = check self->listToolsWithSchemas(headers);
-            ListToolsResult|error compatibilityResult = protocolResult.cloneWithType();
+            ListToolsResult|error compatibilityResult = applicationResult(protocolResult).cloneWithType();
             if compatibilityResult is error {
                 return error ListToolsError("Tool output schemas require listToolsWithSchemas()", compatibilityResult);
             }
@@ -189,7 +190,7 @@ public distinct isolated client class StreamableHttpClient {
             foreach int roundNumber in 0 ... self.maxInputRounds {
                 ProtocolCallToolResult|InputRequiredResult callResult = check self->callToolWithResult(currentParams, headers);
                 if callResult is ProtocolCallToolResult {
-                    CallToolResult|error compatibilityResult = callResult.cloneWithType();
+                    CallToolResult|error compatibilityResult = applicationResult(callResult).cloneWithType();
                     if compatibilityResult is error {
                         return error ToolCallError("Structured output requires callToolWithResult()", compatibilityResult);
                     }
@@ -246,6 +247,7 @@ public distinct isolated client class StreamableHttpClient {
     isolated remote function close() returns ClientError? {
         lock {
             do {
+                StreamError? subscriptionError = self.transport.closeSubscriptions();
                 check self.transport.terminateSession();
                 self.serverCapabilities = ();
                 self.serverInfo = ();
@@ -253,7 +255,8 @@ public distinct isolated client class StreamableHttpClient {
                 self.modernSelected = false;
                 self.discovery = ();
                 self.toolSchemas = {};
-                return;
+                self.schemaHeaders = {};
+                return subscriptionError;
             } on fail error e {
                 return error ClientError(string `Failed to disconnect from server: ${e.message()}`, e);
             }
@@ -293,14 +296,24 @@ public distinct isolated client class StreamableHttpClient {
     # Lists tools preserving modern output schemas. Invalid header annotations are excluded individually.
     # + headers - Additional HTTP request headers
     # + return - Tool definitions or a client error
-    isolated remote function listToolsWithSchemas(map<string|string[]> headers = {}) returns ProtocolListToolsResult|ClientError {
+    # + cursor - Optional cursor returned by a previous tools/list response
+    isolated remote function listToolsWithSchemas(map<string|string[]> headers = {}, Cursor? cursor = ())
+            returns ProtocolListToolsResult|ClientError {
         check self.ensureInitialized(headers);
         if !self.isModern() {
-            ListToolsResult legacyResult = check self->listTools(headers);
+            RequestParams listParams = {};
+            if cursor is Cursor {
+                listParams["cursor"] = cursor;
+            }
+            ServerResult legacyResult = check self.sendRequestMessage({method: REQUEST_LIST_TOOLS, params: listParams}, headers);
             ProtocolListToolsResult|error converted = legacyResult.cloneWithType();
             return converted is error ? error ListToolsError(converted.message()) : converted;
         }
-        Result wireResult = check self.sendModernRequest(REQUEST_LIST_TOOLS, {}, headers);
+        RequestParams listParams = {};
+        if cursor is Cursor {
+            listParams["cursor"] = cursor;
+        }
+        Result wireResult = check self.sendModernRequest(REQUEST_LIST_TOOLS, listParams, headers);
         ProtocolListToolsResult|error listResult = wireResult.cloneWithType();
         if listResult is error || wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
                 !wireResult.hasKey("cacheScope") {
@@ -319,6 +332,7 @@ public distinct isolated client class StreamableHttpClient {
         listResult.tools = acceptedTools;
         lock {
             self.toolSchemas = toolSchemas.cloneReadOnly();
+            self.schemaHeaders = headers.cloneReadOnly();
         }
         return listResult;
     }
@@ -336,18 +350,38 @@ public distinct isolated client class StreamableHttpClient {
             ProtocolCallToolResult|error converted = legacyResult.cloneWithType();
             return converted is error ? error ToolCallError(converted.message()) : converted;
         }
+        return self.callModernTool(params, headers, true);
+    }
+
+    private isolated function callModernTool(CallToolParams params, map<string|string[]> headers, boolean refreshAllowed)
+            returns ProtocolCallToolResult|InputRequiredResult|ClientError {
         if params.task !is () {
             return error ToolCallError("Legacy task parameters cannot be sent to modern servers");
         }
-        ProtocolToolDefinition? toolInfo;
+        ProtocolToolDefinition? toolInfo = ();
         lock {
-            toolInfo = self.toolSchemas[params.name].cloneReadOnly();
-        }
-        if toolInfo is () {
-            _ = check self->listToolsWithSchemas(headers);
-            lock {
+            if self.schemaHeaders == headers.cloneReadOnly() {
                 toolInfo = self.toolSchemas[params.name].cloneReadOnly();
             }
+        }
+        Cursor? nextCursor = ();
+        map<boolean> visitedCursors = {};
+        while toolInfo is () {
+            ProtocolListToolsResult pageResult = check self->listToolsWithSchemas(headers, nextCursor);
+            foreach ProtocolToolDefinition listedTool in pageResult.tools {
+                if listedTool.name == params.name {
+                    toolInfo = listedTool;
+                    break;
+                }
+            }
+            nextCursor = pageResult.nextCursor;
+            if nextCursor is () {
+                break;
+            }
+            if visitedCursors.hasKey(nextCursor) || visitedCursors.length() >= 1000 {
+                return error ToolCallError("Tool pagination repeated a cursor or exceeded the page limit");
+            }
+            visitedCursors[nextCursor] = true;
         }
         if toolInfo is () {
             return error ToolCallError("Tool is unavailable or has invalid header annotations: " + params.name);
@@ -356,7 +390,18 @@ public distinct isolated client class StreamableHttpClient {
         if mirroredHeaders is Error {
             return error ToolCallError(mirroredHeaders.message());
         }
-        Result wireResult = check self.sendModernRequest(REQUEST_CALL_TOOL, params, headers, mirroredHeaders);
+        Result|ClientError responseValue = self.sendModernRequest(REQUEST_CALL_TOOL, params, headers, mirroredHeaders);
+        if responseValue is ClientError {
+            var rpcValue = responseValue.detail()["rpcError"];
+            if refreshAllowed && rpcValue is JsonRpcError && rpcValue.'error.code == HEADER_MISMATCH {
+                lock {
+                    self.toolSchemas = {};
+                }
+                return self.callModernTool(params, headers, false);
+            }
+            return responseValue;
+        }
+        Result wireResult = responseValue;
         if wireResult["resultType"] == "input_required" {
             InputRequiredResult|error inputResult = wireResult.cloneWithType();
             if inputResult is error || (inputResult.inputRequests is () && inputResult.requestState is ()) {
@@ -365,7 +410,16 @@ public distinct isolated client class StreamableHttpClient {
             return inputResult;
         }
         ProtocolCallToolResult|error callResult = wireResult.cloneWithType();
-        return callResult is error ? error ToolCallError("Invalid tool result", callResult) : callResult;
+        if callResult is error {
+            return error ToolCallError("Invalid tool result", callResult);
+        }
+        OutputSchema? outputSchema = toolInfo.outputSchema;
+        if outputSchema is OutputSchema && callResult.isError != true {
+            if !callResult.hasKey("structuredContent") {
+                return error ToolCallError("Server omitted structuredContent required by outputSchema");
+            }
+        }
+        return callResult;
     }
 
     private isolated function isModern() returns boolean {
@@ -379,8 +433,8 @@ public distinct isolated client class StreamableHttpClient {
             if self.initialized || self.transport.getSessionId() is string {
                 return;
             }
+            return self->initialize(headers = headers.cloneReadOnly());
         }
-        return self->initialize(headers = headers);
     }
 
     private isolated function discoverModern(map<string|string[]> headers) returns DiscoverResult|ClientError {

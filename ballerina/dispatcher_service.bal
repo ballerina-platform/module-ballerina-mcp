@@ -96,12 +96,20 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             if routeConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, routeConfig.message());
             }
+            if request is JsonRpcNotification && isModernRequest(request, headers) {
+                return <http:BadRequest>{body: createJsonRpcError(INVALID_REQUEST,
+                        "No core client notifications are supported by modern Streamable HTTP")};
+            }
             if request is JsonRpcRequest && isModernRequest(request, headers) {
                 var mcpService = getMcpServiceFromDispatcher(self);
                 if mcpService is Error {
                     return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), request.id);
                 }
-                return handleModernRequest(mcpService, request, httpRequest, headers, routeConfig);
+                var modernResponse = trap handleModernRequest(mcpService, request, httpRequest, headers, routeConfig);
+                if modernResponse is error {
+                    return createJsonRpcErrorResponse(INTERNAL_ERROR, "Failed to process MCP request", request.id);
+                }
+                return modernResponse;
             }
             if routeConfig.protocolMode == "modern" {
                 return unsupportedProtocolResponse(getProtocolVersionFromHeaders(headers) ?: "legacy",

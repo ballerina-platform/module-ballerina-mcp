@@ -116,3 +116,47 @@ function testSchemasRemainMetadataUntilLanguageValidationIsAvailable() returns e
     }
     check modernClient->close();
 }
+
+@test:Config {}
+function testModernResultDiscriminationAndCorrelation() {
+    WireResponse missingTag = {jsonrpc: JSONRPC_VERSION, id: 10, result: {"content": []}};
+    test:assertTrue(protocolMessageResult(missingTag, 10, true, 200) is ResponseParsingError);
+    test:assertTrue(protocolMessageResult(missingTag, 10, false, 200) is Result);
+    WireResponse completeResponse = {jsonrpc: JSONRPC_VERSION, id: 11, result: {"resultType": "complete", "content": []}};
+    test:assertTrue(protocolMessageResult(completeResponse, 10, true, 200) is ResponseParsingError);
+    WireResponse unknownTag = {jsonrpc: JSONRPC_VERSION, id: 10, result: {"resultType": "unknown", "content": []}};
+    test:assertTrue(protocolMessageResult(unknownTag, 10, true, 200) is ResponseParsingError);
+}
+
+@test:Config {}
+function testModernProbeDoesNotDowngradeAuthenticationOrRecognizedErrors() {
+    test:assertTrue(shouldUseLegacy(error HttpClientError("legacy rejection", statusCode = 400)));
+    test:assertFalse(shouldUseLegacy(error HttpClientError("authentication required", statusCode = 401)));
+    test:assertFalse(shouldUseLegacy(error HttpClientError("forbidden", statusCode = 403)));
+    test:assertFalse(shouldUseLegacy(error HttpClientError("unavailable", statusCode = 503)));
+    test:assertFalse(shouldUseLegacy(error HttpClientError("connection failed")));
+    foreach int errorCode in [HEADER_MISMATCH, MISSING_REQUIRED_CLIENT_CAPABILITY] {
+        JsonRpcError rpcError = createJsonRpcError(errorCode, "modern rejection", 1);
+        test:assertFalse(shouldUseLegacy(error ServerResponseError("modern rejection", rpcError = rpcError)));
+    }
+}
+
+@test:Config {}
+function testModernRejectsLegacyInitializedNotification() returns error? {
+    JsonRpcNotification notificationValue = {jsonrpc: JSONRPC_VERSION, method: NOTIFICATION_INITIALIZED};
+    http:Response responseValue = check modernHttpClient->post("/mcp", notificationValue, headers = {
+        [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
+        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION
+    });
+    test:assertEquals(responseValue.statusCode, 400);
+}
+
+@test:Config {}
+function testHeaderTraversalIgnoresSchemaDataArrays() returns error? {
+    JsonSchema toolSchema = {'type: "object", required: ["count"], properties: {
+        count: {'type: "integer", "enum": [1, 2, 3]},
+        payload: {'type: "object", "default": {"x-mcp-header": "literal data"}}
+    }};
+    map<string> headerValues = check toolParameterHeaders(toolSchema, {});
+    test:assertEquals(headerValues.length(), 0);
+}

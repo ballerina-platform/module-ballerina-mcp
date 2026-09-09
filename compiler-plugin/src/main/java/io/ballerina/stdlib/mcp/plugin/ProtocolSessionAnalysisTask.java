@@ -27,6 +27,7 @@ import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
 import io.ballerina.compiler.syntax.tree.Node;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
+import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic;
@@ -46,7 +47,9 @@ public class ProtocolSessionAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
             return;
         }
         for (Node member : serviceNode.members()) {
-            if (!(member instanceof FunctionDefinitionNode functionNode)) {
+            if (!(member instanceof FunctionDefinitionNode functionNode)
+                    || functionNode.qualifierList().stream()
+                    .noneMatch(token -> token.kind() == SyntaxKind.REMOTE_KEYWORD)) {
                 continue;
             }
             Optional<Symbol> symbol = context.semanticModel().symbol(functionNode);

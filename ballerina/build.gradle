@@ -149,3 +149,13 @@ test.finalizedBy stopMcpServer
 
 publishToMavenLocal.dependsOn build
 publish.dependsOn build
+
+// Recompiled packages retain their version during development. Synchronize the entire package
+// so deleted source files and stale BIR cannot leak into downstream compilation.
+build.doLast {
+    project.sync { syncSpec ->
+        syncSpec.from(project.zipTree("${project.projectDir}/build/bal_build_target/bala/ballerina-mcp-java21-${tomlVersion}.bala"))
+        syncSpec.into("${project.rootDir}/target/ballerina-runtime/repo/bala/ballerina/mcp/${tomlVersion}/java21")
+    }
+    delete "${project.rootDir}/target/ballerina-runtime/repo/cache/ballerina/mcp/${tomlVersion}"
+}

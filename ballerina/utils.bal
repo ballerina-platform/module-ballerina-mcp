@@ -75,3 +75,19 @@ isolated function extractResultFromMessage(JsonRpcMessage message) returns Serve
     }
     return error InvalidMessageTypeError("Received message from server is not a valid JsonRpcResponse.");
 }
+
+// Keep wire-only additions out of the established application result APIs.
+isolated function applicationResult(Result resultValue) returns Result {
+    Result applicationValue = {...resultValue};
+    foreach string fieldName in ["resultType", "ttlMs", "cacheScope"] {
+        _ = applicationValue.removeIfHasKey(fieldName);
+    }
+    record {} applicationMeta = {...(applicationValue._meta ?: {})};
+    _ = applicationMeta.removeIfHasKey(SERVER_INFO_META_KEY);
+    if applicationMeta.length() == 0 {
+        _ = applicationValue.removeIfHasKey("_meta");
+    } else {
+        applicationValue._meta = applicationMeta;
+    }
+    return applicationValue;
+}

@@ -137,13 +137,20 @@ public final class ProtocolHeaders {
                         Object value = instance instanceof BMap<?, ?> arguments ? arguments.get(prop.getKey()) : null;
                         walk(prop.getValue(), value, reachable, true, names, headers, depth + 1, count);
                     }
-                } else if (child instanceof BMap<?, ?> || child instanceof BArray) {
+                } else if (Set.of("$defs", "definitions", "patternProperties", "dependentSchemas").contains(key)
+                        && child instanceof BMap<?, ?> schemas) {
+                    for (Object nestedSchema : schemas.values()) {
+                        walk(nestedSchema, null, false, false, names, headers, depth + 1, count);
+                    }
+                } else if (Set.of("items", "prefixItems", "additionalItems", "additionalProperties",
+                        "unevaluatedProperties", "unevaluatedItems", "contains", "propertyNames", "allOf", "anyOf",
+                        "oneOf", "not", "if", "then", "else", "contentSchema").contains(key)) {
                     walk(child, null, false, false, names, headers, depth + 1, count);
                 }
             }
         } else if (node instanceof BArray values) {
-            for (Object value : values.getValues()) {
-                walk(value, null, false, false, names, headers, depth + 1, count);
+            for (long index = 0; index < values.size(); index++) {
+                walk(values.get(index), null, false, false, names, headers, depth + 1, count);
             }
         }
     }

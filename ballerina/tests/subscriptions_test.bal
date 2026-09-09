@@ -46,3 +46,12 @@ function testSubscriptionAcknowledgementAndCompletion() returns error? {
     check eventStream.close();
     check subscriptionClient->close();
 }
+
+@test:Config {}
+function testClientCloseCancelsSubscriptions() returns error? {
+    StreamableHttpClient subscriptionClient = check new ("http://localhost:3206/mcp");
+    stream<JsonRpcNotification, StreamError?> eventStream = check subscriptionClient->listen();
+    _ = check eventStream.next();
+    check subscriptionClient->close();
+    test:assertEquals(check eventStream.next(), ());
+}
