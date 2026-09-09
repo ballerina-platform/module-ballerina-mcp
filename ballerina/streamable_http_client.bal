@@ -143,12 +143,11 @@ public distinct isolated client class StreamableHttpClient {
     #
     # + return - Stream of JsonRpcMessages or a ClientError.
     isolated remote function subscribeToServerMessages() returns stream<JsonRpcMessage, StreamError?>|ClientError {
-        lock {
-            if self.modernSelected {
-                return error ClientError("Modern MCP uses subscriptions/listen; legacy GET subscriptions are unavailable");
-            }
-            return self.transport.establishEventStream();
+        check self.ensureInitialized({});
+        if self.isModern() {
+            return self->listen({toolsListChanged: true});
         }
+        return self.transport.establishEventStream();
     }
 
     # Retrieves the list of available tools from the server.
@@ -259,6 +258,29 @@ public distinct isolated client class StreamableHttpClient {
                 return error ClientError(string `Failed to disconnect from server: ${e.message()}`, e);
             }
         }
+    }
+
+    # Opens a modern change-notification subscription. The first event acknowledges the accepted filters.
+    # + notifications - Requested notification types
+    # + headers - Additional request headers
+    # + return - Notification stream, or a client error; close the stream to cancel it
+    isolated remote function listen(SubscriptionFilter notifications = {toolsListChanged: true},
+            map<string|string[]> headers = {}) returns stream<JsonRpcNotification, StreamError?>|ClientError {
+        check self.ensureInitialized(headers);
+        if !self.isModern() {
+            return error ClientError("subscriptions/listen requires modern MCP");
+        }
+        JsonRpcRequest requestMessage;
+        lock {
+            self.requestId += 1;
+            requestMessage = {jsonrpc: JSONRPC_VERSION, id: self.requestId, method: "subscriptions/listen",
+                params: {"notifications": notifications.cloneReadOnly(), _meta: {
+                    [PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION,
+                    [CLIENT_INFO_META_KEY]: self.clientInfo.cloneReadOnly(),
+                    [CAPABILITIES_META_KEY]: self.clientCapabilities.cloneReadOnly()
+                }}};
+        }
+        return self.transport.openProtocolSubscription(requestMessage, notifications, headers);
     }
 
     # Retrieves discovery information without a legacy initialize request.

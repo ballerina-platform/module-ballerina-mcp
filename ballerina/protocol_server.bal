@@ -46,13 +46,13 @@ isolated function unsupportedProtocolResponse(string requestedVersion, string[] 
 isolated function modernError(int errorCode, string errorMessage, RequestId requestId)
         returns http:BadRequest => {body: createJsonRpcError(errorCode, errorMessage, requestId)};
 
-isolated function modernCapabilities(StreamableHttpServiceConfiguration serviceConfig) returns ServerCapabilities {
+isolated function modernCapabilities(StreamableHttpServiceConfiguration serviceConfig, boolean supportsSubscriptions = false) returns ServerCapabilities {
     ServerCapabilities serverCapabilities = {...(serviceConfig.options?.capabilities ?: {})};
     // No runtime for these optional capabilities is installed by this module.
     foreach string capabilityName in ["tasks", "logging", "prompts", "resources", "completions"] {
         _ = serverCapabilities.removeIfHasKey(capabilityName);
     }
-    serverCapabilities.tools = {listChanged: false};
+    serverCapabilities.tools = {listChanged: supportsSubscriptions};
     return serverCapabilities;
 }
 
@@ -72,7 +72,7 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
 
 isolated function handleModernRequest(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpServiceConfiguration serviceConfig) returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden {
+        StreamableHttpServiceConfiguration serviceConfig) returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:Response {
     string|http:HeaderNotFoundError originHeader = requestHeaders.getHeader("origin");
     if originHeader is string {
         boolean allowedOrigin = false;
@@ -113,13 +113,31 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     if requestMessage.method == "server/discover" {
         DiscoverResult discoverResult = {
             supportedVersions: serviceConfig.protocolMode == "modern" ? [MODERN_PROTOCOL_VERSION] : SUPPORTED_PROTOCOL_VERSIONS,
-            capabilities: modernCapabilities(serviceConfig)
+            capabilities: modernCapabilities(serviceConfig, mcpService is SubscriptionService)
         };
         string? instructionsText = serviceConfig.options?.instructions;
         if instructionsText is string {
             discoverResult.instructions = instructionsText;
         }
         return modernResult(discoverResult, serviceConfig.info, requestMessage.id, cacheable = true);
+    }
+    if requestMessage.method == "subscriptions/listen" && mcpService is SubscriptionService {
+        RequestParams listenParams = requestMessage.params ?: {};
+        SubscriptionFilter|error requestedFilter = listenParams["notifications"].cloneWithType();
+        if requestedFilter is error {
+            return createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid subscription filter", requestMessage.id);
+        }
+        SubscriptionFilter acceptedFilter = {toolsListChanged: requestedFilter.toolsListChanged};
+        var eventSource = trap invokeOnSubscribe(mcpService, acceptedFilter);
+        if eventSource is error {
+            return createJsonRpcErrorResponse(INTERNAL_ERROR, eventSource.message(), requestMessage.id);
+        }
+        ServerSubscriptionStream streamIterator = new (eventSource, requestMessage.id, acceptedFilter);
+        stream<http:SseEvent, error?> responseStream = new (streamIterator);
+        http:Response httpResponse = new;
+        httpResponse.setSseEventStream(responseStream);
+        httpResponse.setHeader("X-Accel-Buffering", "no");
+        return httpResponse;
     }
     if requestMessage.method != REQUEST_LIST_TOOLS && requestMessage.method != REQUEST_CALL_TOOL {
         return <http:NotFound>{body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", requestMessage.id)};

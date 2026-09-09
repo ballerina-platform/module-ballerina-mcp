@@ -80,7 +80,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         isolated resource function post .(http:Request httpRequest, http:Headers headers)
                 returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:NotFound|
-                        http:Accepted|http:Ok|http:Forbidden {
+                        http:Accepted|http:Ok|http:Forbidden|http:Response {
             http:authenticateResource(self, "post", []);
             http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = validateRequiredHeaders(headers);
             if headerValidationError !is () {

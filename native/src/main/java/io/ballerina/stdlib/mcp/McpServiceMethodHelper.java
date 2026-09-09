@@ -110,6 +110,10 @@ public final class McpServiceMethodHelper {
 
     private McpServiceMethodHelper() {}
 
+    public static Object invokeOnSubscribe(Environment env, BObject mcpService, BMap<?, ?> notifications) {
+        return env.getRuntime().callMethod(mcpService, "onSubscribe", null, notifications);
+    }
+
     public static Object invokeProtocolOnListTools(Environment env, BObject mcpService) {
         return env.getRuntime().callMethod(mcpService, ON_LIST_TOOLS_METHOD, null);
     }

@@ -121,37 +121,32 @@ isolated class StreamableHttpClientTransport {
 
     isolated function sendProtocolRequest(JsonRpcRequest requestMessage, map<string|string[]> additionalHeaders,
             map<string> parameterHeaders = {}) returns Result|ClientError {
-        map<string|string[]> requestHeaders = {
-            [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
-            [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-            [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
-            [METHOD_HEADER]: requestMessage.method
-        };
-        if requestMessage.method == REQUEST_CALL_TOOL {
-            RequestParams requestParams = requestMessage.params ?: {};
-            anydata toolName = requestParams["name"];
-            if toolName is string {
-                requestHeaders[NAME_HEADER] = encodeProtocolHeader(toolName);
-            }
-        }
-        foreach var [headerName, headerValue] in parameterHeaders.entries() {
-            requestHeaders[headerName.toLowerAscii()] = headerValue;
-        }
-        foreach var [headerName, headerValue] in additionalHeaders.entries() {
-            string lowerName = headerName.toLowerAscii();
-            if lowerName == SESSION_ID_HEADER || lowerName == "last-event-id" {
-                continue;
-            }
-            if requestHeaders.hasKey(lowerName) && requestHeaders[lowerName] != headerValue {
-                return error HttpClientError("Additional header conflicts with generated protocol header: " + headerName);
-            }
-            requestHeaders[lowerName] = headerValue;
-        }
+        map<string|string[]> requestHeaders = check prepareProtocolRequestHeaders(requestMessage, additionalHeaders, parameterHeaders);
         http:Response|error httpResponse = self.httpClient->post("", requestMessage, headers = requestHeaders);
         if httpResponse is error {
             return error HttpClientError("Failed to send modern MCP request", httpResponse);
         }
         return readProtocolResponse(httpResponse, requestMessage.id);
+    }
+
+    isolated function openProtocolSubscription(JsonRpcRequest requestMessage, SubscriptionFilter requestedFilter,
+            map<string|string[]> additionalHeaders) returns stream<JsonRpcNotification, StreamError?>|ClientError {
+        map<string|string[]> requestHeaders = check prepareProtocolRequestHeaders(requestMessage, additionalHeaders);
+        http:Response|error httpResponse = self.httpClient->post("", requestMessage, headers = requestHeaders);
+        if httpResponse is error {
+            return error SseStreamEstablishmentError("Failed to open subscription", httpResponse);
+        }
+        if httpResponse.statusCode != 200 || !httpResponse.getContentType().includes(CONTENT_TYPE_SSE) {
+            Result|ClientError resultValue = readProtocolResponse(httpResponse, requestMessage.id);
+            return resultValue is ClientError ? resultValue : error SseStreamEstablishmentError("Expected a subscription SSE stream");
+        }
+        var eventStream = httpResponse.getSseEventStream();
+        if eventStream is error {
+            return error SseStreamEstablishmentError(eventStream.message());
+        }
+        ProtocolMessageStream messageStream = new (eventStream);
+        ClientSubscriptionStream streamIterator = new (messageStream, requestMessage.id, requestedFilter);
+        return new stream<JsonRpcNotification, StreamError?>(streamIterator);
     }
 
     # Establishes a Server-Sent Events (SSE) stream with the server.
