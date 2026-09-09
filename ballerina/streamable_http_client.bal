@@ -309,10 +309,6 @@ public distinct isolated client class StreamableHttpClient {
         ProtocolToolDefinition[] acceptedTools = [];
         map<ProtocolToolDefinition> toolSchemas = {};
         foreach ProtocolToolDefinition toolInfo in listResult.tools {
-            Error? schemaError = validateToolSchema(toolInfo);
-            if schemaError is Error {
-                return error ListToolsError("Invalid schema for tool " + toolInfo.name, schemaError);
-            }
             var validationResult = toolParameterHeaders(toolInfo.inputSchema, {});
             if validationResult is Error {
                 continue;

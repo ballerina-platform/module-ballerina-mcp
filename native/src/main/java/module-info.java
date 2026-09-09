@@ -20,7 +20,5 @@ module io.ballerina.stdlib.mcp {
     requires io.ballerina.runtime;
     requires io.ballerina.lang;
     requires io.ballerina.lang.value;
-    requires com.networknt.schema;
-    requires com.fasterxml.jackson.databind;
     exports io.ballerina.stdlib.mcp;
 }

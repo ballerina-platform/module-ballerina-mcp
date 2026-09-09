@@ -312,3 +312,11 @@ The `mcp` module provides practical examples illustrating usage in various scena
 1. [Weather Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-weather-client-demo) - Shows how to build an MCP client that discovers and invokes weather tools
 2. [Crypto Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-crypto-client-demo) - Demonstrates client interaction with cryptographic MCP services
 3. [Shopping Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-shopping-client-demo) - Shows session-based client usage with parallel session execution for stateful services
+
+### Schema validation
+
+The library retains Ballerina type binding for basic tool arguments and typed record decoding for protocol messages.
+JSON Schema documents are carried as metadata; the library does not evaluate schema constraints or resolve `$ref`
+references. Advanced service implementations are responsible for semantic validation of their arguments and results.
+General JSON Schema evaluation is deferred until language support is available. Validation of `x-mcp-header`
+annotations and their mirrored HTTP values remains part of the transport protocol.

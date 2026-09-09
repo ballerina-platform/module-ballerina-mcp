@@ -8,11 +8,14 @@ service ProtocolService /mcp on new StreamableHttpListener(3205) {
             {name: "scalar", inputSchema: {'type: "object"}, outputSchema: {"type": "integer"}},
             {name: "echo", inputSchema: {'type: "object", properties: {
                 region: {'type: "string", "x-mcp-header": "Region"}}}},
-            {name: "continue", inputSchema: {'type: "object"}}
+            {name: "continue", inputSchema: {'type: "object"}},
+            {name: "schemaMetadata", inputSchema: {'type: "object", properties: {
+                value: {'type: "integer", minimum: 1}}},
+                outputSchema: {"type": "string", "$ref": "http://127.0.0.1:9/not-loaded"}}
         ]};
     }
     remote isolated function onCallTool(CallToolParams callParams) returns ProtocolCallToolResult|InputRequiredResult {
-        if callParams.name == "scalar" {
+        if callParams.name == "scalar" || callParams.name == "schemaMetadata" {
             return {resultType: "complete", content: [], structuredContent: 42};
         }
         if callParams.name == "continue" && callParams.requestState is () {
@@ -68,7 +71,7 @@ function testModernClientWideResultAndContinuation() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     check modernClient->initialize();
     ProtocolListToolsResult toolList = check modernClient->listToolsWithSchemas();
-    test:assertEquals(toolList.tools.length(), 3);
+    test:assertEquals(toolList.tools.length(), 4);
     ProtocolCallToolResult|InputRequiredResult scalarResult = check modernClient->callToolWithResult({name: "scalar"});
     test:assertTrue(scalarResult is ProtocolCallToolResult);
     if scalarResult is ProtocolCallToolResult {
@@ -94,17 +97,6 @@ function testProtocolHeaderEncoding() returns error? {
 }
 
 @test:Config {}
-function testModernSchemaValidation() returns error? {
-    string localSchema = string `{"type":"object","properties":{"count":{"$ref":"#/$defs/count"}},"$defs":{"count":{"type":"integer","minimum":1}},"required":["count"]}`;
-    check validateProtocolSchema(localSchema, string `{"count":2}`, true);
-    test:assertTrue(validateProtocolSchema(localSchema, string `{"count":0}`, true) is Error);
-    test:assertTrue(validateProtocolSchema(string `{"type":42}`, "null", false) is Error);
-    test:assertTrue(validateProtocolSchema(string `{"$schema":"https://example.invalid/schema"}`, "null", false) is Error);
-    test:assertTrue(validateProtocolSchema(string `{"$ref":"http://127.0.0.1:9/private"}`, "null", true) is Error);
-    check validateProtocolSchema(string `{"type":["integer","null"]}`, "null", true);
-}
-
-@test:Config {}
 function testModernOriginAndDelete() returns error? {
     http:Response originResponse = check modernPost("server/discover", {}, {"origin": "https://untrusted.example"});
     test:assertEquals(originResponse.statusCode, 403);
@@ -112,4 +104,15 @@ function testModernOriginAndDelete() returns error? {
         [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION
     });
     test:assertEquals(deleteResponse.statusCode, 405);
+}
+
+@test:Config {}
+function testSchemasRemainMetadataUntilLanguageValidationIsAvailable() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    var resultValue = check modernClient->callToolWithResult({name: "schemaMetadata", arguments: {"value": "unvalidated"}});
+    test:assertTrue(resultValue is ProtocolCallToolResult);
+    if resultValue is ProtocolCallToolResult {
+        test:assertEquals(resultValue?.structuredContent, 42);
+    }
+    check modernClient->close();
 }

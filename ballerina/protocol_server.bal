@@ -148,10 +148,6 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     }
     foreach ProtocolToolDefinition toolInfo in toolList.tools {
         _ = toolInfo.removeIfHasKey("execution");
-        Error? schemaError = validateToolSchema(toolInfo);
-        if schemaError is Error {
-            return createJsonRpcErrorResponse(INTERNAL_ERROR, schemaError.message(), requestMessage.id);
-        }
         var headerDefinition = toolParameterHeaders(toolInfo.inputSchema, {});
         if headerDefinition is Error {
             return createJsonRpcErrorResponse(INTERNAL_ERROR, headerDefinition.message(), requestMessage.id);
@@ -190,11 +186,6 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     if headerError is Error {
         return modernError(HEADER_MISMATCH, headerError.message(), requestMessage.id);
     }
-    Error? inputSchemaError = validateProtocolSchema(selectedTool.inputSchema.toJsonString(),
-            (callParams.arguments ?: {}).toJsonString(), true);
-    if inputSchemaError is Error {
-        return modernResult(toToolExecutionError(inputSchemaError, callParams.name), serviceConfig.info, requestMessage.id);
-    }
     if callParams.task !is () {
         return createJsonRpcErrorResponse(INVALID_PARAMS, "Legacy task parameters are not supported in modern MCP",
                 requestMessage.id);
@@ -216,11 +207,6 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
             if !callResult.hasKey("structuredContent") {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, "Missing structured output for declared outputSchema",
                         requestMessage.id);
-            }
-            Error? outputError = validateProtocolSchema(outputSchema.toJsonString(),
-                    callResult?.structuredContent.toJsonString(), true);
-            if outputError is Error {
-                return createJsonRpcErrorResponse(INTERNAL_ERROR, outputError.message(), requestMessage.id);
             }
         }
     }
