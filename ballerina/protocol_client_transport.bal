@@ -54,9 +54,11 @@ isolated class ProtocolMessageStream {
     private isolated function attachSseStream(stream<http:SseEvent, error?> sseEventStream) = @java:Method {
         'class: "io.ballerina.stdlib.mcp.SseEventStreamHelper"
     } external;
+
     private isolated function getNextSseEvent() returns record {|http:SseEvent value;|}?|error? = @java:Method {
         'class: "io.ballerina.stdlib.mcp.SseEventStreamHelper"
     } external;
+
     private isolated function closeSseEventStream() returns error? = @java:Method {
         'class: "io.ballerina.stdlib.mcp.SseEventStreamHelper"
     } external;
@@ -109,11 +111,13 @@ isolated function readProtocolStream(ProtocolMessageStream messageStream, Reques
 
 isolated function protocolMessageResult(WireMessage messageValue, RequestId requestId, boolean modernResponse, int statusCode)
         returns Result|ClientError {
-    if messageValue is JsonRpcError {
-        if messageValue.id is RequestId && messageValue.id != requestId {
+    if messageValue is WireError {
+        RequestId? responseId = messageValue?.id;
+        if responseId is RequestId && responseId != requestId {
             return error ResponseParsingError("JSON-RPC error response ID does not match the request");
         }
-        return error ServerResponseError(messageValue.'error.message, rpcError = messageValue, statusCode = statusCode);
+        JsonRpcError normalizedError = {jsonrpc: JSONRPC_VERSION, id: responseId, 'error: messageValue.'error};
+        return error ServerResponseError(messageValue.'error.message, rpcError = normalizedError, statusCode = statusCode);
     }
     if messageValue !is WireResponse || messageValue.id != requestId {
         return error ResponseParsingError("JSON-RPC response ID does not match the request");

@@ -37,9 +37,13 @@ isolated function isModernRequest(JsonRpcRequest|JsonRpcNotification requestMess
 isolated function unsupportedProtocolResponse(string requestedVersion, string[] supportedVersions, RequestId? requestId)
         returns http:BadRequest => {
     body: {
-        jsonrpc: JSONRPC_VERSION, id: requestId,
-        'error: {code: UNSUPPORTED_PROTOCOL_VERSION, message: "Unsupported protocol version",
-            data: {supported: supportedVersions, requested: requestedVersion}}
+        jsonrpc: JSONRPC_VERSION,
+        id: requestId,
+        'error: {
+            code: UNSUPPORTED_PROTOCOL_VERSION,
+            message: "Unsupported protocol version",
+            data: {supported: supportedVersions, requested: requestedVersion}
+        }
     }
 };
 
@@ -103,7 +107,7 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     }
     if requestedVersion != MODERN_PROTOCOL_VERSION {
         return unsupportedProtocolResponse(requestedVersion,
-                serviceConfig.protocolMode == "modern" ? [MODERN_PROTOCOL_VERSION] : SUPPORTED_PROTOCOL_VERSIONS,
+                    serviceConfig.protocolMode == "modern" ? [MODERN_PROTOCOL_VERSION] : SUPPORTED_PROTOCOL_VERSIONS,
                 requestMessage.id);
     }
     string|error methodHeader = requestHeaders.getHeader(METHOD_HEADER);
@@ -200,9 +204,17 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
         if inputError is Error {
             var requiredCapabilities = inputError.detail()["requiredCapabilities"];
             if requiredCapabilities is anydata && requiredCapabilities is map<anydata> {
-                return <http:BadRequest>{body: {jsonrpc: JSONRPC_VERSION, id: requestMessage.id,
-                    'error: {code: MISSING_REQUIRED_CLIENT_CAPABILITY, message: inputError.message(),
-                        data: {requiredCapabilities: requiredCapabilities}}}};
+                return <http:BadRequest>{
+                    body: {
+                        jsonrpc: JSONRPC_VERSION,
+                        id: requestMessage.id,
+                        'error: {
+                            code: MISSING_REQUIRED_CLIENT_CAPABILITY,
+                            message: inputError.message(),
+                            data: {requiredCapabilities: requiredCapabilities}
+                        }
+                    }
+                };
             }
             return createJsonRpcErrorResponse(INTERNAL_ERROR, inputError.message(), requestMessage.id);
         }
@@ -223,12 +235,14 @@ isolated function listProtocolTools(Service|AdvancedService|StreamableHttpServic
         http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig)
         returns ProtocolListToolsResult|error {
     if mcpService is ProtocolService {
-        return trap invokeProtocolOnListTools(mcpService);
+        ProtocolListToolsResult handlerResult = check trap invokeProtocolOnListTools(mcpService);
+        // Normalize a private mutable copy; handlers may return shared readonly definitions.
+        return handlerResult.cloneWithType();
     }
     ListToolsResult|Error listResult;
     if mcpService is StreamableHttpAdvancedService {
         listResult = trapListToolsFailure(trap invokeAdvancedOnListTools(mcpService, requestHeaders, httpRequest,
-                extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional));
+                        extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional));
     } else if mcpService is AdvancedService {
         listResult = trapListToolsFailure(trap invokeOnListTools(mcpService));
     } else if mcpService is Service|StreamableHttpService {
@@ -285,6 +299,21 @@ isolated function validateInputRequired(InputRequiredResult inputResult, ClientC
         if !clientCapabilities.hasKey(capabilityName) {
             return error("Client did not declare the required capability: " + capabilityName,
                     requiredCapabilities = {[capabilityName]: {}});
+        }
+        if inputRequest.method == "elicitation/create" {
+            RequestParams inputParams = inputRequest.params ?: {};
+            anydata inputMode = inputParams["mode"] ?: "form";
+            if inputMode != "form" && inputMode != "url" {
+                return error("Invalid elicitation mode");
+            }
+            record {} elicitationCapabilities = clientCapabilities.elicitation ?: {};
+            boolean supportedMode = inputMode == "form" ?
+                    (elicitationCapabilities.length() == 0 || elicitationCapabilities.hasKey("form")) :
+                    elicitationCapabilities.hasKey("url");
+            if !supportedMode {
+                return error("Client did not declare the required elicitation mode",
+                        requiredCapabilities = {elicitation: {[<string>inputMode]: {}}});
+            }
         }
     }
 }

@@ -54,7 +54,7 @@ public isolated class StreamableHttpListener {
             return error DispatcherError("Modern MCP services cannot require mcp:Session; use explicit application state");
         }
         http:HttpServiceConfig httpServiceConfig = serviceConfig.httpConfig;
-        DispatcherService dispatcherService = getDispatcherService(httpServiceConfig);
+        final DispatcherService dispatcherService = getDispatcherService(httpServiceConfig);
         check addMcpServiceToDispatcher(dispatcherService, mcpService);
         lock {
             error? result = self.httpListener.attach(dispatcherService, name.cloneReadOnly());

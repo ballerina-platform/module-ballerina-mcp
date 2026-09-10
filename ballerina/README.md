@@ -4,6 +4,92 @@ This module offers APIs for developing MCP (Model Context Protocol) clients and 
 
 MCP is an open standard that enables seamless integration between Large Language Models (LLMs) and external data sources, tools, and services. It facilitates structured communication through JSON-RPC 2.0 over HTTP transport, allowing AI applications to access and interact with external capabilities in a standardized way. This module provides both client-side APIs for consuming MCP services and server-side APIs for exposing tools and capabilities to AI applications.
 
+## Protocol versions and compatibility
+
+Version 1.4.0 adds MCP `2026-07-28` for tools over Streamable HTTP. Clients and services default to
+`protocolMode: "auto"`. Protocol mode is independent of `sessionMode`, which controls legacy HTTP sessions.
+
+| Protocol mode | Client behavior | Service behavior |
+| --- | --- | --- |
+| `"auto"` (default) | Probe `server/discover`; fall back to the legacy handshake when appropriate | Serve modern and legacy requests on the same endpoint |
+| `"legacy"` | Use the existing `initialize` handshake | Keep the legacy protocol and session behavior |
+| `"modern"` | Require `2026-07-28` | Accept modern, sessionless requests |
+
+The supported legacy version identifiers remain `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`, and
+`2024-10-07`. This retains existing version handling; it does not add the older HTTP+SSE or stdio transports.
+Modern requests carry version and capabilities in `_meta`; they neither require initialization nor use protocol sessions.
+The existing `initialize()` method remains available and selects the appropriate lifecycle. Supplying a saved
+`sessionId` keeps a client on the legacy path; combining it with explicit modern mode is an error.
+
+```ballerina
+mcp:StreamableHttpClient compatibleClient = check new (serverUrl);
+mcp:StreamableHttpClient legacyClient = check new (serverUrl, protocolMode = "legacy");
+```
+
+Modern discovery reports the service's available protocol versions, capabilities, identity, and instructions.
+Only implemented capabilities are advertised. Resources, prompts, sampling/roots runtimes, logging, and the tasks
+extension are not added by this release. Legacy task-related types remain available for source compatibility.
+Extension capability settings and application metadata can still be carried as data.
+
+### Session-dependent services
+
+An auto-mode service with a required `mcp:Session` parameter remains legacy-only, with a compiler warning.
+An explicitly modern service with such a parameter fails compilation and is also rejected during runtime attachment.
+A nilable `mcp:Session?` parameter is allowed, but receives a warning in modern and auto modes: modern requests supply
+nil. The compiler does not infer session requirements hidden inside arbitrary application code. Select legacy mode
+explicitly when such code requires a protocol session.
+
+For modern cross-call state, pass a server-created application handle as a normal tool argument. The original
+shopping example retains its session behavior; the shopping example with explicit cart handles demonstrates the
+sessionless alternative. Multi-instance deployments need shared application storage for these handles.
+
+Traditional service handlers retain their application metadata view: automatically generated protocol version,
+client identity, and capability fields are removed before binding `mcp:Meta` or traditional `CallToolParams`.
+The newer `ProtocolService` receives the full request metadata. Existing client result methods retain readonly results and hide wire-only
+result fields and server identity while retaining application response metadata.
+
+### Modern tool results and continuations
+
+`ProtocolService` exposes `onListTools()` returning `ProtocolListToolsResult`, and `onCallTool(CallToolParams)`
+returning `ProtocolCallToolResult`, `InputRequiredResult`, or `ServerError`. Use `@mcp:StreamableHttpServiceConfig`
+and `mcp:StreamableHttpListener` to expose it. Traditional service interfaces remain supported. When a handler returns a union of complete and input-required results,
+include the appropriate `resultType` in the record constructor to disambiguate it.
+
+Use `listToolsWithSchemas(headers, cursor)` to preserve general output schemas, and `callToolWithResult(params, headers)`
+to preserve arbitrary JSON structured output, including arrays, scalars, and explicit null. Input schemas still have an
+object root. Existing `listTools()` and `callTool()` keep their original return types; a modern result that cannot fit
+those types produces an error directing the application to the new method. Explicit legacy mode retains the old wire
+path when interoperating with a server that supports it.
+
+`callToolWithResult()` performs one logical tool request and exposes an input-required result to the application.
+To continue, provide `inputResponses` and echo `requestState` exactly in the next call. A fresh JSON-RPC ID is assigned
+on every continuation. When using `callTool()`, an optional `inputHandler` callback can gather the requested input;
+`maxInputRounds` bounds automatic continuation (default: 8). Declare matching client capabilities in `initialize()`.
+Without a callback, a result requiring user input produces an actionable error; state-only continuations need no callback.
+
+Servers must treat returned `requestState` as client-supplied input. Protect and verify any state that affects business
+logic or authorization, and design side effects so continuation retries do not repeat them unintentionally.
+
+### HTTP headers, caching hints, and subscriptions
+
+Modern requests include matching `MCP-Protocol-Version`, `Mcp-Method`, and applicable `Mcp-Name` headers.
+`x-mcp-header` annotations mirror supported primitive tool arguments into `Mcp-Param-*` headers; this is separate from
+Ballerina's existing `@http:Header` injection. Invalid annotations are excluded by the client. Conflicting additional
+protocol headers are rejected locally. A header-mismatch rejection triggers at most one schema refresh and corrected retry.
+Tool-schema lookup follows pagination and is separated by the supplied request headers.
+
+Discovery and tool lists include `ttlMs` and `cacheScope`, defaulting to `0` and `"private"`. The client does not introduce
+a shared result cache or background polling. Modern requests with an Origin header must match the service's
+`allowedOrigins` list; requests without Origin are accepted. Set that list explicitly for browser clients.
+
+`SubscriptionService` extends `ProtocolService` with `onSubscribe(SubscriptionFilter)`, returning a notification stream.
+Server-side subscriptions currently publish tool-list changes. The transport acknowledges the accepted filter first,
+adds subscription IDs, filters events, and completes the request when the source ends. Event sources must release
+resources when closed. `listen()` returns a client notification stream; closing it cancels the subscription, and closing
+the client closes its open subscriptions. The client can also consume prompt/resource notifications from other servers.
+`subscribeToServerMessages()` uses the new subscription path for modern peers and retains GET behavior for legacy peers.
+Modern SSE streams are not resumed or automatically replayed after disconnection.
+
 ## Quickstart
 
 To use the `mcp` module in your Ballerina application, update the `.bal` file as follows:
@@ -75,7 +161,7 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 
 **Session Management Modes:**
 
-MCP services support three session management modes:
+Legacy MCP requests support three session management modes. Modern requests are always sessionless:
 
 - **`STATEFUL`**: Sessions are managed by the transport. Clients must initialize and maintain session IDs. Use this for services that need to track client state.
 - **`STATELESS`**: No session management. Each request is independent. Ideal for simple, stateless services.

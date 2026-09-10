@@ -14,7 +14,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-
 # Latest protocol revision using per-request negotiation.
 public const MODERN_PROTOCOL_VERSION = "2026-07-28";
 # Latest revision supporting the initialize handshake.
@@ -114,10 +113,11 @@ public type InputRequiredResult record {
 };
 
 # An input result supplied by the application, for example an elicitation response.
-public type InputResponse record {};
+public type InputResponse record {
+};
 
 # Callback for gathering input requested by a server. It is invoked outside client locks.
-public type InputHandler isolated function(InputRequest inputRequest) returns InputResponse|ClientError;
+public type InputHandler isolated function (InputRequest inputRequest) returns InputResponse|ClientError;
 
 # A service exposing modern result shapes. Legacy requests use checked compatibility conversion.
 public type ProtocolService distinct service object {
@@ -131,7 +131,19 @@ type WireResponse record {|
     RequestId id;
     Result result;
 |};
-type WireMessage WireResponse|JsonRpcError|JsonRpcRequest|JsonRpcNotification;
+
+// Modern HTTP errors may omit an ID when the request could not be identified.
+type WireError record {|
+    JSONRPC_VERSION jsonrpc;
+    RequestId? id?;
+    record {
+        int code;
+        string message;
+        anydata data?;
+    } 'error;
+|};
+
+type WireMessage WireResponse|WireError|JsonRpcRequest|JsonRpcNotification;
 
 type ModernRequestMeta record {
     string io\.modelcontextprotocol\/protocolVersion;

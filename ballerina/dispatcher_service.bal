@@ -97,8 +97,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, routeConfig.message());
             }
             if request is JsonRpcNotification && isModernRequest(request, headers) {
-                return <http:BadRequest>{body: createJsonRpcError(INVALID_REQUEST,
-                        "No core client notifications are supported by modern Streamable HTTP")};
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_REQUEST,
+                            "No core client notifications are supported by modern Streamable HTTP")
+                };
             }
             if request is JsonRpcRequest && isModernRequest(request, headers) {
                 var mcpService = getMcpServiceFromDispatcher(self);
@@ -382,7 +384,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             }
             if mcpService is StreamableHttpAdvancedService {
                 return trapListToolsFailure(trap invokeAdvancedOnListTools(mcpService, headers, httpRequest,
-                        extractHeaderValues(headers), treatNilableAsOptional));
+                                extractHeaderValues(headers), treatNilableAsOptional));
             }
             if mcpService is AdvancedService {
                 return trapListToolsFailure(trap invokeOnListTools(mcpService));

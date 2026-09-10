@@ -163,7 +163,7 @@ public distinct isolated client class StreamableHttpClient {
             if compatibilityResult is error {
                 return error ListToolsError("Tool output schemas require listToolsWithSchemas()", compatibilityResult);
             }
-            return compatibilityResult;
+            return compatibilityResult.cloneReadOnly();
         }
         ListToolsRequest listToolsRequest = {};
 
@@ -194,7 +194,7 @@ public distinct isolated client class StreamableHttpClient {
                     if compatibilityResult is error {
                         return error ToolCallError("Structured output requires callToolWithResult()", compatibilityResult);
                     }
-                    return compatibilityResult;
+                    return compatibilityResult.cloneReadOnly();
                 }
                 if roundNumber == self.maxInputRounds {
                     return error ToolCallError("Maximum input-required continuation rounds exceeded", inputRequired = callResult);
@@ -276,12 +276,19 @@ public distinct isolated client class StreamableHttpClient {
         JsonRpcRequest requestMessage;
         lock {
             self.requestId += 1;
-            requestMessage = {jsonrpc: JSONRPC_VERSION, id: self.requestId, method: "subscriptions/listen",
-                params: {"notifications": notifications.cloneReadOnly(), _meta: {
-                    [PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION,
-                    [CLIENT_INFO_META_KEY]: self.clientInfo.cloneReadOnly(),
-                    [CAPABILITIES_META_KEY]: self.clientCapabilities.cloneReadOnly()
-                }}};
+            requestMessage = {
+                jsonrpc: JSONRPC_VERSION,
+                id: self.requestId,
+                method: "subscriptions/listen",
+                params: {
+                    "notifications": notifications.cloneReadOnly(),
+                    _meta: {
+                        [PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION,
+                        [CLIENT_INFO_META_KEY]: self.clientInfo.cloneReadOnly(),
+                        [CAPABILITIES_META_KEY]: self.clientCapabilities.cloneReadOnly()
+                    }
+                }
+            };
         }
         return self.transport.openProtocolSubscription(requestMessage, notifications, headers);
     }

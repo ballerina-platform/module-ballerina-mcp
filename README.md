@@ -12,6 +12,44 @@ MCP is an open standard that enables seamless integration between Large Language
 
 The Ballerina MCP library implements both client and server-side functionality, supporting automatic tool discovery, type-safe schema generation, flexible session management (STATEFUL, STATELESS, AUTO modes), and streamable HTTP transport with Server-Sent Events (SSE) for bidirectional communication.
 
+## MCP 2026-07-28
+
+Version 1.4.0 adds automatic modern/legacy protocol selection, modern discovery, per-request metadata and headers,
+modern tool-result APIs, bounded input-required continuations, and POST-based subscriptions. Existing session-dependent
+services remain on the legacy path in auto mode. See the [protocol compatibility and migration guide](ballerina/README.md#protocol-versions-and-compatibility).
+General JSON Schema evaluation is deferred until Ballerina language support is available; existing type binding remains.
+
+### Interoperability checks
+
+After `./gradlew build -x commitTomlFiles`, use `target/ballerina-runtime/bin/bal` to clean and build the
+`ballerina-tests/interop-server` and `ballerina-tests/interop-client` packages. Cleaning matters when testing multiple
+checkpoints with the same development version. The fixtures use FastMCP 4.0.0b5, Python SDK 2.2.0, and TypeScript SDK 2.0.0.
+Install the Node fixtures with `npm ci --prefix ballerina-tests/interop` and use the pinned Python requirements in that directory.
+
+Start the Ballerina fixture with:
+
+```sh
+java -jar ballerina-tests/interop-server/target/bin/interop_server.jar -CinteropPort=3210
+```
+
+Then run `python_client.py` and `typescript_client.mjs` from `ballerina-tests/interop`, passing
+`http://127.0.0.1:3210`. They check legacy/auto/modern operation, required-session fallback, and scalar results.
+For the reverse direction, start `python_server.py fastmcp 3211`, `python_server.py sdk 3212`, and
+`node typescript_server.mjs 3213`. Run the Ballerina interop client JAR with
+`-CinteropUrl=http://127.0.0.1:PORT/mcp` for each port. These checks exercise JSON/SSE responses and Unicode mirrored headers.
+Stop all fixture processes when finished. These are optional interoperability checks; the regular Gradle suites need no
+Python or Node SDK installation.
+
+The standard HTTP-header conformance scenario can be run against the Ballerina fixture with:
+
+```sh
+npx --yes @modelcontextprotocol/conformance@0.2.0-alpha.11 server --url http://127.0.0.1:3210/mcp --scenario http-header-validation --spec-version 2026-07-28
+```
+
+This scenario passed all 14 checks during the upgrade. The broader caching scenario passed tool-list caching and wire
+validation, but also requires prompt/resource fixtures outside this module's implemented feature set; it is not a
+complete conformance gate for this tools-focused library.
+
 ## Issues and projects
 
 Issues and Projects tabs are disabled for this repository as this is part of the Ballerina Library. To report bugs, request new features, start new discussions, view project boards, etc., go to the [Ballerina Library parent repository](https://github.com/ballerina-platform/ballerina-standard-library).

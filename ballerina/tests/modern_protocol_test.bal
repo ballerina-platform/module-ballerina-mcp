@@ -1,24 +1,76 @@
+// Copyright (c) 2026 WSO2 LLC (http://www.wso2.com).
+//
+// WSO2 LLC. licenses this file to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 import ballerina/http;
 import ballerina/test;
 
 @StreamableHttpServiceConfig {info: {name: "modern-test", version: "1"}}
 service ProtocolService /mcp on new StreamableHttpListener(3205) {
     remote isolated function onListTools() returns ProtocolListToolsResult {
-        return {tools: [
-            {name: "scalar", inputSchema: {'type: "object"}, outputSchema: {"type": "integer"}},
-            {name: "echo", inputSchema: {'type: "object", properties: {
-                region: {'type: "string", "x-mcp-header": "Region"}}}},
-            {name: "continue", inputSchema: {'type: "object"}},
-            {name: "schemaMetadata", inputSchema: {'type: "object", properties: {
-                value: {'type: "integer", minimum: 1}}},
-                outputSchema: {"type": "string", "$ref": "http://127.0.0.1:9/not-loaded"}}
-        ]};
+        ProtocolListToolsResult handlerResult = {
+            tools: [
+                {name: "scalar", inputSchema: {'type: "object"}, outputSchema: {"type": "integer"}},
+                {
+                    name: "echo",
+                    inputSchema: {
+                        'type: "object",
+                        properties: {
+                            region: {'type: "string", "x-mcp-header": "Region"}
+                        }
+                    }
+                },
+                {name: "continue", inputSchema: {'type: "object"}},
+                {name: "ask", inputSchema: {'type: "object"}},
+                {name: "loop", inputSchema: {'type: "object"}},
+                {
+                    name: "schemaMetadata",
+                    inputSchema: {
+                        'type: "object",
+                        properties: {
+                            value: {'type: "integer", minimum: 1}
+                        }
+                    },
+                    outputSchema: {"type": "string", "$ref": "http://127.0.0.1:9/not-loaded"}
+                }
+            ]
+        };
+        return handlerResult.cloneReadOnly();
     }
+
     remote isolated function onCallTool(CallToolParams callParams) returns ProtocolCallToolResult|InputRequiredResult {
         if callParams.name == "scalar" || callParams.name == "schemaMetadata" {
             return {resultType: "complete", content: [], structuredContent: 42};
         }
-        if callParams.name == "continue" && callParams.requestState is () {
+        if callParams.name == "ask" && callParams.inputResponses is () {
+            return {
+                resultType: "input_required",
+                requestState: "echo-only-state",
+                inputRequests: {
+                    "answer": {
+                        method: "elicitation/create",
+                        params: {
+                            "mode": "form",
+                            "message": "Confirm",
+                            "requestedSchema": {"type": "object"}
+                        }
+                    }
+                }
+            };
+        }
+        if (callParams.name == "continue" && callParams.requestState is ()) || callParams.name == "loop" {
             return {resultType: "input_required", requestState: "opaque-state"};
         }
         return {resultType: "complete", content: [{'type: "text", text: callParams.requestState ?: "ok"}]};
@@ -71,7 +123,7 @@ function testModernClientWideResultAndContinuation() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     check modernClient->initialize();
     ProtocolListToolsResult toolList = check modernClient->listToolsWithSchemas();
-    test:assertEquals(toolList.tools.length(), 4);
+    test:assertEquals(toolList.tools.length(), 6);
     ProtocolCallToolResult|InputRequiredResult scalarResult = check modernClient->callToolWithResult({name: "scalar"});
     test:assertTrue(scalarResult is ProtocolCallToolResult);
     if scalarResult is ProtocolCallToolResult {
@@ -90,10 +142,13 @@ function testProtocolHeaderEncoding() returns error? {
         test:assertEquals(check decodeProtocolHeader(encodeProtocolHeader(headerValue)), headerValue);
     }
     test:assertTrue(decodeProtocolHeader("bad\nvalue") is Error);
-    test:assertTrue(toolParameterHeaders({'type: "object", properties: {
-        first: {'type: "string", "x-mcp-header": "Region"},
-        second: {'type: "string", "x-mcp-header": "region"}
-    }}, {}) is Error);
+    test:assertTrue(toolParameterHeaders({
+                                             'type: "object",
+                                             properties: {
+                                                 first: {'type: "string", "x-mcp-header": "Region"},
+                                                 second: {'type: "string", "x-mcp-header": "region"}
+                                             }
+                                         }, {}) is Error);
 }
 
 @test:Config {}
@@ -153,10 +208,75 @@ function testModernRejectsLegacyInitializedNotification() returns error? {
 
 @test:Config {}
 function testHeaderTraversalIgnoresSchemaDataArrays() returns error? {
-    JsonSchema toolSchema = {'type: "object", required: ["count"], properties: {
-        count: {'type: "integer", "enum": [1, 2, 3]},
-        payload: {'type: "object", "default": {"x-mcp-header": "literal data"}}
-    }};
+    JsonSchema toolSchema = {
+        'type: "object",
+        required: ["count"],
+        properties: {
+            count: {'type: "integer", "enum": [1, 2, 3]},
+            payload: {'type: "object", "default": {"x-mcp-header": "literal data"}}
+        }
+    };
     map<string> headerValues = check toolParameterHeaders(toolSchema, {});
     test:assertEquals(headerValues.length(), 0);
+}
+
+@test:Config {}
+function testModernErrorWithoutIdDoesNotTriggerLegacyFallback() returns error? {
+    WireMessage errorMessage = check string `{"jsonrpc":"2.0","error":{"code":-32020,"message":"Missing required header"}}`.fromJsonStringWithType();
+    Result|ClientError errorResult = protocolMessageResult(errorMessage, 10, true, 400);
+    test:assertTrue(errorResult is ClientError);
+    if errorResult is ClientError {
+        test:assertFalse(shouldUseLegacy(errorResult));
+    }
+}
+
+isolated function acceptTestInput(InputRequest inputRequest) returns InputResponse|ClientError {
+    if inputRequest.method != "elicitation/create" {
+        return error ClientError("Unexpected input request");
+    }
+    return {"action": "accept"};
+}
+
+@test:Config {}
+function testElicitationHandlerAndContinuationLimit() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp", inputHandler = acceptTestInput,
+        maxInputRounds = 2
+    );
+    check modernClient->initialize(capabilities = {elicitation: {form: {}}});
+    CallToolResult callResult = check modernClient->callTool({name: "ask"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "echo-only-state"});
+    var exhaustedResult = modernClient->callTool({name: "loop"});
+    test:assertTrue(exhaustedResult is ToolCallError);
+    if exhaustedResult is ToolCallError {
+        test:assertTrue(exhaustedResult.message().includes("Maximum input-required"));
+    }
+    check modernClient->close();
+}
+
+@test:Config {}
+function testMissingClientCapabilityRemainsAModernError() returns error? {
+    ClientCapabilities[] unsupportedCapabilities = [{}, {elicitation: {url: {}}}];
+    foreach ClientCapabilities unsupportedCapability in unsupportedCapabilities {
+        StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+        check modernClient->initialize(capabilities = unsupportedCapability);
+        var callResult = modernClient->callToolWithResult({name: "ask"});
+        test:assertTrue(callResult is ServerResponseError);
+        if callResult is ServerResponseError {
+            var rpcValue = callResult.detail()["rpcError"];
+            test:assertTrue(rpcValue is JsonRpcError);
+            if rpcValue is JsonRpcError {
+                test:assertEquals(rpcValue.'error.code, MISSING_REQUIRED_CLIENT_CAPABILITY);
+            }
+        }
+        check modernClient->close();
+    }
+}
+
+@test:Config {}
+function testEmptyElicitationCapabilityRetainsFormCompatibility() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp", inputHandler = acceptTestInput);
+    check modernClient->initialize(capabilities = {elicitation: {}});
+    CallToolResult callResult = check modernClient->callTool({name: "ask"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "echo-only-state"});
+    check modernClient->close();
 }

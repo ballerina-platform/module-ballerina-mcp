@@ -67,9 +67,12 @@ isolated class ServerSubscriptionStream {
                     acceptedNotifications["toolsListChanged"] = true;
                 }
                 JsonRpcNotification acknowledgement = {
-                    jsonrpc: JSONRPC_VERSION, method: "notifications/subscriptions/acknowledged",
-                    params: {_meta: {"io.modelcontextprotocol/subscriptionId": self.subscriptionId},
-                        "notifications": acceptedNotifications}
+                    jsonrpc: JSONRPC_VERSION,
+                    method: "notifications/subscriptions/acknowledged",
+                    params: {
+                        _meta: {"io.modelcontextprotocol/subscriptionId": self.subscriptionId},
+                        "notifications": acceptedNotifications
+                    }
                 };
                 return {value: {data: acknowledgement.toJsonString()}};
             }
@@ -80,8 +83,11 @@ isolated class ServerSubscriptionStream {
                 lock {
                     self.finished = true;
                 }
-                WireResponse completed = {jsonrpc: JSONRPC_VERSION, id: self.subscriptionId,
-                    result: {"resultType": "complete", _meta: {"io.modelcontextprotocol/subscriptionId": self.subscriptionId}}};
+                WireResponse completed = {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: self.subscriptionId,
+                    result: {"resultType": "complete", _meta: {"io.modelcontextprotocol/subscriptionId": self.subscriptionId}}
+                };
                 return {value: {data: completed.toJsonString()}};
             }
             if sourceItem.value.method == "notifications/tools/list_changed" && self.acceptedFilter.toolsListChanged {
@@ -90,7 +96,9 @@ isolated class ServerSubscriptionStream {
                 notificationMeta["io.modelcontextprotocol/subscriptionId"] = self.subscriptionId;
                 notificationParams._meta = notificationMeta;
                 JsonRpcNotification notificationValue = {
-                    jsonrpc: JSONRPC_VERSION, method: sourceItem.value.method, params: notificationParams
+                    jsonrpc: JSONRPC_VERSION,
+                    method: sourceItem.value.method,
+                    params: notificationParams
                 };
                 return {value: {data: notificationValue.toJsonString()}};
             }
@@ -107,9 +115,11 @@ isolated class ServerSubscriptionStream {
     private isolated function attachSseStream(stream<JsonRpcNotification, error?> sseEventStream) = @java:Method {
         'class: "io.ballerina.stdlib.mcp.SseEventStreamHelper"
     } external;
+
     private isolated function getNextSseEvent() returns record {|JsonRpcNotification value;|}?|error? = @java:Method {
         'class: "io.ballerina.stdlib.mcp.SseEventStreamHelper"
     } external;
+
     private isolated function closeSseEventStream() returns error? = @java:Method {
         'class: "io.ballerina.stdlib.mcp.SseEventStreamHelper"
     } external;
@@ -158,6 +168,11 @@ isolated class ClientSubscriptionStream {
         }
         WireMessage messageValue = streamItem.value;
         if messageValue is WireResponse {
+            lock {
+                if self.acknowledgedFilter is () {
+                    return error SseEventStreamError("Subscription ended before acknowledgment");
+                }
+            }
             if messageValue.id != self.subscriptionId || messageValue.result["resultType"] != "complete" {
                 return error SseEventStreamError("Invalid subscription completion response");
             }
@@ -165,6 +180,9 @@ isolated class ClientSubscriptionStream {
                 self.finished = true;
             }
             return;
+        }
+        if messageValue is WireError {
+            return error SseEventStreamError(messageValue.'error.message, rpcError = messageValue);
         }
         if messageValue !is JsonRpcNotification {
             return error SseEventStreamError("Unexpected subscription message");
@@ -229,9 +247,15 @@ isolated function isSubscriptionSubset(SubscriptionFilter acceptedFilter, Subscr
 isolated function allowsSubscriptionNotification(SubscriptionFilter acceptedFilter, JsonRpcNotification notificationValue)
         returns boolean {
     match notificationValue.method {
-        "notifications/tools/list_changed" => {return acceptedFilter.toolsListChanged;}
-        "notifications/prompts/list_changed" => {return acceptedFilter.promptsListChanged;}
-        "notifications/resources/list_changed" => {return acceptedFilter.resourcesListChanged;}
+        "notifications/tools/list_changed" => {
+            return acceptedFilter.toolsListChanged;
+        }
+        "notifications/prompts/list_changed" => {
+            return acceptedFilter.promptsListChanged;
+        }
+        "notifications/resources/list_changed" => {
+            return acceptedFilter.resourcesListChanged;
+        }
         "notifications/resources/updated" => {
             record {} notificationParams = notificationValue.params ?: {};
             foreach string resourceUri in acceptedFilter.resourceSubscriptions {
@@ -241,6 +265,8 @@ isolated function allowsSubscriptionNotification(SubscriptionFilter acceptedFilt
             }
             return false;
         }
-        _ => {return false;}
+        _ => {
+            return false;
+        }
     }
 }

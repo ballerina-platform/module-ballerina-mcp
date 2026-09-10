@@ -47,31 +47,31 @@ isolated function validateToolHeaders(JsonSchema toolSchema, record {} toolArgum
 
 isolated function prepareProtocolRequestHeaders(JsonRpcRequest requestMessage, map<string|string[]> additionalHeaders,
         map<string> parameterHeaders = {}) returns map<string|string[]>|HttpClientError {
-        map<string|string[]> requestHeaders = {
-            [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
-            [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-            [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
-            [METHOD_HEADER]: requestMessage.method
-        };
-        if requestMessage.method == REQUEST_CALL_TOOL {
-            RequestParams requestParams = requestMessage.params ?: {};
-            anydata toolName = requestParams["name"];
-            if toolName is string {
-                requestHeaders[NAME_HEADER] = encodeProtocolHeader(toolName);
-            }
+    map<string|string[]> requestHeaders = {
+        [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
+        [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
+        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+        [METHOD_HEADER]: requestMessage.method
+    };
+    if requestMessage.method == REQUEST_CALL_TOOL {
+        RequestParams requestParams = requestMessage.params ?: {};
+        anydata toolName = requestParams["name"];
+        if toolName is string {
+            requestHeaders[NAME_HEADER] = encodeProtocolHeader(toolName);
         }
-        foreach var [headerName, headerValue] in parameterHeaders.entries() {
-            requestHeaders[headerName.toLowerAscii()] = headerValue;
+    }
+    foreach var [headerName, headerValue] in parameterHeaders.entries() {
+        requestHeaders[headerName.toLowerAscii()] = headerValue;
+    }
+    foreach var [headerName, headerValue] in additionalHeaders.entries() {
+        string lowerName = headerName.toLowerAscii();
+        if lowerName == SESSION_ID_HEADER || lowerName == "last-event-id" {
+            continue;
         }
-        foreach var [headerName, headerValue] in additionalHeaders.entries() {
-            string lowerName = headerName.toLowerAscii();
-            if lowerName == SESSION_ID_HEADER || lowerName == "last-event-id" {
-                continue;
-            }
-            if requestHeaders.hasKey(lowerName) && requestHeaders[lowerName] != headerValue {
-                return error HttpClientError("Additional header conflicts with generated protocol header: " + headerName);
-            }
-            requestHeaders[lowerName] = headerValue;
+        if requestHeaders.hasKey(lowerName) && requestHeaders[lowerName] != headerValue {
+            return error HttpClientError("Additional header conflicts with generated protocol header: " + headerName);
         }
-        return requestHeaders;
+        requestHeaders[lowerName] = headerValue;
+    }
+    return requestHeaders;
 }
