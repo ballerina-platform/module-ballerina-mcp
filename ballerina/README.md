@@ -2,7 +2,7 @@
 
 This module provides APIs for building MCP (Model Context Protocol) clients and servers in Ballerina, enabling standardized integration between LLMs and external data sources, tools, and services via JSON-RPC 2.0 over HTTP. It supports automatic tool discovery, type-safe schema generation, flexible session management, and streamable HTTP transport with Server-Sent Events for bidirectional communication.
 
-## Key Features
+### Key Features
 
 - MCP Client and Server implementation for LLM tool integration
 - Automatic tool discovery and type-safe schema generation
