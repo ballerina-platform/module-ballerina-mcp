@@ -190,7 +190,7 @@ public class CompilerPluginTest {
         DiagnosticResult diagnosticResult = compile("sample_package_15");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
         assertError(diagnosticResult, 0,
-                "must return 'mcp:CallToolResult|mcp:ProtocolCallToolResult|mcp:InputRequiredResult|mcp:ServerError'",
+                "must return 'mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError'",
                 MCP_112);
     }
 

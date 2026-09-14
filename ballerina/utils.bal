@@ -77,9 +77,10 @@ isolated function extractResultFromMessage(JsonRpcMessage message) returns Serve
 }
 
 // Keep wire-only additions out of the established application result APIs.
-isolated function applicationResult(Result resultValue) returns Result {
+isolated function applicationResult(Result resultValue, boolean preserveCacheHints = false) returns Result {
     Result applicationValue = {...resultValue};
-    foreach string fieldName in ["resultType", "ttlMs", "cacheScope"] {
+    string[] wireFields = preserveCacheHints ? ["resultType"] : ["resultType", "ttlMs", "cacheScope"];
+    foreach string fieldName in wireFields {
         _ = applicationValue.removeIfHasKey(fieldName);
     }
     record {} applicationMeta = {...(applicationValue._meta ?: {})};
@@ -92,54 +93,33 @@ isolated function applicationResult(Result resultValue) returns Result {
     return applicationValue;
 }
 
-// Adapts a modern tool list to the established client API. Scalar output schemas cannot be
-// represented by ToolDefinition, whose schema type has historically required an object root.
-isolated function legacyCompatibleToolList(ProtocolListToolsResult protocolResult) returns ListToolsResult {
-    ToolDefinition[] tools = [];
-    foreach ProtocolToolDefinition protocolTool in protocolResult.tools {
-        ToolDefinition toolInfo = {
-            name: protocolTool.name,
-            inputSchema: protocolTool.inputSchema
-        };
-        if protocolTool.title is string {
-            toolInfo.title = protocolTool.title;
-        }
-        if protocolTool.icons is Icon[] {
-            toolInfo.icons = protocolTool.icons;
-        }
-        if protocolTool.description is string {
-            toolInfo.description = protocolTool.description;
-        }
-        if protocolTool.annotations is ToolAnnotations {
-            toolInfo.annotations = protocolTool.annotations;
-        }
-        tools.push(toolInfo);
+// Keep legacy wire responses within the schema shape accepted by pre-2026 clients.
+isolated function legacyToolListResult(ListToolsResult resultValue) returns ListToolsResult|error {
+    ListToolsResult|error legacyResult = applicationResult(resultValue).cloneWithType();
+    if legacyResult is error {
+        return legacyResult;
     }
-    ListToolsResult resultValue = {tools};
-    if protocolResult.nextCursor is Cursor {
-        resultValue.nextCursor = protocolResult.nextCursor;
+    foreach ToolDefinition toolInfo in legacyResult.tools {
+        OutputSchema? outputSchema = toolInfo.outputSchema;
+        if outputSchema is OutputSchema {
+            JsonSchema|error objectSchema = outputSchema.cloneWithType();
+            if objectSchema is error {
+                _ = toolInfo.removeIfHasKey("outputSchema");
+            }
+        }
     }
-    Result applicationValue = applicationResult(protocolResult);
-    if applicationValue._meta is record {} {
-        resultValue._meta = applicationValue._meta;
-    }
-    return resultValue;
+    return legacyResult;
 }
 
-// Adapts a modern result to the established client API. Preserve object structured content,
-// which fits the historical type, and leave scalar, array, and null values to callToolWithResult().
-isolated function legacyCompatibleToolResult(ProtocolCallToolResult protocolResult) returns CallToolResult {
-    CallToolResult resultValue = {content: protocolResult.content};
-    json structuredContent = protocolResult["structuredContent"];
-    if structuredContent is map<json> {
-        resultValue.structuredContent = structuredContent;
+// Legacy CallToolResult allowed structured content only when its root was an object.
+isolated function legacyToolCallResult(CallToolResult resultValue) returns CallToolResult|error {
+    CallToolResult|error legacyResult = applicationResult(resultValue).cloneWithType();
+    if legacyResult is error {
+        return legacyResult;
     }
-    if protocolResult.isError is boolean {
-        resultValue.isError = protocolResult.isError;
+    json structuredContent = legacyResult["structuredContent"];
+    if legacyResult.hasKey("structuredContent") && !(structuredContent is map<json>) {
+        _ = legacyResult.removeIfHasKey("structuredContent");
     }
-    Result applicationValue = applicationResult(protocolResult);
-    if applicationValue._meta is record {} {
-        resultValue._meta = applicationValue._meta;
-    }
-    return resultValue;
+    return legacyResult;
 }

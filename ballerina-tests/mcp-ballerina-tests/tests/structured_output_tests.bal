@@ -48,42 +48,31 @@ function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
     mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
             protocolMode = "modern");
     check httpClient->initialize();
-    mcp:ProtocolListToolsResult listedTools = check httpClient->listToolsWithSchemas();
-    map<mcp:ProtocolToolDefinition> toolsByName = {};
-    foreach mcp:ProtocolToolDefinition toolInfo in listedTools.tools {
+    mcp:ListToolsResult listedTools = check httpClient->listTools();
+    map<mcp:ToolDefinition> toolsByName = {};
+    foreach mcp:ToolDefinition toolInfo in listedTools.tools {
         toolsByName[toolInfo.name] = toolInfo;
     }
     check assertSchemaType(check toolsByName["stringValue"].ensureType(), "string");
     check assertSchemaType(check toolsByName["arrayValue"].ensureType(), "array");
     check assertSchemaType(check toolsByName["personValue"].ensureType(), "object");
-    mcp:ProtocolToolDefinition nullableTool = check toolsByName["nullableValue"].ensureType();
+    mcp:ToolDefinition nullableTool = check toolsByName["nullableValue"].ensureType();
     mcp:OutputSchema nullableSchema = check nullableTool.outputSchema.ensureType();
     test:assertTrue(nullableSchema.hasKey("anyOf"));
-    mcp:ProtocolToolDefinition textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
+    mcp:ToolDefinition textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
     test:assertEquals(textOnlyTool.outputSchema, ());
 
-    mcp:ProtocolCallToolResult|mcp:InputRequiredResult stringResult =
-            check httpClient->callToolWithResult({name: "stringValue"});
+    mcp:CallToolResult stringResult = check httpClient->callTool({name: "stringValue"});
     assertStructuredValue(stringResult, "hello");
-    mcp:ProtocolCallToolResult|mcp:InputRequiredResult arrayResult =
-            check httpClient->callToolWithResult({name: "arrayValue"});
+    mcp:CallToolResult arrayResult = check httpClient->callTool({name: "arrayValue"});
     assertStructuredValue(arrayResult, <json>[1, 2, 3]);
-    mcp:ProtocolCallToolResult|mcp:InputRequiredResult personResult =
-            check httpClient->callToolWithResult({name: "personValue"});
+    mcp:CallToolResult personResult = check httpClient->callTool({name: "personValue"});
     assertStructuredValue(personResult, <json>{name: "Alice", age: 30});
-    mcp:ProtocolCallToolResult|mcp:InputRequiredResult nullableResult =
-            check httpClient->callToolWithResult({name: "nullableValue"});
-    test:assertTrue(nullableResult is mcp:ProtocolCallToolResult);
-    if nullableResult is mcp:ProtocolCallToolResult {
-        test:assertTrue(nullableResult.hasKey("structuredContent"));
-        test:assertEquals(nullableResult["structuredContent"], ());
-    }
-    mcp:ProtocolCallToolResult|mcp:InputRequiredResult textOnlyResult =
-            check httpClient->callToolWithResult({name: "textOnlyValue"});
-    test:assertTrue(textOnlyResult is mcp:ProtocolCallToolResult);
-    if textOnlyResult is mcp:ProtocolCallToolResult {
-        test:assertFalse(textOnlyResult.hasKey("structuredContent"));
-    }
+    mcp:CallToolResult nullableResult = check httpClient->callTool({name: "nullableValue"});
+    test:assertTrue(nullableResult.hasKey("structuredContent"));
+    test:assertEquals(nullableResult["structuredContent"], ());
+    mcp:CallToolResult textOnlyResult = check httpClient->callTool({name: "textOnlyValue"});
+    test:assertFalse(textOnlyResult.hasKey("structuredContent"));
     check httpClient->close();
 
     mcp:StreamableHttpClient legacyClient = check new ("http://localhost:8789/structuredHttp",
@@ -94,27 +83,22 @@ function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
         test:assertEquals(toolInfo.outputSchema, ());
     }
     mcp:CallToolResult legacyResult = check legacyClient->callTool({name: "arrayValue"});
-    test:assertEquals(legacyResult.structuredContent, ());
+    test:assertFalse(legacyResult.hasKey("structuredContent"));
     check legacyClient->close();
 
     mcp:StreamableHttpClient genericClient = check new ("http://localhost:8789/structuredGeneric",
             protocolMode = "modern");
     check genericClient->initialize();
-    mcp:ProtocolCallToolResult|mcp:InputRequiredResult booleanResult =
-            check genericClient->callToolWithResult({name: "booleanValue"});
+    mcp:CallToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
     assertStructuredValue(booleanResult, true);
     check genericClient->close();
 }
 
-function assertSchemaType(mcp:ProtocolToolDefinition toolInfo, string expectedType) returns error? {
+function assertSchemaType(mcp:ToolDefinition toolInfo, string expectedType) returns error? {
     mcp:OutputSchema outputSchema = check toolInfo.outputSchema.ensureType();
     test:assertEquals(outputSchema["type"], expectedType);
 }
 
-function assertStructuredValue(mcp:ProtocolCallToolResult|mcp:InputRequiredResult resultValue,
-        json expectedValue) {
-    test:assertTrue(resultValue is mcp:ProtocolCallToolResult);
-    if resultValue is mcp:ProtocolCallToolResult {
-        test:assertEquals(resultValue["structuredContent"], expectedValue);
-    }
+function assertStructuredValue(mcp:CallToolResult resultValue, json expectedValue) {
+    test:assertEquals(resultValue["structuredContent"], expectedValue);
 }

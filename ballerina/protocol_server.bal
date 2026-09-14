@@ -148,22 +148,22 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     if requestMessage.method != REQUEST_LIST_TOOLS && requestMessage.method != REQUEST_CALL_TOOL {
         return <http:NotFound>{body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", requestMessage.id)};
     }
-    ProtocolListToolsResult|error toolList = listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig);
+    ListToolsResult|error toolList = listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig);
     if toolList is error {
         return createJsonRpcErrorResponse(INTERNAL_ERROR, toolList.message(), requestMessage.id);
     }
-    foreach ProtocolToolDefinition toolInfo in toolList.tools {
+    foreach ToolDefinition toolInfo in toolList.tools {
         _ = toolInfo.removeIfHasKey("execution");
         var headerDefinition = toolParameterHeaders(toolInfo.inputSchema, {});
         if headerDefinition is Error {
             return createJsonRpcErrorResponse(INTERNAL_ERROR, headerDefinition.message(), requestMessage.id);
         }
     }
-    if toolList.ttlMs < 0 {
+    if toolList.ttlMs is int && toolList.ttlMs < 0 {
         return createJsonRpcErrorResponse(INTERNAL_ERROR, "ttlMs must be non-negative", requestMessage.id);
     }
     if requestMessage.method == REQUEST_LIST_TOOLS {
-        toolList.tools = toolList.tools.sort(key = isolated function(ProtocolToolDefinition toolInfo) returns string => toolInfo.name);
+        toolList.tools = toolList.tools.sort(key = isolated function(ToolDefinition toolInfo) returns string => toolInfo.name);
         return modernResult(toolList, serviceConfig.info, requestMessage.id, cacheable = true);
     }
     CallToolParams|error callParams = requestMessage.params.cloneWithType();
@@ -178,8 +178,8 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     if decodedName is Error || decodedName != callParams.name {
         return modernError(HEADER_MISMATCH, "Mcp-Name must match the tool name", requestMessage.id);
     }
-    ProtocolToolDefinition? selectedTool = ();
-    foreach ProtocolToolDefinition toolInfo in toolList.tools {
+    ToolDefinition? selectedTool = ();
+    foreach ToolDefinition toolInfo in toolList.tools {
         if toolInfo.name == callParams.name {
             selectedTool = toolInfo;
             break;
@@ -196,7 +196,7 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
         return createJsonRpcErrorResponse(INVALID_PARAMS, "Legacy task parameters are not supported in modern MCP",
                 requestMessage.id);
     }
-    ProtocolCallToolResult|InputRequiredResult|error callResult = callProtocolTool(mcpService, callParams,
+    CallToolResult|InputRequiredResult|error callResult = callProtocolTool(mcpService, callParams,
             httpRequest, requestHeaders, serviceConfig);
     if callResult is error {
         return createJsonRpcErrorResponse(INTERNAL_ERROR, callResult.message(), requestMessage.id);
@@ -221,7 +221,7 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
             return createJsonRpcErrorResponse(INTERNAL_ERROR, inputError.message(), requestMessage.id);
         }
     }
-    if callResult is ProtocolCallToolResult && callResult.isError != true {
+    if callResult is CallToolResult && callResult.isError != true {
         OutputSchema? outputSchema = selectedTool.outputSchema;
         if outputSchema is OutputSchema {
             if !callResult.hasKey("structuredContent") {
@@ -235,20 +235,16 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
 
 isolated function listProtocolTools(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
         http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig)
-        returns ProtocolListToolsResult|error {
+        returns ListToolsResult|error {
     ListToolsResult|Error listResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
-        ListToolsResult|ProtocolListToolsResult|error advancedResult =
+        ListToolsResult|error advancedResult =
                 trap invokeAdvancedOnListTools(mcpService, requestHeaders, httpRequest,
                     extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
-        if advancedResult is ProtocolListToolsResult {
-            return advancedResult.cloneWithType();
-        }
         if advancedResult is error {
             listResult = trapListToolsFailure(advancedResult);
         } else {
-            ListToolsResult|error convertedResult = advancedResult.cloneWithType();
-            listResult = convertedResult is error ? error ServerError(convertedResult.message()) : convertedResult;
+            listResult = advancedResult;
         }
     } else if mcpService is AdvancedService {
         listResult = trapListToolsFailure(trap invokeOnListTools(mcpService));
@@ -263,7 +259,7 @@ isolated function listProtocolTools(Service|AdvancedService|StreamableHttpServic
 
 isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
         CallToolParams callParams, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpServiceConfiguration serviceConfig) returns ProtocolCallToolResult|InputRequiredResult|error {
+        StreamableHttpServiceConfiguration serviceConfig) returns CallToolResult|InputRequiredResult|error {
     CallToolParams applicationParams = callParams.clone();
     Meta applicationMeta = {...(callParams._meta ?: {})};
     foreach string metaKey in [PROTOCOL_META_KEY, CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LOG_LEVEL_META_KEY] {
@@ -276,10 +272,10 @@ isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService
     }
     CallToolResult|error callResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
-        CallToolResult|ProtocolCallToolResult|InputRequiredResult|error advancedResult =
+        CallToolResult|InputRequiredResult|error advancedResult =
                 trap invokeAdvancedOnCallTool(mcpService, applicationParams, (), requestHeaders, httpRequest,
                     extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
-        if advancedResult is ProtocolCallToolResult|InputRequiredResult {
+        if advancedResult is InputRequiredResult {
             return advancedResult;
         }
         if advancedResult is error {
@@ -290,7 +286,7 @@ isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService
     } else if mcpService is AdvancedService {
         callResult = trap invokeOnCallTool(mcpService, applicationParams, ());
     } else if mcpService is Service|StreamableHttpService {
-        ProtocolCallToolResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
+        CallToolResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
                 applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
         if structuredResult is error {

@@ -56,9 +56,9 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
     private static final String HTTP_REQUEST_DISPLAY = "http:Request";
     private static final String SESSION_DISPLAY = "mcp:Session";
     private static final String CALL_TOOL_RESULT_DISPLAY =
-            "mcp:CallToolResult|mcp:ProtocolCallToolResult|mcp:InputRequiredResult|mcp:ServerError";
+            "mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError";
     private static final String LIST_TOOLS_RESULT_DISPLAY =
-            "mcp:ListToolsResult|mcp:ProtocolListToolsResult|mcp:ServerError";
+            "mcp:ListToolsResult|mcp:ServerError";
     private static final String SUBSCRIPTION_RESULT_DISPLAY =
             "stream<mcp:JsonRpcNotification, error?>|mcp:ServerError";
 
@@ -183,9 +183,8 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         String expectedDisplay = isCallTool ? CALL_TOOL_RESULT_DISPLAY : LIST_TOOLS_RESULT_DISPLAY;
         boolean validResult = isCallTool
                 ? returnTypeContainsAny(functionType, Utils.CALL_TOOL_RESULT_TYPE_NAME,
-                    Utils.PROTOCOL_CALL_TOOL_RESULT_TYPE_NAME, Utils.INPUT_REQUIRED_RESULT_TYPE_NAME)
-                : returnTypeContainsAny(functionType, Utils.LIST_TOOLS_RESULT_TYPE_NAME,
-                    Utils.PROTOCOL_LIST_TOOLS_RESULT_TYPE_NAME);
+                    Utils.INPUT_REQUIRED_RESULT_TYPE_NAME)
+                : returnTypeContainsAny(functionType, Utils.LIST_TOOLS_RESULT_TYPE_NAME);
         if (!validResult) {
             report(context, CompilationDiagnostic.ADVANCED_INVALID_RETURN_TYPE, location, methodName, expectedDisplay);
         }

@@ -20,12 +20,12 @@ import ballerina/mcp;
     info: {name: "modern-advanced", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9325) {
-    remote isolated function onListTools() returns mcp:ProtocolListToolsResult|mcp:ServerError {
+    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {tools: []};
     }
 
     remote isolated function onCallTool(mcp:CallToolParams params)
-            returns mcp:ProtocolCallToolResult|mcp:InputRequiredResult|mcp:ServerError {
+            returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
         return {resultType: "complete", content: []};
     }
 

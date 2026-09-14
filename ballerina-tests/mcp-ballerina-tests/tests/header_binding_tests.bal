@@ -155,7 +155,7 @@ function testHeaderParamsExcludedFromSchema() returns error? {
         if tool.name != "readAuth" {
             continue;
         }
-        map<record {}> properties = check tool.inputSchema.properties.ensureType();
+        map<anydata> properties = tool.inputSchema.properties ?: {};
         test:assertTrue(properties.hasKey("name"), msg = "tool argument must stay in the schema");
         test:assertFalse(properties.hasKey("authorization"),
             msg = "@http:Header parameter must be excluded from the tool input schema");

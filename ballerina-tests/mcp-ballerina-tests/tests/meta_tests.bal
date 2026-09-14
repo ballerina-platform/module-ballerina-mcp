@@ -52,7 +52,7 @@ function testMetaToolSchemaExcludesMetaParam() returns error? {
     test:assertEquals(result.tools[0].name, "greetWithMeta");
 
     var inputSchema = result.tools[0].inputSchema;
-    map<record {}> properties = check inputSchema.properties.ensureType();
+    map<anydata> properties = inputSchema.properties ?: {};
     test:assertTrue(properties.hasKey("name"),
         msg = "Schema must include the 'name' data parameter");
     test:assertTrue(properties.hasKey("greeting"),

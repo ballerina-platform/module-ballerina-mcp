@@ -62,19 +62,24 @@ Use `@mcp:Tool {outputSchema: ...}` to replace the generated schema metadata. Se
 its generated output schema. Schemas remain metadata until native Ballerina JSON Schema validation is available, so the
 runtime does not evaluate a manual schema against the returned value.
 
-`StreamableHttpAdvancedService` accepts its existing `ListToolsResult` and `CallToolResult` handlers. Modern handlers may
-instead return `ProtocolListToolsResult` and `ProtocolCallToolResult|InputRequiredResult`. When a handler returns a union
-of complete and input-required results, include the appropriate `resultType` in the record constructor to disambiguate it.
+`ToolDefinition.outputSchema` accepts a general `OutputSchema`, while `inputSchema` retains its object-root `JsonSchema`
+type. `CallToolResult.structuredContent` accepts any JSON value. Consequently, `listTools(headers, cursor)` preserves
+modern output schemas and freshness hints, and `callTool(params, headers)` preserves arbitrary structured output without
+requiring separate modern result types. Explicit legacy mode retains the old wire path when interoperating with a server
+that supports it; scalar schemas and structured values are emitted only for modern requests.
 
-Use `listToolsWithSchemas(headers, cursor)` to preserve general output schemas, and `callToolWithResult(params, headers)`
-to preserve arbitrary JSON structured output, including arrays, scalars, and explicit null. Input schemas still have an
-object root. Existing `listTools()` and `callTool()` keep their original return types when auto mode selects the modern
-protocol. `listTools()` omits general output schemas that cannot fit the historical object-root schema type.
-`callTool()` preserves object-valued structured content and omits array, scalar, and null structured values while keeping
-the text content. Use the modern methods when the application needs those fields. Explicit legacy mode retains the old
-wire path when interoperating with a server that supports it.
+This widens two public fields from their earlier object-only types. Code that assigned `outputSchema` directly to
+`JsonSchema` should use `OutputSchema`, and code that assumed `structuredContent` was a map should narrow the returned
+`json` value first. Use member access or `hasKey("structuredContent")` when explicit JSON null must be distinguished from
+an absent field.
 
-`callToolWithResult()` performs one logical tool request and exposes an input-required result to the application.
+`StreamableHttpAdvancedService` uses the same `ListToolsResult` and `CallToolResult` types for both protocol versions. An
+`onCallTool` handler may additionally return `InputRequiredResult`. When its return type is a union of complete and
+input-required results, include the appropriate `resultType` in the record constructor to disambiguate it.
+
+`callToolWithResult()` exists only for manual continuation handling: it performs one logical tool request and exposes an
+input-required result to the application. Ordinary completed calls, including calls with structured output, should use
+`callTool()`.
 To continue, provide `inputResponses` and echo `requestState` exactly in the next call. A fresh JSON-RPC ID is assigned
 on every continuation. When using `callTool()`, an optional `inputHandler` callback can gather the requested input;
 `maxInputRounds` bounds automatic continuation (default: 8). Declare matching client capabilities in `initialize()`.
@@ -304,10 +309,10 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
    declared to support modern change-notification subscriptions; no other `remote` methods are allowed.
 2. `onCallTool` must accept exactly one `mcp:CallToolParams` parameter, and may accept an `mcp:Session?` parameter for stateful services. An `mcp:Meta?` parameter is not accepted here, unlike on the tools of a basic service; read the metadata from the `_meta` field of the `mcp:CallToolParams` value instead.
 3. As with the tools of an `mcp:StreamableHttpService`, both methods can additionally bind HTTP request information, such as `@http:Header` parameters, an `http:Headers` parameter, or an `http:Request` parameter.
-4. Existing handlers may return `mcp:ListToolsResult` and `mcp:CallToolResult`. To expose general output schemas, raw
-   structured values, or input-required continuations, return `mcp:ProtocolListToolsResult` and
-   `mcp:ProtocolCallToolResult|mcp:InputRequiredResult` respectively. Modern-only results are adapted to the legacy wire
-   shape when the same auto-mode service receives a legacy request.
+4. Handlers return `mcp:ListToolsResult` and `mcp:CallToolResult`. An `onCallTool` handler that needs manual modern
+   continuations may return `mcp:CallToolResult|mcp:InputRequiredResult`. General output schemas and raw structured values
+   use the standard result types and are adapted to the legacy wire shape when an auto-mode service receives a legacy
+   request.
 
 ### MCP Client Implementation
 

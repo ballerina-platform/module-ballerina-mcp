@@ -425,6 +425,10 @@ public type ListToolsResult record {
     *PaginatedResult;
     # A list of tools available on the server.
     ToolDefinition[] tools;
+    # Freshness hint in milliseconds. Modern servers default this to zero.
+    int ttlMs?;
+    # Whether a modern response may be shared between callers.
+    "public"|"private" cacheScope?;
 };
 
 # A content block that can be text, image, audio, resource link, or embedded resource.
@@ -433,10 +437,12 @@ public type ContentBlock TextContent|ImageContent|AudioContent|ResourceLink|Embe
 # The server's response to a tool call.
 public type CallToolResult record {
     *Result;
+    # Identifies a completed modern result when disambiguating it from InputRequiredResult.
+    "complete" resultType?;
     # A list of content objects that represent the unstructured result of the tool call.
     ContentBlock[] content;
-    # An optional JSON object that represents the structured result of the tool call.
-    map<anydata> structuredContent?;
+    # An optional JSON value that represents the structured result of the tool call.
+    json structuredContent?;
     # Whether the tool call ended in an error.
     # If not set, this is assumed to be false (the call was successful).
     boolean isError?;
@@ -533,8 +539,8 @@ public type ToolDefinition record {
     JsonSchema inputSchema;
     # Execution-related properties for this tool.
     ToolExecution execution?;
-    # An optional JSON Schema object defining the structure of the tool's output.
-    JsonSchema outputSchema?;
+    # An optional general JSON Schema object defining the tool's structured output.
+    OutputSchema outputSchema?;
     # Optional additional tool information.
     ToolAnnotations annotations?;
 };
@@ -690,11 +696,10 @@ public type StreamableHttpService distinct service object {
 };
 
 # Defines an MCP service interface exposed over the Streamable HTTP transport with manual control
-# over tool listing and invocation. Existing handlers may return `ListToolsResult` and
-# `CallToolResult`. Modern handlers may instead return `ProtocolListToolsResult` and
-# `ProtocolCallToolResult|InputRequiredResult`. An optional `onSubscribe` method publishes modern
-# change notifications. In addition to protocol parameters, handlers may bind transport-specific
-# request information via `@http:Header`, `http:Headers`, or `http:Request`. The compiler plugin
-# validates the method shapes.
+# over tool listing and invocation. Handlers return `ListToolsResult` and
+# `CallToolResult|InputRequiredResult`. An optional `onSubscribe` method publishes modern change
+# notifications. In addition to protocol parameters, handlers may bind transport-specific request
+# information via `@http:Header`, `http:Headers`, or `http:Request`. The compiler plugin validates
+# the method shapes.
 public type StreamableHttpAdvancedService distinct service object {
 };

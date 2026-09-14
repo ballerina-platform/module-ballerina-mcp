@@ -144,14 +144,14 @@ function testToolDefinition() {
             required: ["x", "y"]
         },
         outputSchema: {
-            'type: "object",
-            properties: {"result": {}}
+            "type": "object",
+            "properties": {"result": {}}
         },
         execution: {taskSupport: "optional"},
         icons: [{mimeType: "image/png", data: "icon", size: 32}]
     };
     test:assertEquals(tool.title, "Calculate");
-    test:assertEquals(tool.outputSchema?.'type, "object");
+    test:assertEquals(tool.outputSchema is OutputSchema ? tool.outputSchema["type"] : (), "object");
     test:assertEquals(tool.execution?.taskSupport, "optional");
     test:assertEquals((tool.icons ?: [])[0].size, 32);
 }
@@ -186,7 +186,7 @@ function testCallToolResult() {
     };
     test:assertEquals(result.content.length(), 2);
     test:assertTrue(result.content[1] is ResourceLink);
-    test:assertTrue(result.structuredContent != ());
+    test:assertTrue(result.hasKey("structuredContent"));
     test:assertEquals(result.isError, ());
 }
 

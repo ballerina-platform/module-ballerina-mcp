@@ -51,7 +51,7 @@ function testInlineListenerToolSchema() returns error? {
 
     var inputSchema = result.tools[0].inputSchema;
     test:assertEquals(inputSchema.'type, "object");
-    map<record {}> properties = check inputSchema.properties.ensureType();
+    map<anydata> properties = inputSchema.properties ?: {};
     test:assertTrue(properties.hasKey("name"),
         msg = "Schema must include the 'name' parameter — compiler plugin generates the schema");
 }

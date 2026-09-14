@@ -40,44 +40,6 @@ public type OutputSchema record {
     string \$schema?;
 };
 
-# Tool definition supporting modern output schemas without widening ToolDefinition.
-public type ProtocolToolDefinition record {
-    *BaseMetadata;
-    *Icons;
-    # Description of the tool.
-    string description?;
-    # Object-root JSON Schema describing the tool arguments.
-    JsonSchema inputSchema;
-    # JSON Schema describing the structured result.
-    OutputSchema outputSchema?;
-    # Optional tool behavior hints.
-    ToolAnnotations annotations?;
-};
-
-# Tool list with modern schema support and freshness hints.
-public type ProtocolListToolsResult record {
-    *PaginatedResult;
-    # Available tools.
-    ProtocolToolDefinition[] tools;
-    # Freshness hint in milliseconds; zero disables caching.
-    int ttlMs = 0;
-    # Whether a response may be shared between callers.
-    "public"|"private" cacheScope = "private";
-};
-
-# Completed tool result preserving all JSON structured values, including null.
-public type ProtocolCallToolResult record {
-    *Result;
-    # Identifies a completed result.
-    "complete" resultType = "complete";
-    # Unstructured content for the caller.
-    ContentBlock[] content;
-    # Structured result, preserving arbitrary JSON values and explicit null.
-    json structuredContent?;
-    # Whether the tool reported an execution error.
-    boolean isError?;
-};
-
 # Server discovery response. Identity is carried in _meta.
 public type DiscoverResult record {
     *Result;

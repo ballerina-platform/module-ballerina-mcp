@@ -29,13 +29,13 @@ isolated function invokeOnCallTool(AdvancedService 'service, CallToolParams para
 
 isolated function invokeAdvancedOnListTools(StreamableHttpAdvancedService 'service, http:Headers headers,
         http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional)
-        returns ListToolsResult|ProtocolListToolsResult|Error = @java:Method {
+        returns ListToolsResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
 isolated function invokeAdvancedOnCallTool(StreamableHttpAdvancedService 'service, CallToolParams params,
         Session? session, http:Headers headers, http:Request request, map<string[]> headerValues,
-        boolean treatNilableAsOptional) returns CallToolResult|ProtocolCallToolResult|InputRequiredResult|Error = @java:Method {
+        boolean treatNilableAsOptional) returns CallToolResult|InputRequiredResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
@@ -45,7 +45,7 @@ isolated function listToolsForRemoteFunctions(Service|StreamableHttpService 'ser
 } external;
 
 isolated function listProtocolToolsForRemoteFunctions(Service|StreamableHttpService 'service,
-        typedesc<ProtocolListToolsResult> t = <>) returns t|Error = @java:Method {
+        typedesc<ListToolsResult> t = <>) returns t|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
@@ -57,7 +57,7 @@ isolated function callToolForRemoteFunctions(Service|StreamableHttpService 'serv
 
 isolated function callProtocolToolForRemoteFunctions(Service|StreamableHttpService 'service, CallToolParams params,
         Session? session, http:Headers headers, http:Request request, map<string[]> headerValues,
-        boolean treatNilableAsOptional, typedesc<ProtocolCallToolResult> t = <>) returns t|error = @java:Method {
+        boolean treatNilableAsOptional, typedesc<CallToolResult> t = <>) returns t|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 

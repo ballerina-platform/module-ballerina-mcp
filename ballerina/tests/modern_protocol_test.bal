@@ -19,8 +19,8 @@ import ballerina/test;
 
 @StreamableHttpServiceConfig {info: {name: "modern-test", version: "1"}}
 service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
-    remote isolated function onListTools() returns ProtocolListToolsResult {
-        ProtocolListToolsResult handlerResult = {
+    remote isolated function onListTools() returns ListToolsResult {
+        ListToolsResult handlerResult = {
             tools: [
                 {name: "scalar", inputSchema: {'type: "object"}, outputSchema: {"type": "integer"}},
                 {
@@ -50,7 +50,7 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
         return handlerResult.cloneReadOnly();
     }
 
-    remote isolated function onCallTool(CallToolParams callParams) returns ProtocolCallToolResult|InputRequiredResult {
+    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult {
         if callParams.name == "scalar" || callParams.name == "schemaMetadata" {
             return {resultType: "complete", content: [], structuredContent: 42};
         }
@@ -153,18 +153,35 @@ function testModernHeaderValidationAndUnknownMethod() returns error? {
 function testModernClientWideResultAndContinuation() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     check modernClient->initialize();
-    ProtocolListToolsResult toolList = check modernClient->listToolsWithSchemas();
+    ListToolsResult toolList = check modernClient->listTools();
     test:assertEquals(toolList.tools.length(), 6);
-    ProtocolCallToolResult|InputRequiredResult scalarResult = check modernClient->callToolWithResult({name: "scalar"});
-    test:assertTrue(scalarResult is ProtocolCallToolResult);
-    if scalarResult is ProtocolCallToolResult {
-        test:assertEquals(scalarResult?.structuredContent, 42);
-    }
+    test:assertEquals(toolList.ttlMs, 0);
+    test:assertEquals(toolList.cacheScope, "private");
+    CallToolResult scalarResult = check modernClient->callTool({name: "scalar"});
+    test:assertEquals(scalarResult["structuredContent"], 42);
     var echoResult = check modernClient->callToolWithResult({name: "echo", arguments: {"region": "世界"}});
-    test:assertTrue(echoResult is ProtocolCallToolResult);
+    test:assertTrue(echoResult is CallToolResult);
     CallToolResult continuedResult = check modernClient->callTool({name: "continue"});
     test:assertEquals(continuedResult.content[0], <TextContent>{'type: "text", text: "opaque-state"});
     check modernClient->close();
+
+    StreamableHttpClient legacyClient = check new ("http://localhost:3205/mcp", protocolMode = "legacy");
+    check legacyClient->initialize();
+    ListToolsResult legacyTools = check legacyClient->listTools();
+    ToolDefinition? legacyScalar = ();
+    foreach ToolDefinition toolInfo in legacyTools.tools {
+        if toolInfo.name == "scalar" {
+            legacyScalar = toolInfo;
+            break;
+        }
+    }
+    test:assertTrue(legacyScalar is ToolDefinition);
+    if legacyScalar is ToolDefinition {
+        test:assertEquals(legacyScalar.outputSchema, ());
+    }
+    CallToolResult legacyScalarResult = check legacyClient->callTool({name: "scalar"});
+    test:assertFalse(legacyScalarResult.hasKey("structuredContent"));
+    check legacyClient->close();
 }
 
 @test:Config {}
@@ -196,8 +213,8 @@ function testModernOriginAndDelete() returns error? {
 function testSchemasRemainMetadataUntilLanguageValidationIsAvailable() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     var resultValue = check modernClient->callToolWithResult({name: "schemaMetadata", arguments: {"value": "unvalidated"}});
-    test:assertTrue(resultValue is ProtocolCallToolResult);
-    if resultValue is ProtocolCallToolResult {
+    test:assertTrue(resultValue is CallToolResult);
+    if resultValue is CallToolResult {
         test:assertEquals(resultValue?.structuredContent, 42);
     }
     check modernClient->close();
@@ -207,16 +224,16 @@ function testSchemasRemainMetadataUntilLanguageValidationIsAvailable() returns e
 function testRegularServicesProduceRawStructuredOutputOnlyForModernRequests() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3207/regular", protocolMode = "modern");
     check modernClient->initialize();
-    ProtocolListToolsResult modernTools = check modernClient->listToolsWithSchemas();
-    map<ProtocolToolDefinition> toolsByName = {};
-    foreach ProtocolToolDefinition toolInfo in modernTools.tools {
+    ListToolsResult modernTools = check modernClient->listTools();
+    map<ToolDefinition> toolsByName = {};
+    foreach ToolDefinition toolInfo in modernTools.tools {
         toolsByName[toolInfo.name] = toolInfo;
     }
-    ProtocolToolDefinition stringTool = check toolsByName["stringValue"].ensureType();
-    ProtocolToolDefinition arrayTool = check toolsByName["arrayValue"].ensureType();
-    ProtocolToolDefinition recordTool = check toolsByName["recordValue"].ensureType();
-    ProtocolToolDefinition nullableTool = check toolsByName["nullableValue"].ensureType();
-    ProtocolToolDefinition textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
+    ToolDefinition stringTool = check toolsByName["stringValue"].ensureType();
+    ToolDefinition arrayTool = check toolsByName["arrayValue"].ensureType();
+    ToolDefinition recordTool = check toolsByName["recordValue"].ensureType();
+    ToolDefinition nullableTool = check toolsByName["nullableValue"].ensureType();
+    ToolDefinition textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
     OutputSchema stringSchema = check stringTool.outputSchema.ensureType();
     OutputSchema arraySchema = check arrayTool.outputSchema.ensureType();
     OutputSchema recordSchema = check recordTool.outputSchema.ensureType();
@@ -227,32 +244,17 @@ function testRegularServicesProduceRawStructuredOutputOnlyForModernRequests() re
     test:assertTrue(nullableSchema.hasKey("anyOf"));
     test:assertEquals(textOnlyTool.outputSchema, ());
 
-    var stringResult = check modernClient->callToolWithResult({name: "stringValue"});
-    test:assertTrue(stringResult is ProtocolCallToolResult);
-    if stringResult is ProtocolCallToolResult {
-        test:assertEquals(stringResult["structuredContent"], "hello");
-    }
-    var arrayResult = check modernClient->callToolWithResult({name: "arrayValue"});
-    test:assertTrue(arrayResult is ProtocolCallToolResult);
-    if arrayResult is ProtocolCallToolResult {
-        test:assertEquals(arrayResult["structuredContent"], <json>[1, 2, 3]);
-    }
-    var recordResult = check modernClient->callToolWithResult({name: "recordValue"});
-    test:assertTrue(recordResult is ProtocolCallToolResult);
-    if recordResult is ProtocolCallToolResult {
-        test:assertEquals(recordResult["structuredContent"], <json>{name: "Alice", age: 30});
-    }
-    var nullableResult = check modernClient->callToolWithResult({name: "nullableValue"});
-    test:assertTrue(nullableResult is ProtocolCallToolResult);
-    if nullableResult is ProtocolCallToolResult {
-        test:assertTrue(nullableResult.hasKey("structuredContent"));
-        test:assertEquals(nullableResult["structuredContent"], ());
-    }
-    var textOnlyResult = check modernClient->callToolWithResult({name: "textOnlyValue"});
-    test:assertTrue(textOnlyResult is ProtocolCallToolResult);
-    if textOnlyResult is ProtocolCallToolResult {
-        test:assertFalse(textOnlyResult.hasKey("structuredContent"));
-    }
+    CallToolResult stringResult = check modernClient->callTool({name: "stringValue"});
+    test:assertEquals(stringResult["structuredContent"], "hello");
+    CallToolResult arrayResult = check modernClient->callTool({name: "arrayValue"});
+    test:assertEquals(arrayResult["structuredContent"], <json>[1, 2, 3]);
+    CallToolResult recordResult = check modernClient->callTool({name: "recordValue"});
+    test:assertEquals(recordResult["structuredContent"], <json>{name: "Alice", age: 30});
+    CallToolResult nullableResult = check modernClient->callTool({name: "nullableValue"});
+    test:assertTrue(nullableResult.hasKey("structuredContent"));
+    test:assertEquals(nullableResult["structuredContent"], ());
+    CallToolResult textOnlyResult = check modernClient->callTool({name: "textOnlyValue"});
+    test:assertFalse(textOnlyResult.hasKey("structuredContent"));
     check modernClient->close();
 
     StreamableHttpClient legacyClient = check new ("http://localhost:3207/regular", protocolMode = "legacy");
@@ -260,16 +262,13 @@ function testRegularServicesProduceRawStructuredOutputOnlyForModernRequests() re
     ListToolsResult legacyTools = check legacyClient->listTools();
     test:assertTrue(legacyTools.tools.every(toolInfo => toolInfo.outputSchema is ()));
     CallToolResult legacyResult = check legacyClient->callTool({name: "arrayValue"});
-    test:assertEquals(legacyResult.structuredContent, ());
+    test:assertFalse(legacyResult.hasKey("structuredContent"));
     check legacyClient->close();
 
     StreamableHttpClient genericClient = check new ("http://localhost:3207/generic", protocolMode = "modern");
     check genericClient->initialize();
-    var booleanResult = check genericClient->callToolWithResult({name: "booleanValue"});
-    test:assertTrue(booleanResult is ProtocolCallToolResult);
-    if booleanResult is ProtocolCallToolResult {
-        test:assertEquals(booleanResult["structuredContent"], true);
-    }
+    CallToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
+    test:assertEquals(booleanResult["structuredContent"], true);
     check genericClient->close();
 }
 
