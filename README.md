@@ -15,8 +15,9 @@ The Ballerina MCP library implements both client and server-side functionality, 
 ## MCP 2026-07-28
 
 Version 1.4.0 adds automatic modern/legacy protocol selection, modern discovery, per-request metadata and headers,
-modern tool-result APIs, bounded input-required continuations, and POST-based subscriptions. Existing session-dependent
-services remain on the legacy path in auto mode. See the [protocol compatibility and migration guide](ballerina/README.md#protocol-versions-and-compatibility).
+automatic output schemas and raw structured results for regular services, modern tool-result APIs, bounded
+input-required continuations, and POST-based subscriptions. Existing session-dependent services remain on the legacy
+path in auto mode. See the [protocol compatibility and migration guide](ballerina/README.md#protocol-versions-and-compatibility).
 General JSON Schema evaluation is deferred until Ballerina language support is available; existing type binding remains.
 
 ### Interoperability checks
