@@ -236,7 +236,7 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
 isolated function listProtocolTools(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
         http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig)
         returns ProtocolListToolsResult|error {
-    ListToolsResult|Error listResult;
+    ListToolsResult|Error listResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
         ListToolsResult|ProtocolListToolsResult|error advancedResult =
                 trap invokeAdvancedOnListTools(mcpService, requestHeaders, httpRequest,
@@ -253,7 +253,7 @@ isolated function listProtocolTools(Service|AdvancedService|StreamableHttpServic
     } else if mcpService is AdvancedService {
         listResult = trapListToolsFailure(trap invokeOnListTools(mcpService));
     } else if mcpService is Service|StreamableHttpService {
-        listResult = trapListToolsFailure(trap listToolsForRemoteFunctions(mcpService));
+        return listProtocolToolsForRemoteFunctions(mcpService);
     }
     else {
         return error("Unsupported MCP service");
@@ -274,7 +274,7 @@ isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService
     } else {
         applicationParams._meta = applicationMeta;
     }
-    CallToolResult|error callResult;
+    CallToolResult|error callResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
         CallToolResult|ProtocolCallToolResult|InputRequiredResult|error advancedResult =
                 trap invokeAdvancedOnCallTool(mcpService, applicationParams, (), requestHeaders, httpRequest,
@@ -290,11 +290,13 @@ isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService
     } else if mcpService is AdvancedService {
         callResult = trap invokeOnCallTool(mcpService, applicationParams, ());
     } else if mcpService is Service|StreamableHttpService {
-        callResult = trap callToolForRemoteFunctions(mcpService, applicationParams, (), requestHeaders, httpRequest,
+        ProtocolCallToolResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
+                applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
-        if callResult is error {
-            callResult = toToolExecutionError(callResult, callParams.name);
+        if structuredResult is error {
+            return toToolExecutionError(structuredResult, callParams.name).cloneWithType();
         }
+        return structuredResult;
     }
     else {
         return error("Unsupported MCP service");

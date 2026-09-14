@@ -595,6 +595,11 @@ public type McpToolConfig record {|
     string description?;
     # The JSON schema for the tool's parameters.
     map<json> schema?;
+    # The JSON schema generated from, or explicitly assigned for, the successful return value.
+    # It is advertised only to clients using the modern protocol.
+    map<json> outputSchema?;
+    # Whether modern requests should receive structured output for this tool.
+    boolean structuredOutput = true;
 |};
 
 # Annotation to mark a function as an MCP tool configuration.

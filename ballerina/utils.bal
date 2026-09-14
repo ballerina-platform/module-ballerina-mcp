@@ -91,3 +91,55 @@ isolated function applicationResult(Result resultValue) returns Result {
     }
     return applicationValue;
 }
+
+// Adapts a modern tool list to the established client API. Scalar output schemas cannot be
+// represented by ToolDefinition, whose schema type has historically required an object root.
+isolated function legacyCompatibleToolList(ProtocolListToolsResult protocolResult) returns ListToolsResult {
+    ToolDefinition[] tools = [];
+    foreach ProtocolToolDefinition protocolTool in protocolResult.tools {
+        ToolDefinition toolInfo = {
+            name: protocolTool.name,
+            inputSchema: protocolTool.inputSchema
+        };
+        if protocolTool.title is string {
+            toolInfo.title = protocolTool.title;
+        }
+        if protocolTool.icons is Icon[] {
+            toolInfo.icons = protocolTool.icons;
+        }
+        if protocolTool.description is string {
+            toolInfo.description = protocolTool.description;
+        }
+        if protocolTool.annotations is ToolAnnotations {
+            toolInfo.annotations = protocolTool.annotations;
+        }
+        tools.push(toolInfo);
+    }
+    ListToolsResult resultValue = {tools};
+    if protocolResult.nextCursor is Cursor {
+        resultValue.nextCursor = protocolResult.nextCursor;
+    }
+    Result applicationValue = applicationResult(protocolResult);
+    if applicationValue._meta is record {} {
+        resultValue._meta = applicationValue._meta;
+    }
+    return resultValue;
+}
+
+// Adapts a modern result to the established client API. Preserve object structured content,
+// which fits the historical type, and leave scalar, array, and null values to callToolWithResult().
+isolated function legacyCompatibleToolResult(ProtocolCallToolResult protocolResult) returns CallToolResult {
+    CallToolResult resultValue = {content: protocolResult.content};
+    json structuredContent = protocolResult["structuredContent"];
+    if structuredContent is map<json> {
+        resultValue.structuredContent = structuredContent;
+    }
+    if protocolResult.isError is boolean {
+        resultValue.isError = protocolResult.isError;
+    }
+    Result applicationValue = applicationResult(protocolResult);
+    if applicationValue._meta is record {} {
+        resultValue._meta = applicationValue._meta;
+    }
+    return resultValue;
+}

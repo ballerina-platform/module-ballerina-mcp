@@ -37,15 +37,21 @@ public class ModifierContext {
 
 record ToolAnnotationConfig(
         String description,
-        String schema) {
+        String schema,
+        String outputSchema,
+        String structuredOutput) {
 
     public static final String DESCRIPTION_FIELD_NAME = "description";
     public static final String SCHEMA_FIELD_NAME = "schema";
+    public static final String OUTPUT_SCHEMA_FIELD_NAME = "outputSchema";
+    public static final String STRUCTURED_OUTPUT_FIELD_NAME = "structuredOutput";
 
     public String get(String field) {
         return switch (field) {
             case DESCRIPTION_FIELD_NAME -> description();
             case SCHEMA_FIELD_NAME -> schema();
+            case OUTPUT_SCHEMA_FIELD_NAME -> outputSchema();
+            case STRUCTURED_OUTPUT_FIELD_NAME -> structuredOutput();
             default -> null;
         };
     }

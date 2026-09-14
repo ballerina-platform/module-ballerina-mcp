@@ -44,9 +44,20 @@ isolated function listToolsForRemoteFunctions(Service|StreamableHttpService 'ser
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
+isolated function listProtocolToolsForRemoteFunctions(Service|StreamableHttpService 'service,
+        typedesc<ProtocolListToolsResult> t = <>) returns t|Error = @java:Method {
+    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+} external;
+
 isolated function callToolForRemoteFunctions(Service|StreamableHttpService 'service, CallToolParams params,
         Session? session, http:Headers headers, http:Request request, map<string[]> headerValues,
         boolean treatNilableAsOptional, typedesc<CallToolResult> t = <>) returns t|error = @java:Method {
+    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+} external;
+
+isolated function callProtocolToolForRemoteFunctions(Service|StreamableHttpService 'service, CallToolParams params,
+        Session? session, http:Headers headers, http:Request request, map<string[]> headerValues,
+        boolean treatNilableAsOptional, typedesc<ProtocolCallToolResult> t = <>) returns t|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 

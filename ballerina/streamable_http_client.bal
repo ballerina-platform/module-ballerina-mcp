@@ -159,11 +159,7 @@ public distinct isolated client class StreamableHttpClient {
         check self.ensureInitialized(headers);
         if self.isModern() {
             ProtocolListToolsResult protocolResult = check self->listToolsWithSchemas(headers);
-            ListToolsResult|error compatibilityResult = applicationResult(protocolResult).cloneWithType();
-            if compatibilityResult is error {
-                return error ListToolsError("Tool output schemas require listToolsWithSchemas()", compatibilityResult);
-            }
-            return compatibilityResult.cloneReadOnly();
+            return legacyCompatibleToolList(protocolResult).cloneReadOnly();
         }
         ListToolsRequest listToolsRequest = {};
 
@@ -190,11 +186,7 @@ public distinct isolated client class StreamableHttpClient {
             foreach int roundNumber in 0 ... self.maxInputRounds {
                 ProtocolCallToolResult|InputRequiredResult callResult = check self->callToolWithResult(currentParams, headers);
                 if callResult is ProtocolCallToolResult {
-                    CallToolResult|error compatibilityResult = applicationResult(callResult).cloneWithType();
-                    if compatibilityResult is error {
-                        return error ToolCallError("Structured output requires callToolWithResult()", compatibilityResult);
-                    }
-                    return compatibilityResult.cloneReadOnly();
+                    return legacyCompatibleToolResult(callResult).cloneReadOnly();
                 }
                 if roundNumber == self.maxInputRounds {
                     return error ToolCallError("Maximum input-required continuation rounds exceeded", inputRequired = callResult);
@@ -322,7 +314,10 @@ public distinct isolated client class StreamableHttpClient {
         }
         Result wireResult = check self.sendModernRequest(REQUEST_LIST_TOOLS, listParams, headers);
         ProtocolListToolsResult|error listResult = wireResult.cloneWithType();
-        if listResult is error || wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
+        if listResult is error {
+            return error ListToolsError("Invalid modern tools/list result: " + listResult.message(), listResult);
+        }
+        if wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
                 !wireResult.hasKey("cacheScope") {
             return error ListToolsError("Invalid modern tools/list result");
         }

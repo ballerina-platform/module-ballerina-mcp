@@ -79,6 +79,37 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
 
 final http:Client modernHttpClient = check new ("http://localhost:3205");
 
+listener StreamableHttpListener structuredOutputListener = check new (3207);
+
+type StructuredPerson record {|
+    string name;
+    int age;
+|};
+
+@StreamableHttpServiceConfig {info: {name: "regular-structured-output", version: "1"}}
+service StreamableHttpService /regular on structuredOutputListener {
+    @Tool {description: "string", schema: {'type: "object"}, outputSchema: {"type": "string"}}
+    remote isolated function stringValue() returns string => "hello";
+
+    @Tool {description: "array", schema: {'type: "object"}, outputSchema: {"type": "array", "items": {"type": "integer"}}}
+    remote isolated function arrayValue() returns int[] => [1, 2, 3];
+
+    @Tool {description: "record", schema: {'type: "object"}, outputSchema: {"type": "object"}}
+    remote isolated function recordValue() returns StructuredPerson => {name: "Alice", age: 30};
+
+    @Tool {description: "nullable", schema: {'type: "object"}, outputSchema: {"anyOf": [{"type": "string"}, {"type": "null"}]}}
+    remote isolated function nullableValue() returns string? => ();
+
+    @Tool {description: "text", schema: {'type: "object"}, outputSchema: {"type": "string"}, structuredOutput: false}
+    remote isolated function textOnlyValue() returns string => "text only";
+}
+
+@ServiceConfig {info: {name: "generic-structured-output", version: "1"}}
+service Service /generic on structuredOutputListener {
+    @Tool {description: "boolean", schema: {'type: "object"}, outputSchema: {"type": "boolean"}}
+    remote isolated function booleanValue() returns boolean => true;
+}
+
 isolated function modernPost(string methodName, RequestParams requestParams = {}, map<string|string[]> extraHeaders = {})
         returns http:Response|error {
     requestParams._meta = {
@@ -170,6 +201,76 @@ function testSchemasRemainMetadataUntilLanguageValidationIsAvailable() returns e
         test:assertEquals(resultValue?.structuredContent, 42);
     }
     check modernClient->close();
+}
+
+@test:Config {}
+function testRegularServicesProduceRawStructuredOutputOnlyForModernRequests() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3207/regular", protocolMode = "modern");
+    check modernClient->initialize();
+    ProtocolListToolsResult modernTools = check modernClient->listToolsWithSchemas();
+    map<ProtocolToolDefinition> toolsByName = {};
+    foreach ProtocolToolDefinition toolInfo in modernTools.tools {
+        toolsByName[toolInfo.name] = toolInfo;
+    }
+    ProtocolToolDefinition stringTool = check toolsByName["stringValue"].ensureType();
+    ProtocolToolDefinition arrayTool = check toolsByName["arrayValue"].ensureType();
+    ProtocolToolDefinition recordTool = check toolsByName["recordValue"].ensureType();
+    ProtocolToolDefinition nullableTool = check toolsByName["nullableValue"].ensureType();
+    ProtocolToolDefinition textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
+    OutputSchema stringSchema = check stringTool.outputSchema.ensureType();
+    OutputSchema arraySchema = check arrayTool.outputSchema.ensureType();
+    OutputSchema recordSchema = check recordTool.outputSchema.ensureType();
+    OutputSchema nullableSchema = check nullableTool.outputSchema.ensureType();
+    test:assertEquals(stringSchema["type"], "string");
+    test:assertEquals(arraySchema["type"], "array");
+    test:assertEquals(recordSchema["type"], "object");
+    test:assertTrue(nullableSchema.hasKey("anyOf"));
+    test:assertEquals(textOnlyTool.outputSchema, ());
+
+    var stringResult = check modernClient->callToolWithResult({name: "stringValue"});
+    test:assertTrue(stringResult is ProtocolCallToolResult);
+    if stringResult is ProtocolCallToolResult {
+        test:assertEquals(stringResult["structuredContent"], "hello");
+    }
+    var arrayResult = check modernClient->callToolWithResult({name: "arrayValue"});
+    test:assertTrue(arrayResult is ProtocolCallToolResult);
+    if arrayResult is ProtocolCallToolResult {
+        test:assertEquals(arrayResult["structuredContent"], <json>[1, 2, 3]);
+    }
+    var recordResult = check modernClient->callToolWithResult({name: "recordValue"});
+    test:assertTrue(recordResult is ProtocolCallToolResult);
+    if recordResult is ProtocolCallToolResult {
+        test:assertEquals(recordResult["structuredContent"], <json>{name: "Alice", age: 30});
+    }
+    var nullableResult = check modernClient->callToolWithResult({name: "nullableValue"});
+    test:assertTrue(nullableResult is ProtocolCallToolResult);
+    if nullableResult is ProtocolCallToolResult {
+        test:assertTrue(nullableResult.hasKey("structuredContent"));
+        test:assertEquals(nullableResult["structuredContent"], ());
+    }
+    var textOnlyResult = check modernClient->callToolWithResult({name: "textOnlyValue"});
+    test:assertTrue(textOnlyResult is ProtocolCallToolResult);
+    if textOnlyResult is ProtocolCallToolResult {
+        test:assertFalse(textOnlyResult.hasKey("structuredContent"));
+    }
+    check modernClient->close();
+
+    StreamableHttpClient legacyClient = check new ("http://localhost:3207/regular", protocolMode = "legacy");
+    check legacyClient->initialize();
+    ListToolsResult legacyTools = check legacyClient->listTools();
+    test:assertTrue(legacyTools.tools.every(toolInfo => toolInfo.outputSchema is ()));
+    CallToolResult legacyResult = check legacyClient->callTool({name: "arrayValue"});
+    test:assertEquals(legacyResult.structuredContent, ());
+    check legacyClient->close();
+
+    StreamableHttpClient genericClient = check new ("http://localhost:3207/generic", protocolMode = "modern");
+    check genericClient->initialize();
+    var booleanResult = check genericClient->callToolWithResult({name: "booleanValue"});
+    test:assertTrue(booleanResult is ProtocolCallToolResult);
+    if booleanResult is ProtocolCallToolResult {
+        test:assertEquals(booleanResult["structuredContent"], true);
+    }
+    check genericClient->close();
 }
 
 @test:Config {}
