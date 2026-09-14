@@ -30,7 +30,7 @@ service mcp:StreamableHttpService /stateful on interopListener {
 }
 
 @mcp:StreamableHttpServiceConfig {info: {name: "ballerina-modern-interop", version: "1.4.0"}, protocolMode: "modern"}
-service mcp:ProtocolService /modern on interopListener {
+service mcp:StreamableHttpAdvancedService /modern on interopListener {
     remote isolated function onListTools() returns mcp:ProtocolListToolsResult => {
         tools: [{name: "scalar", inputSchema: {'type: "object"}, outputSchema: {"type": "integer"}}]
     };

@@ -29,15 +29,12 @@ public type SubscriptionFilter record {|
     string[] resourceSubscriptions = [];
 |};
 
-# A protocol service that publishes tool-list changes. The transport applies filters and subscription IDs.
-# Implementations must release event-source resources when the returned stream is closed.
-public type SubscriptionService distinct service object {
-    *ProtocolService;
-    remote isolated function onSubscribe(SubscriptionFilter notifications) returns stream<JsonRpcNotification, error?>|ServerError;
-};
-
-isolated function invokeOnSubscribe(SubscriptionService mcpService, SubscriptionFilter notifications)
+isolated function invokeOnSubscribe(StreamableHttpAdvancedService mcpService, SubscriptionFilter notifications)
         returns stream<JsonRpcNotification, error?>|ServerError = @java:Method {
+    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+} external;
+
+isolated function hasSubscriptionHandler(StreamableHttpAdvancedService mcpService) returns boolean = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 

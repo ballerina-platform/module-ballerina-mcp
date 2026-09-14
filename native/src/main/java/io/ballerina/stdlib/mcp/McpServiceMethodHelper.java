@@ -114,12 +114,8 @@ public final class McpServiceMethodHelper {
         return env.getRuntime().callMethod(mcpService, "onSubscribe", null, notifications);
     }
 
-    public static Object invokeProtocolOnListTools(Environment env, BObject mcpService) {
-        return env.getRuntime().callMethod(mcpService, ON_LIST_TOOLS_METHOD, null);
-    }
-
-    public static Object invokeProtocolOnCallTool(Environment env, BObject mcpService, BMap<?, ?> callParams) {
-        return env.getRuntime().callMethod(mcpService, ON_CALL_TOOL_METHOD, null, callParams);
+    public static boolean hasSubscriptionHandler(BObject mcpService) {
+        return getRemoteMethod(mcpService, "onSubscribe").isPresent();
     }
 
     /** Returns whether a service has a session parameter that cannot receive nil. */

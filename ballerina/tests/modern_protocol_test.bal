@@ -18,7 +18,7 @@ import ballerina/http;
 import ballerina/test;
 
 @StreamableHttpServiceConfig {info: {name: "modern-test", version: "1"}}
-service ProtocolService /mcp on new StreamableHttpListener(3205) {
+service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
     remote isolated function onListTools() returns ProtocolListToolsResult {
         ProtocolListToolsResult handlerResult = {
             tools: [

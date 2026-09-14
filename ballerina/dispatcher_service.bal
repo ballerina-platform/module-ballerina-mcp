@@ -145,7 +145,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         private isolated function getCachedServiceConfiguration() returns StreamableHttpServiceConfiguration|Error {
             lock {
                 if self.cachedServiceConfig is () {
-                    Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService =
+                    Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
                             check getMcpServiceFromDispatcher(self);
                     self.cachedServiceConfig = getServiceConfiguration(mcpService);
                 }
@@ -366,25 +366,22 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function executeOnListTools(http:Headers headers, http:Request httpRequest,
                 boolean treatNilableAsOptional) returns ListToolsResult|Error {
-            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService =
+            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
-            if mcpService is ProtocolService {
-                ProtocolListToolsResult|error protocolResult = trap invokeProtocolOnListTools(mcpService);
-                if protocolResult is error {
-                    return error ServerError(protocolResult.message());
-                }
-                ListToolsResult|error legacyResult = protocolResult.cloneWithType();
-                if legacyResult is error {
-                    return error ServerError("Tool output schemas require modern MCP");
-                }
-                _ = legacyResult.removeIfHasKey("ttlMs");
-                _ = legacyResult.removeIfHasKey("cacheScope");
-                _ = legacyResult.removeIfHasKey("resultType");
-                return legacyResult;
-            }
             if mcpService is StreamableHttpAdvancedService {
-                return trapListToolsFailure(trap invokeAdvancedOnListTools(mcpService, headers, httpRequest,
-                                extractHeaderValues(headers), treatNilableAsOptional));
+                ListToolsResult|ProtocolListToolsResult|error advancedResult =
+                        trap invokeAdvancedOnListTools(mcpService, headers, httpRequest,
+                            extractHeaderValues(headers), treatNilableAsOptional);
+                if advancedResult is ProtocolListToolsResult {
+                    ListToolsResult|error legacyResult = applicationResult(advancedResult).cloneWithType();
+                    return legacyResult is error ? error ServerError("Tool output schemas require modern MCP") :
+                            legacyResult;
+                }
+                if advancedResult is error {
+                    return trapListToolsFailure(advancedResult);
+                }
+                ListToolsResult|error legacyResult = advancedResult.cloneWithType();
+                return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
             if mcpService is AdvancedService {
                 return trapListToolsFailure(trap invokeOnListTools(mcpService));
@@ -397,27 +394,25 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function executeOnCallTool(CallToolParams params, Session? session, http:Headers headers,
                 http:Request httpRequest, boolean treatNilableAsOptional) returns CallToolResult|Error {
-            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService =
+            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
-            if mcpService is ProtocolService {
-                var protocolResult = trap invokeProtocolOnCallTool(mcpService, params);
-                if protocolResult is error {
-                    return error ServerError(protocolResult.message());
-                }
-                if protocolResult is InputRequiredResult {
+            if mcpService is StreamableHttpAdvancedService {
+                CallToolResult|ProtocolCallToolResult|InputRequiredResult|error result =
+                        trap invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(), session, headers,
+                            httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
+                if result is InputRequiredResult {
                     return error ServerError("Input-required tool calls require modern MCP");
                 }
-                CallToolResult|error legacyResult = protocolResult.cloneWithType();
-                if legacyResult is error {
-                    return error ServerError("Structured tool output requires modern MCP");
+                if result is ProtocolCallToolResult {
+                    CallToolResult|error legacyResult = applicationResult(result).cloneWithType();
+                    return legacyResult is error ? error ServerError("Structured tool output requires modern MCP") :
+                            legacyResult;
                 }
-                _ = legacyResult.removeIfHasKey("resultType");
-                return legacyResult;
-            }
-            if mcpService is StreamableHttpAdvancedService {
-                CallToolResult|error result = trap invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(),
-                        session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
-                return result is error ? toServerError(result, params.name) : result;
+                if result is error {
+                    return toServerError(result, params.name);
+                }
+                CallToolResult|error legacyResult = result.cloneWithType();
+                return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
             if mcpService is AdvancedService {
                 CallToolResult|error result = trap invokeOnCallTool(mcpService, params.cloneReadOnly(), session);

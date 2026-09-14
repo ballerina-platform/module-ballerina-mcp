@@ -51,11 +51,16 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
 
     private static final String ON_CALL_TOOL = "onCallTool";
     private static final String ON_LIST_TOOLS = "onListTools";
+    private static final String ON_SUBSCRIBE = "onSubscribe";
     private static final String HTTP_HEADERS_DISPLAY = "http:Headers";
     private static final String HTTP_REQUEST_DISPLAY = "http:Request";
     private static final String SESSION_DISPLAY = "mcp:Session";
-    private static final String CALL_TOOL_RESULT_DISPLAY = "mcp:CallToolResult|mcp:ServerError";
-    private static final String LIST_TOOLS_RESULT_DISPLAY = "mcp:ListToolsResult|mcp:ServerError";
+    private static final String CALL_TOOL_RESULT_DISPLAY =
+            "mcp:CallToolResult|mcp:ProtocolCallToolResult|mcp:InputRequiredResult|mcp:ServerError";
+    private static final String LIST_TOOLS_RESULT_DISPLAY =
+            "mcp:ListToolsResult|mcp:ProtocolListToolsResult|mcp:ServerError";
+    private static final String SUBSCRIPTION_RESULT_DISPLAY =
+            "stream<mcp:JsonRpcNotification, error?>|mcp:ServerError";
 
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
@@ -71,6 +76,7 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         Location serviceLocation = serviceNode.location();
         FunctionDefinitionNode onCallTool = null;
         FunctionDefinitionNode onListTools = null;
+        FunctionDefinitionNode onSubscribe = null;
 
         // Locate the two known remote methods; any other remote method is unsupported.
         for (Node member : serviceNode.members()) {
@@ -82,6 +88,8 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
                 onCallTool = functionNode;
             } else if (ON_LIST_TOOLS.equals(methodName)) {
                 onListTools = functionNode;
+            } else if (ON_SUBSCRIBE.equals(methodName)) {
+                onSubscribe = functionNode;
             } else {
                 report(context, CompilationDiagnostic.ADVANCED_UNKNOWN_REMOTE_METHOD,
                         functionNode.location(), methodName);
@@ -98,6 +106,9 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
             report(context, CompilationDiagnostic.ADVANCED_SERVICE_MISSING_METHOD, serviceLocation, ON_LIST_TOOLS);
         } else {
             validateMethod(context, onListTools, ON_LIST_TOOLS, false);
+        }
+        if (onSubscribe != null) {
+            validateSubscribeMethod(context, onSubscribe);
         }
     }
 
@@ -169,12 +180,60 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
             report(context, CompilationDiagnostic.ADVANCED_ON_CALL_TOOL_PARAMS, location, methodName);
         }
 
-        String expectedResultType = isCallTool
-                ? Utils.CALL_TOOL_RESULT_TYPE_NAME : Utils.LIST_TOOLS_RESULT_TYPE_NAME;
         String expectedDisplay = isCallTool ? CALL_TOOL_RESULT_DISPLAY : LIST_TOOLS_RESULT_DISPLAY;
-        if (!returnTypeContains(functionType, expectedResultType)) {
+        boolean validResult = isCallTool
+                ? returnTypeContainsAny(functionType, Utils.CALL_TOOL_RESULT_TYPE_NAME,
+                    Utils.PROTOCOL_CALL_TOOL_RESULT_TYPE_NAME, Utils.INPUT_REQUIRED_RESULT_TYPE_NAME)
+                : returnTypeContainsAny(functionType, Utils.LIST_TOOLS_RESULT_TYPE_NAME,
+                    Utils.PROTOCOL_LIST_TOOLS_RESULT_TYPE_NAME);
+        if (!validResult) {
             report(context, CompilationDiagnostic.ADVANCED_INVALID_RETURN_TYPE, location, methodName, expectedDisplay);
         }
+    }
+
+    private void validateSubscribeMethod(SyntaxNodeAnalysisContext context, FunctionDefinitionNode functionNode) {
+        Optional<Symbol> symbol = context.semanticModel().symbol(functionNode);
+        if (symbol.isEmpty() || !(symbol.get() instanceof FunctionSymbol functionSymbol)) {
+            return;
+        }
+        FunctionTypeSymbol functionType = functionSymbol.typeDescriptor();
+        List<ParameterSymbol> parameters = functionType.params().orElse(List.of());
+        boolean validParameter = parameters.size() == 1
+                && typeMatches(parameters.get(0).typeDescriptor(), Utils.SUBSCRIPTION_FILTER_TYPE_NAME);
+        if (!validParameter) {
+            String parameterName = parameters.isEmpty() ? Utils.UNKNOWN_SYMBOL :
+                    parameters.get(0).getName().orElse(Utils.UNKNOWN_SYMBOL);
+            report(context, CompilationDiagnostic.INVALID_PARAMETER_TYPE, functionNode.location(), ON_SUBSCRIBE,
+                    parameterName, "'mcp:SubscriptionFilter'");
+        }
+        boolean validReturn = functionType.returnTypeDescriptor()
+                .map(type -> containsStream(type) && type.signature().contains("JsonRpcNotification"))
+                .orElse(false);
+        if (!validReturn) {
+            report(context, CompilationDiagnostic.ADVANCED_INVALID_RETURN_TYPE, functionNode.location(),
+                    ON_SUBSCRIBE, SUBSCRIPTION_RESULT_DISPLAY);
+        }
+    }
+
+    private static boolean containsStream(TypeSymbol type) {
+        if (type.typeKind() == TypeDescKind.STREAM) {
+            return true;
+        }
+        if (type.typeKind() == TypeDescKind.UNION) {
+            return ((UnionTypeSymbol) type).memberTypeDescriptors().stream()
+                    .anyMatch(AdvancedServiceAnalysisTask::containsStream);
+        }
+        if (type.typeKind() == TypeDescKind.TYPE_REFERENCE) {
+            return containsStream(((TypeReferenceTypeSymbol) type).typeDescriptor());
+        }
+        return false;
+    }
+
+    private static boolean returnTypeContainsAny(FunctionTypeSymbol functionType, String... typeNames) {
+        return functionType.returnTypeDescriptor()
+                .map(returnType -> java.util.Arrays.stream(typeNames)
+                        .anyMatch(typeName -> typeMatches(returnType, typeName)))
+                .orElse(false);
     }
 
     /**
@@ -192,12 +251,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
                 .filter(member -> member.typeKind() != TypeDescKind.NIL)
                 .toList();
         return nonNilMembers.size() == 1 && Utils.isSessionType(nonNilMembers.get(0));
-    }
-
-    private static boolean returnTypeContains(FunctionTypeSymbol functionType, String typeName) {
-        return functionType.returnTypeDescriptor()
-                .map(returnType -> typeMatches(returnType, typeName))
-                .orElse(false);
     }
 
     private static boolean typeMatches(TypeSymbol type, String typeName) {

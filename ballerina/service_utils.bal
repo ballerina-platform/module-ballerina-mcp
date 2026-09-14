@@ -21,7 +21,7 @@ import ballerina/log;
 #
 # + mcpService - The MCP service instance
 # + return - The resolved Streamable HTTP service configuration
-isolated function getServiceConfiguration(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService)
+isolated function getServiceConfiguration(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService)
         returns StreamableHttpServiceConfiguration {
     typedesc mcpServiceType = typeof mcpService;
 

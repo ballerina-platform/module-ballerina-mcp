@@ -74,6 +74,10 @@ public class Utils {
     public static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
     public static final String CALL_TOOL_RESULT_TYPE_NAME = "CallToolResult";
     public static final String LIST_TOOLS_RESULT_TYPE_NAME = "ListToolsResult";
+    public static final String PROTOCOL_CALL_TOOL_RESULT_TYPE_NAME = "ProtocolCallToolResult";
+    public static final String PROTOCOL_LIST_TOOLS_RESULT_TYPE_NAME = "ProtocolListToolsResult";
+    public static final String INPUT_REQUIRED_RESULT_TYPE_NAME = "InputRequiredResult";
+    public static final String SUBSCRIPTION_FILTER_TYPE_NAME = "SubscriptionFilter";
     public static final String HTTP_PACKAGE_NAME = "http";
     public static final String HEADERS_TYPE_NAME = "Headers";
     public static final String REQUEST_TYPE_NAME = "Request";

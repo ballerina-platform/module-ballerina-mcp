@@ -74,7 +74,7 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
     return {body: {jsonrpc: JSONRPC_VERSION, id: requestId, result: wireResult}};
 }
 
-isolated function handleModernRequest(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService,
+isolated function handleModernRequest(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
         StreamableHttpServiceConfiguration serviceConfig) returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:Response {
     string|http:HeaderNotFoundError originHeader = requestHeaders.getHeader("origin");
@@ -117,7 +117,8 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     if requestMessage.method == "server/discover" {
         DiscoverResult discoverResult = {
             supportedVersions: serviceConfig.protocolMode == "modern" ? [MODERN_PROTOCOL_VERSION] : SUPPORTED_PROTOCOL_VERSIONS,
-            capabilities: modernCapabilities(serviceConfig, mcpService is SubscriptionService)
+            capabilities: modernCapabilities(serviceConfig,
+                mcpService is StreamableHttpAdvancedService && hasSubscriptionHandler(mcpService))
         };
         string? instructionsText = serviceConfig.options?.instructions;
         if instructionsText is string {
@@ -125,7 +126,8 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
         }
         return modernResult(discoverResult, serviceConfig.info, requestMessage.id, cacheable = true);
     }
-    if requestMessage.method == "subscriptions/listen" && mcpService is SubscriptionService {
+    if requestMessage.method == "subscriptions/listen" && mcpService is StreamableHttpAdvancedService &&
+            hasSubscriptionHandler(mcpService) {
         RequestParams listenParams = requestMessage.params ?: {};
         SubscriptionFilter|error requestedFilter = listenParams["notifications"].cloneWithType();
         if requestedFilter is error {
@@ -231,18 +233,23 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     return modernResult(callResult, serviceConfig.info, requestMessage.id);
 }
 
-isolated function listProtocolTools(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService,
+isolated function listProtocolTools(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
         http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig)
         returns ProtocolListToolsResult|error {
-    if mcpService is ProtocolService {
-        ProtocolListToolsResult handlerResult = check trap invokeProtocolOnListTools(mcpService);
-        // Normalize a private mutable copy; handlers may return shared readonly definitions.
-        return handlerResult.cloneWithType();
-    }
     ListToolsResult|Error listResult;
     if mcpService is StreamableHttpAdvancedService {
-        listResult = trapListToolsFailure(trap invokeAdvancedOnListTools(mcpService, requestHeaders, httpRequest,
-                        extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional));
+        ListToolsResult|ProtocolListToolsResult|error advancedResult =
+                trap invokeAdvancedOnListTools(mcpService, requestHeaders, httpRequest,
+                    extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
+        if advancedResult is ProtocolListToolsResult {
+            return advancedResult.cloneWithType();
+        }
+        if advancedResult is error {
+            listResult = trapListToolsFailure(advancedResult);
+        } else {
+            ListToolsResult|error convertedResult = advancedResult.cloneWithType();
+            listResult = convertedResult is error ? error ServerError(convertedResult.message()) : convertedResult;
+        }
     } else if mcpService is AdvancedService {
         listResult = trapListToolsFailure(trap invokeOnListTools(mcpService));
     } else if mcpService is Service|StreamableHttpService {
@@ -254,12 +261,9 @@ isolated function listProtocolTools(Service|AdvancedService|StreamableHttpServic
     return (check listResult).cloneWithType();
 }
 
-isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService,
+isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
         CallToolParams callParams, http:Request httpRequest, http:Headers requestHeaders,
         StreamableHttpServiceConfiguration serviceConfig) returns ProtocolCallToolResult|InputRequiredResult|error {
-    if mcpService is ProtocolService {
-        return trap invokeProtocolOnCallTool(mcpService, callParams);
-    }
     CallToolParams applicationParams = callParams.clone();
     Meta applicationMeta = {...(callParams._meta ?: {})};
     foreach string metaKey in [PROTOCOL_META_KEY, CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LOG_LEVEL_META_KEY] {
@@ -272,8 +276,17 @@ isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService
     }
     CallToolResult|error callResult;
     if mcpService is StreamableHttpAdvancedService {
-        callResult = trap invokeAdvancedOnCallTool(mcpService, applicationParams, (), requestHeaders, httpRequest,
-                extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
+        CallToolResult|ProtocolCallToolResult|InputRequiredResult|error advancedResult =
+                trap invokeAdvancedOnCallTool(mcpService, applicationParams, (), requestHeaders, httpRequest,
+                    extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
+        if advancedResult is ProtocolCallToolResult|InputRequiredResult {
+            return advancedResult;
+        }
+        if advancedResult is error {
+            callResult = advancedResult;
+        } else {
+            callResult = advancedResult.cloneWithType();
+        }
     } else if mcpService is AdvancedService {
         callResult = trap invokeOnCallTool(mcpService, applicationParams, ());
     } else if mcpService is Service|StreamableHttpService {

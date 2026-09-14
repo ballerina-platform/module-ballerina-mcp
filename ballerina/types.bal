@@ -685,10 +685,11 @@ public type StreamableHttpService distinct service object {
 };
 
 # Defines an MCP service interface exposed over the Streamable HTTP transport with manual control
-# over tool listing and invocation. The service must declare `onListTools` and `onCallTool` `remote`
-# methods. In addition to `mcp:CallToolParams` and an optional `mcp:Session`, these methods may bind
-# transport-specific request information the same way `mcp:StreamableHttpService` tools can — via
-# `@http:Header` parameters, an `http:Headers` parameter, and/or an `http:Request` parameter. The
-# compiler plugin validates the shape of these methods.
+# over tool listing and invocation. Existing handlers may return `ListToolsResult` and
+# `CallToolResult`. Modern handlers may instead return `ProtocolListToolsResult` and
+# `ProtocolCallToolResult|InputRequiredResult`. An optional `onSubscribe` method publishes modern
+# change notifications. In addition to protocol parameters, handlers may bind transport-specific
+# request information via `@http:Header`, `http:Headers`, or `http:Request`. The compiler plugin
+# validates the method shapes.
 public type StreamableHttpAdvancedService distinct service object {
 };

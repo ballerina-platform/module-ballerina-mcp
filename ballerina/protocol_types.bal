@@ -119,12 +119,6 @@ public type InputResponse record {
 # Callback for gathering input requested by a server. It is invoked outside client locks.
 public type InputHandler isolated function (InputRequest inputRequest) returns InputResponse|ClientError;
 
-# A service exposing modern result shapes. Legacy requests use checked compatibility conversion.
-public type ProtocolService distinct service object {
-    remote isolated function onListTools() returns ProtocolListToolsResult|ServerError;
-    remote isolated function onCallTool(CallToolParams params) returns ProtocolCallToolResult|InputRequiredResult|ServerError;
-};
-
 // Wire responses are decoded before conversion to application-facing result records.
 type WireResponse record {|
     JSONRPC_VERSION jsonrpc;

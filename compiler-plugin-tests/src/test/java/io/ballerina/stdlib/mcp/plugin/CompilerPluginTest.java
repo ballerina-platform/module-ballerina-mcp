@@ -189,7 +189,9 @@ public class CompilerPluginTest {
     public void testAdvancedInvalidReturnType() {
         DiagnosticResult diagnosticResult = compile("sample_package_15");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "must return 'mcp:CallToolResult|mcp:ServerError'", MCP_112);
+        assertError(diagnosticResult, 0,
+                "must return 'mcp:CallToolResult|mcp:ProtocolCallToolResult|mcp:InputRequiredResult|mcp:ServerError'",
+                MCP_112);
     }
 
     @Test
@@ -241,5 +243,11 @@ public class CompilerPluginTest {
         Assert.assertEquals(errorCount(result), 0L);
         Assert.assertEquals(result.diagnostics().stream()
                 .filter(d -> d.diagnosticInfo().code().equals("MCP_WARNING_103")).count(), 1L);
+    }
+
+    @Test
+    public void testModernResultsAndSubscriptionOnExistingAdvancedService() {
+        DiagnosticResult result = compile("sample_package_25");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
     }
 }

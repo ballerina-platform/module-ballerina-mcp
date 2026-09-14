@@ -29,13 +29,13 @@ isolated function invokeOnCallTool(AdvancedService 'service, CallToolParams para
 
 isolated function invokeAdvancedOnListTools(StreamableHttpAdvancedService 'service, http:Headers headers,
         http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional)
-        returns ListToolsResult|Error = @java:Method {
+        returns ListToolsResult|ProtocolListToolsResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
 isolated function invokeAdvancedOnCallTool(StreamableHttpAdvancedService 'service, CallToolParams params,
         Session? session, http:Headers headers, http:Request request, map<string[]> headerValues,
-        boolean treatNilableAsOptional) returns CallToolResult|Error = @java:Method {
+        boolean treatNilableAsOptional) returns CallToolResult|ProtocolCallToolResult|InputRequiredResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
@@ -51,28 +51,18 @@ isolated function callToolForRemoteFunctions(Service|StreamableHttpService 'serv
 } external;
 
 isolated function addMcpServiceToDispatcher(http:Service dispatcherService,
-        Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService)
+        Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService)
         returns Error? = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
 isolated function getMcpServiceFromDispatcher(http:Service dispatcherService)
-        returns Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService|Error = @java:Method {
+        returns Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
 // Runtime counterpart of the compiler diagnostic, including dynamically attached services.
-isolated function requiresLegacySession(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|ProtocolService mcpService)
+isolated function requiresLegacySession(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService)
         returns boolean = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
-} external;
-
-isolated function invokeProtocolOnListTools(ProtocolService mcpService)
-        returns ProtocolListToolsResult|ServerError = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
-} external;
-
-isolated function invokeProtocolOnCallTool(ProtocolService mcpService, CallToolParams callParams)
-        returns ProtocolCallToolResult|InputRequiredResult|ServerError = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;

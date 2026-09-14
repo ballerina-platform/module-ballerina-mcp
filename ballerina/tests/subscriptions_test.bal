@@ -17,7 +17,7 @@
 import ballerina/test;
 
 @StreamableHttpServiceConfig {info: {name: "subscription-test", version: "1"}}
-service SubscriptionService /mcp on new StreamableHttpListener(3206) {
+service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3206) {
     remote isolated function onListTools() returns ProtocolListToolsResult => {tools: []};
 
     remote isolated function onCallTool(CallToolParams callParams) returns ProtocolCallToolResult => {content: []};

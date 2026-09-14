@@ -45,15 +45,14 @@ sessionless alternative. Multi-instance deployments need shared application stor
 
 Traditional service handlers retain their application metadata view: automatically generated protocol version,
 client identity, and capability fields are removed before binding `mcp:Meta` or traditional `CallToolParams`.
-The newer `ProtocolService` receives the full request metadata. Existing client result methods retain readonly results and hide wire-only
-result fields and server identity while retaining application response metadata.
+Existing advanced handlers retain their application metadata view. Existing client result methods retain readonly results
+and hide wire-only result fields and server identity while retaining application response metadata.
 
 ### Modern tool results and continuations
 
-`ProtocolService` exposes `onListTools()` returning `ProtocolListToolsResult`, and `onCallTool(CallToolParams)`
-returning `ProtocolCallToolResult`, `InputRequiredResult`, or `ServerError`. Use `@mcp:StreamableHttpServiceConfig`
-and `mcp:StreamableHttpListener` to expose it. Traditional service interfaces remain supported. When a handler returns a union of complete and input-required results,
-include the appropriate `resultType` in the record constructor to disambiguate it.
+`StreamableHttpAdvancedService` accepts its existing `ListToolsResult` and `CallToolResult` handlers. Modern handlers may
+instead return `ProtocolListToolsResult` and `ProtocolCallToolResult|InputRequiredResult`. When a handler returns a union
+of complete and input-required results, include the appropriate `resultType` in the record constructor to disambiguate it.
 
 Use `listToolsWithSchemas(headers, cursor)` to preserve general output schemas, and `callToolWithResult(params, headers)`
 to preserve arbitrary JSON structured output, including arrays, scalars, and explicit null. Input schemas still have an
@@ -82,7 +81,7 @@ Discovery and tool lists include `ttlMs` and `cacheScope`, defaulting to `0` and
 a shared result cache or background polling. Modern requests with an Origin header must match the service's
 `allowedOrigins` list; requests without Origin are accepted. Set that list explicitly for browser clients.
 
-`SubscriptionService` extends `ProtocolService` with `onSubscribe(SubscriptionFilter)`, returning a notification stream.
+`StreamableHttpAdvancedService` may define `onSubscribe(SubscriptionFilter)` returning a notification stream.
 Server-side subscriptions currently publish tool-list changes. The transport acknowledges the accepted filter first,
 adds subscription IDs, filters events, and completes the request when the source ends. Event sources must release
 resources when closed. `listen()` returns a client notification stream; closing it cancels the subscription, and closing
