@@ -24,7 +24,7 @@ type Person record {|
     int age;
 |};
 
-@mcp:StreamableHttpServiceConfig {info: {name: "structured-http", version: "1.0.0"}}
+@mcp:StreamableHttpConfig {info: {name: "structured-http", version: "1.0.0"}}
 service mcp:StreamableHttpService /structuredHttp on structuredListener {
     remote isolated function stringValue() returns string => "hello";
 
@@ -38,8 +38,8 @@ service mcp:StreamableHttpService /structuredHttp on structuredListener {
     remote isolated function textOnlyValue() returns string => "text only";
 }
 
-@mcp:ServiceConfig {info: {name: "structured-generic", version: "1.0.0"}}
-service mcp:Service /structuredGeneric on structuredListener {
+@mcp:StreamableHttpConfig {info: {name: "structured-generic", version: "1.0.0"}}
+service mcp:StreamableHttpService /structuredGeneric on structuredListener {
     remote isolated function booleanValue() returns boolean => true;
 }
 
@@ -47,7 +47,7 @@ service mcp:Service /structuredGeneric on structuredListener {
 function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
     mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
             protocolMode = "modern");
-    check httpClient->initialize();
+    _ = check httpClient->connect();
     mcp:ListToolsResult listedTools = check httpClient->listTools();
     map<mcp:ToolDefinition> toolsByName = {};
     foreach mcp:ToolDefinition toolInfo in listedTools.tools {
@@ -77,7 +77,7 @@ function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
 
     mcp:StreamableHttpClient legacyClient = check new ("http://localhost:8789/structuredHttp",
             protocolMode = "legacy");
-    check legacyClient->initialize();
+    _ = check legacyClient->connect();
     mcp:ListToolsResult legacyTools = check legacyClient->listTools();
     foreach mcp:ToolDefinition toolInfo in legacyTools.tools {
         test:assertEquals(toolInfo.outputSchema, ());
@@ -88,7 +88,7 @@ function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
 
     mcp:StreamableHttpClient genericClient = check new ("http://localhost:8789/structuredGeneric",
             protocolMode = "modern");
-    check genericClient->initialize();
+    _ = check genericClient->connect();
     mcp:CallToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
     assertStructuredValue(booleanResult, true);
     check genericClient->close();

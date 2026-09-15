@@ -45,7 +45,7 @@ public enum RequestMethod {
 public type ProtocolMode "legacy"|"auto"|"modern";
 
 # Represents the session management modes supported by the MCP server transport.
-public enum SessionMode {
+public enum HttpSessionMode {
     # Stateful mode - sessions are managed by the transport
     STATEFUL = "stateful",
     # Stateless mode - no session management
@@ -66,8 +66,8 @@ public type ProgressToken string|int;
 # An opaque token used to represent a cursor for pagination.
 public type Cursor string;
 
-# Optional metadata for requests
-public type Meta record {
+# Application-facing metadata for requests.
+public type RequestMetaObject record {
     # If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress).
     # The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
     ProgressToken progressToken?;
@@ -76,7 +76,7 @@ public type Meta record {
 # Parameters for the request
 public type RequestParams record {
     # Optional metadata for the request
-    Meta _meta?;
+    RequestMetaObject _meta?;
 };
 
 # Represents a generic request in the protocol
@@ -93,15 +93,36 @@ public type Notification record {|
     string method;
     # Additional parameters for the notification
     record {
-        record {} _meta?;
+        NotificationMetaObject _meta?;
     } params?;
 |};
 
+# Application-facing metadata attached to a result.
+public type ResultMetaObject record {
+    # Server implementation that produced the response.
+    Implementation serverInfo?;
+};
+
+# Application-facing metadata attached to a notification.
+public type NotificationMetaObject record {
+    # Request identifier of the subscription that delivered the notification.
+    RequestId subscriptionId?;
+};
+
+# Fields shared by result records.
+type ResultFields record {
+    # Metadata attached to the result.
+    ResultMetaObject _meta?;
+};
+
+# Result discriminator. Known core results narrow this to a string singleton.
+public type ResultType string;
+
 # Base result type with common fields.
 public type Result record {
-    # This result property is reserved by the protocol to allow clients and servers
-    # to attach additional metadata to their responses.
-    record {} _meta?;
+    *ResultFields;
+    # Modern results carry a discriminator. It is absent on legacy wire responses.
+    ResultType resultType?;
 };
 
 # A uniquely identifying ID for a request in JSON-RPC.
@@ -438,7 +459,7 @@ public type ContentBlock TextContent|ImageContent|AudioContent|ResourceLink|Embe
 
 # The server's response to a tool call.
 public type CallToolResult record {
-    *Result;
+    *ResultFields;
     # Identifies a completed modern result when disambiguating it from InputRequiredResult.
     "complete" resultType?;
     # A list of content objects that represent the unstructured result of the tool call.
@@ -624,46 +645,12 @@ public type ServerOptions record {|
     boolean enforceStrictCapabilities?;
 |};
 
-# Transport-agnostic configuration for an MCP service, defining server metadata and options.
-public type ServiceConfiguration record {|
-    # Server implementation information
-    Implementation info;
-    # Protocol selection. Auto preserves legacy requests and accepts modern requests when the service supports them.
-    ProtocolMode protocolMode = "auto";
-    # Origins permitted on modern HTTP requests. Requests without Origin are accepted.
-    string[] allowedOrigins = [];
-    # Optional server configuration options
-    ServerOptions options?;
-    # HTTP service configuration for the underlying transport.
-    #
-    # # Deprecated
-    # HTTP configuration is transport-specific. Use the `httpConfig` field of the
-    # `@mcp:StreamableHttpServiceConfig` annotation on an `mcp:StreamableHttpService` instead.
-    @deprecated
-    http:HttpServiceConfig httpConfig = {};
-    # Controls the session management mode for the transport.
-    # - STATEFUL → Sessions are managed by the transport with session IDs
-    # - STATELESS → No session management, each request is independent
-    # - AUTO → Automatically determined based on client initialization behavior (default)
-    #
-    # # Deprecated
-    # Session management is transport-specific. Use the `sessionMode` field of the
-    # `@mcp:StreamableHttpServiceConfig` annotation on an `mcp:StreamableHttpService` instead.
-    @deprecated
-    SessionMode sessionMode = AUTO;
-|};
-
-# Annotation to provide configuration to MCP services.
-public annotation ServiceConfiguration ServiceConfig on service;
-
 # Configuration for an MCP service exposed over the Streamable HTTP transport.
-public type StreamableHttpServiceConfiguration record {|
+public type StreamableHttpConfiguration record {|
     # Server implementation information
     Implementation info;
     # Protocol selection. Auto preserves legacy requests and accepts modern requests when the service supports them.
     ProtocolMode protocolMode = "auto";
-    # Origins permitted on modern HTTP requests. Requests without Origin are accepted.
-    string[] allowedOrigins = [];
     # Optional server configuration options
     ServerOptions options?;
     # HTTP service configuration for the underlying transport
@@ -672,24 +659,12 @@ public type StreamableHttpServiceConfiguration record {|
     # - STATEFUL → Sessions are managed by the transport with session IDs
     # - STATELESS → No session management, each request is independent
     # - AUTO → Automatically determined based on client initialization behavior (default)
-    SessionMode sessionMode = AUTO;
+    HttpSessionMode sessionMode = AUTO;
 |};
 
 # Annotation to provide configuration to Streamable HTTP MCP services.
-public annotation StreamableHttpServiceConfiguration StreamableHttpServiceConfig on service;
-
-# Defines a transport-agnostic MCP service interface that handles incoming MCP requests with
-# manual control over tool listing and invocation.
-public type AdvancedService distinct service object {
-    remote isolated function onListTools() returns ListToolsResult|ServerError;
-    remote isolated function onCallTool(CallToolParams params, Session? session = ()) returns CallToolResult|ServerError;
-};
- 
-# Defines a transport-agnostic basic MCP service interface. Tools are declared as `remote`
-# functions and cannot access transport-specific request information.
-public type Service distinct service object {
-
-};
+# Annotation to configure an MCP service exposed over Streamable HTTP.
+public annotation StreamableHttpConfiguration StreamableHttpConfig on service;
 
 # Defines a basic MCP service interface exposed over the Streamable HTTP transport. Tool
 # `remote` functions may additionally bind HTTP request information (e.g. `@http:Header`

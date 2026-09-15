@@ -19,7 +19,7 @@ import ballerina/mcp;
 
 // An mcp:StreamableHttpAdvancedService whose remote methods bind transport-specific request
 // information the same way StreamableHttpService tools do. Must compile without diagnostics.
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "sample-11", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9311) {
@@ -29,7 +29,7 @@ service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener
         return {tools: []};
     }
 
-    remote function onCallTool(mcp:CallToolParams params, mcp:Session? session,
+    remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session,
             @http:Header {name: "Authorization"} string? auth, http:Headers headers, http:Request request)
             returns mcp:CallToolResult|mcp:ServerError {
         return {content: []};

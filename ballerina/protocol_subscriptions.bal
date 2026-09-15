@@ -88,8 +88,8 @@ isolated class ServerSubscriptionStream {
                 return {value: {data: completed.toJsonString()}};
             }
             if sourceItem.value.method == "notifications/tools/list_changed" && self.acceptedFilter.toolsListChanged {
-                record {record {} _meta?;} notificationParams = {...(sourceItem.value.params ?: {})};
-                record {} notificationMeta = {...(sourceItem.value.params?._meta ?: {})};
+                record {NotificationMetaObject _meta?;} notificationParams = {...(sourceItem.value.params ?: {})};
+                NotificationMetaObject notificationMeta = {...(sourceItem.value.params?._meta ?: {})};
                 notificationMeta["io.modelcontextprotocol/subscriptionId"] = self.subscriptionId;
                 notificationParams._meta = notificationMeta;
                 JsonRpcNotification notificationValue = {

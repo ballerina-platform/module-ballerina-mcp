@@ -37,7 +37,7 @@ type CartEntry record {|
 
 isolated map<CartEntry> cartStore = {};
 
-@mcp:StreamableHttpServiceConfig {info: {name: "Shopping with explicit cart handles", version: "1.0.0"}}
+@mcp:StreamableHttpConfig {info: {name: "Shopping with explicit cart handles", version: "1.0.0"}}
 service mcp:StreamableHttpService /mcp on cartListener {
     @mcp:Tool {description: "Create a cart and return its handle. Pass this handle to every cart operation."}
     remote isolated function createCart() returns string|error {

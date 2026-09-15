@@ -45,7 +45,7 @@ import java.util.Optional;
  *
  * <p>The service type is an empty marker, so this task enforces the contract the type used to pin: the service
  * must declare {@code onListTools} and {@code onCallTool} remote methods, and their parameters are restricted to the
- * supported set (CallToolParams, Session, http:Headers, http:Request, and {@code @http:Header} parameters).</p>
+ * supported set (CallToolParams, HttpSession, http:Headers, http:Request, and {@code @http:Header} parameters).</p>
  */
 public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
 
@@ -54,7 +54,7 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
     private static final String ON_SUBSCRIBE = "onSubscribe";
     private static final String HTTP_HEADERS_DISPLAY = "http:Headers";
     private static final String HTTP_REQUEST_DISPLAY = "http:Request";
-    private static final String SESSION_DISPLAY = "mcp:Session";
+    private static final String SESSION_DISPLAY = "mcp:HttpSession";
     private static final String CALL_TOOL_RESULT_DISPLAY =
             "mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError";
     private static final String LIST_TOOLS_RESULT_DISPLAY =
@@ -236,8 +236,8 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
     }
 
     /**
-     * Returns whether the type is {@code mcp:Session} or a nilable {@code mcp:Session?}. Session is typically declared
-     * nilable because it is absent in stateless mode.
+     * Returns whether the type is {@code mcp:HttpSession} or a nilable {@code mcp:HttpSession?}.
+     * The parameter is typically nilable because it is absent in stateless mode.
      */
     private static boolean isSessionParam(TypeSymbol type) {
         if (Utils.isSessionType(type)) {

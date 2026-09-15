@@ -17,16 +17,16 @@
 import ballerina/http;
 import ballerina/test;
 
-listener Listener pvServerListener = check new (3201);
+listener StreamableHttpListener pvServerListener = check new (3201);
 
-@ServiceConfig {
+@StreamableHttpConfig {
     info: {
         name: "Protocol Version Test Server",
         version: "1.0.0"
     },
     sessionMode: STATELESS
 }
-service Service /mcp on pvServerListener {
+service StreamableHttpService /mcp on pvServerListener {
     @Tool {
         description: "Echoes the provided message back to the caller."
     }

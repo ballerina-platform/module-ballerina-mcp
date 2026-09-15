@@ -28,7 +28,7 @@ import ballerina/mcp;
 import ballerina/test;
 
 // The tool-bearing basic service. Its presence is what makes the modifier rewrite this document.
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "shared-doc-basic", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -37,7 +37,7 @@ isolated service mcp:StreamableHttpService /sharedBasic on new mcp:StreamableHtt
 }
 
 // The advanced service sharing the document above.
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "shared-doc-advanced", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -48,7 +48,7 @@ isolated service mcp:StreamableHttpAdvancedService /sharedAdvanced on new mcp:St
         };
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
             returns mcp:CallToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "shared-doc-ok"}]};
     }

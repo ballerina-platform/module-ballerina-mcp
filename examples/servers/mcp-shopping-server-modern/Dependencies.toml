@@ -213,7 +213,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "1.4.0"
+version = "2.0.0"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},
@@ -320,4 +320,3 @@ dependencies = [
 modules = [
 	{org = "mcp_examples", packageName = "shopping_handles", moduleName = "shopping_handles"}
 ]
-

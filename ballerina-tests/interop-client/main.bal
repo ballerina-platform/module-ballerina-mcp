@@ -23,7 +23,7 @@ public function main() returns error? {
     mcp:ProtocolMode[] protocolModes = ["legacy", "auto", "modern"];
     foreach mcp:ProtocolMode protocolMode in protocolModes {
         mcp:StreamableHttpClient peerClient = check new (interopUrl, protocolMode = protocolMode);
-        check peerClient->initialize();
+        _ = check peerClient->connect();
         mcp:CallToolResult addResult = check peerClient->callTool({name: "add", arguments: {"firstValue": 2, "secondValue": 3}});
         mcp:TextContent addText = check addResult.content[0].ensureType();
         if addText.text != "5" {

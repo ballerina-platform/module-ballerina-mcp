@@ -66,11 +66,10 @@ public class Utils {
     public static final String BALLERINA_ORG = "ballerina";
     public static final String TOOL_ANNOTATION_NAME = "Tool";
     public static final String MCP_PACKAGE_NAME = "mcp";
-    public static final String MCP_BASIC_SERVICE_NAME = "Service";
     public static final String STREAMABLE_HTTP_BASIC_SERVICE_NAME = "StreamableHttpService";
     public static final String STREAMABLE_HTTP_ADVANCED_SERVICE_NAME = "StreamableHttpAdvancedService";
-    public static final String SESSION_TYPE_NAME = "Session";
-    public static final String META_TYPE_NAME = "Meta";
+    public static final String SESSION_TYPE_NAME = "HttpSession";
+    public static final String META_TYPE_NAME = "RequestMetaObject";
     public static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
     public static final String CALL_TOOL_RESULT_TYPE_NAME = "CallToolResult";
     public static final String LIST_TOOLS_RESULT_TYPE_NAME = "ListToolsResult";
@@ -81,17 +80,17 @@ public class Utils {
     public static final String REQUEST_TYPE_NAME = "Request";
     public static final String HEADER_ANNOTATION_NAME = "Header";
     public static final String UNKNOWN_SYMBOL = "unknown";
-    public static final String SERVICE_CONFIG_ANNOTATION_NAME = "ServiceConfig";
-    public static final String STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME = "StreamableHttpServiceConfig";
+    public static final String STREAMABLE_HTTP_CONFIG_ANNOTATION_NAME = "StreamableHttpConfig";
     public static final String SESSION_MODE_FIELD = "sessionMode";
 
     // Human-readable lists of supported parameter types, used in the INVALID_PARAMETER_TYPE diagnostic.
     public static final String BASIC_TOOL_SUPPORTED_PARAM_TYPES =
-            "'anydata' tool parameters, a first 'mcp:Session' parameter, an optional 'mcp:Meta' parameter, "
+            "'anydata' tool parameters, a first 'mcp:HttpSession' parameter, an optional "
+                    + "'mcp:RequestMetaObject' parameter, "
                     + "an 'http:Headers' parameter, an 'http:Request' parameter, or '@http:Header' parameters";
     public static final String ADVANCED_SUPPORTED_PARAM_TYPES =
-            "'mcp:CallToolParams', 'mcp:Session', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
-    // 'onListTools' does not accept 'mcp:CallToolParams' or 'mcp:Session'.
+            "'mcp:CallToolParams', 'mcp:HttpSession', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
+    // 'onListTools' does not accept 'mcp:CallToolParams' or 'mcp:HttpSession'.
     public static final String ADVANCED_LIST_TOOLS_SUPPORTED_PARAM_TYPES =
             "'http:Headers', 'http:Request', or an '@http:Header' parameter";
 
@@ -193,7 +192,7 @@ public class Utils {
     }
 
     /**
-     * Returns whether the given node is an `mcp:Service` or `mcp:StreamableHttpService` declaration attached to a
+     * Returns whether the given node is an `mcp:StreamableHttpService` declaration attached to a
      * listener from the mcp module. These are the only services whose tool methods the source modifier may rewrite;
      * every other service declaration (including advanced mcp services and unrelated services such as `http:Service`)
      * must be left untouched.
@@ -212,8 +211,7 @@ public class Utils {
 
         boolean isServiceType = serviceSymbol.typeDescriptor()
                 .flatMap(TypeSymbol::getName)
-                .map(name -> MCP_BASIC_SERVICE_NAME.equals(name)
-                        || STREAMABLE_HTTP_BASIC_SERVICE_NAME.equals(name))
+                .map(STREAMABLE_HTTP_BASIC_SERVICE_NAME::equals)
                 .orElse(false);
 
         return isFromMcpModule && isServiceType;
@@ -546,17 +544,10 @@ public class Utils {
             return SessionMode.AUTO;
         }
 
-        // The transport-specific @mcp:StreamableHttpConfig annotation takes precedence over
-        // the deprecated sessionMode field of @mcp:ServiceConfig
         AnnotationNode transportConfigAnnotation =
-                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME);
+                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_CONFIG_ANNOTATION_NAME);
         if (transportConfigAnnotation != null) {
             return getSessionModeFieldValue(transportConfigAnnotation, semanticModel);
-        }
-
-        AnnotationNode serviceConfigAnnotation = findMcpAnnotation(serviceNode, SERVICE_CONFIG_ANNOTATION_NAME);
-        if (serviceConfigAnnotation != null) {
-            return getSessionModeFieldValue(serviceConfigAnnotation, semanticModel);
         }
         return SessionMode.AUTO;
     }

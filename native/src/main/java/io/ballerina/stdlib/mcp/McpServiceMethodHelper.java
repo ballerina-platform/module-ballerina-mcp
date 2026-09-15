@@ -89,10 +89,10 @@ public final class McpServiceMethodHelper {
     private static final String TEXT_VALUE_NAME = "text";
     private static final String MCP_SERVICE_FIELD = "mcpService";
 
-    // MCP Session and Meta-related constants
+    // MCP HTTP session and metadata-related constants
     private static final String MCP_PACKAGE_NAME = "mcp";
-    private static final String SESSION_TYPE_NAME = "Session";
-    private static final String META_TYPE_NAME = "Meta";
+    private static final String SESSION_TYPE_NAME = "HttpSession";
+    private static final String META_TYPE_NAME = "RequestMetaObject";
     private static final String META_FIELD_NAME = "_meta";
     private static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
 
@@ -161,7 +161,7 @@ public final class McpServiceMethodHelper {
 
     /**
      * Invoke the 'onCallTool' remote method of a Streamable HTTP advanced service. The method's
-     * declared parameters are inspected and bound flexibly (CallToolParams, Session, http:Headers,
+     * declared parameters are inspected and bound flexibly (CallToolParams, HttpSession, http:Headers,
      * http:Request, and '@http:Header' parameters), mirroring how basic service tools are bound.
      *
      * @param env                    The Ballerina runtime environment.
@@ -515,7 +515,7 @@ public final class McpServiceMethodHelper {
     }
 
     private static boolean isSessionParameter(Parameter param) {
-        // Session is commonly declared nilable ('mcp:Session?'), so look through the union as well.
+        // HttpSession is commonly declared nilable, so look through the union as well.
         return isMcpSessionType(param.type);
     }
 

@@ -16,7 +16,7 @@
 
 import ballerina/test;
 
-@StreamableHttpServiceConfig {info: {name: "subscription-test", version: "1"}}
+@StreamableHttpConfig {info: {name: "subscription-test", version: "1"}}
 service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3206) {
     remote isolated function onListTools() returns ListToolsResult => {tools: []};
 
@@ -51,16 +51,25 @@ isolated class TestNotificationSource {
 @test:Config {}
 function testSubscriptionAcknowledgementAndCompletion() returns error? {
     StreamableHttpClient subscriptionClient = check new ("http://localhost:3206/mcp");
-    stream<JsonRpcNotification, StreamError?> eventStream = check subscriptionClient->listen();
+    _ = check subscriptionClient->connect();
+    stream<JsonRpcMessage, StreamError?> eventStream = check subscriptionClient->listen();
     var firstEvent = check eventStream.next();
-    test:assertTrue(firstEvent is record {|JsonRpcNotification value;|});
-    if firstEvent is record {|JsonRpcNotification value;|} {
-        test:assertEquals(firstEvent.value.method, "notifications/subscriptions/acknowledged");
+    test:assertTrue(firstEvent is record {|JsonRpcMessage value;|});
+    if firstEvent is record {|JsonRpcMessage value;|} {
+        JsonRpcMessage message = firstEvent.value;
+        test:assertTrue(message is JsonRpcNotification);
+        if message is JsonRpcNotification {
+            test:assertEquals(message.method, "notifications/subscriptions/acknowledged");
+        }
     }
     var secondEvent = check eventStream.next();
-    test:assertTrue(secondEvent is record {|JsonRpcNotification value;|});
-    if secondEvent is record {|JsonRpcNotification value;|} {
-        test:assertEquals(secondEvent.value.method, "notifications/tools/list_changed");
+    test:assertTrue(secondEvent is record {|JsonRpcMessage value;|});
+    if secondEvent is record {|JsonRpcMessage value;|} {
+        JsonRpcMessage message = secondEvent.value;
+        test:assertTrue(message is JsonRpcNotification);
+        if message is JsonRpcNotification {
+            test:assertEquals(message.method, "notifications/tools/list_changed");
+        }
     }
     test:assertEquals(check eventStream.next(), ());
     check eventStream.close();
@@ -70,7 +79,8 @@ function testSubscriptionAcknowledgementAndCompletion() returns error? {
 @test:Config {}
 function testClientCloseCancelsSubscriptions() returns error? {
     StreamableHttpClient subscriptionClient = check new ("http://localhost:3206/mcp");
-    stream<JsonRpcNotification, StreamError?> eventStream = check subscriptionClient->listen();
+    _ = check subscriptionClient->connect();
+    stream<JsonRpcMessage, StreamError?> eventStream = check subscriptionClient->listen();
     _ = check eventStream.next();
     check subscriptionClient->close();
     test:assertEquals(check eventStream.next(), ());

@@ -21,35 +21,13 @@ import ballerina/log;
 #
 # + mcpService - The MCP service instance
 # + return - The resolved Streamable HTTP service configuration
-isolated function getServiceConfiguration(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService)
-        returns StreamableHttpServiceConfiguration {
+isolated function getServiceConfiguration(StreamableHttpService|StreamableHttpAdvancedService mcpService)
+        returns StreamableHttpConfiguration {
     typedesc mcpServiceType = typeof mcpService;
-
-    // The transport-specific annotation is the configuration home for Streamable HTTP services.
-    StreamableHttpServiceConfiguration? transportConfig = mcpServiceType.@StreamableHttpServiceConfig;
-    if transportConfig is StreamableHttpServiceConfiguration {
+    StreamableHttpConfiguration? transportConfig = mcpServiceType.@StreamableHttpConfig;
+    if transportConfig is StreamableHttpConfiguration {
         return transportConfig;
     }
-
-    // Fallback for transport-agnostic services. The deprecated httpConfig/sessionMode fields of
-    // @mcp:ServiceConfig are still honored here for backward compatibility (the only place the
-    // runtime reads these deprecated fields).
-    ServiceConfiguration? serviceConfig = mcpServiceType.@ServiceConfig;
-    if serviceConfig is ServiceConfiguration {
-        StreamableHttpServiceConfiguration config = {
-            info: serviceConfig.info,
-            protocolMode: serviceConfig.protocolMode,
-            allowedOrigins: serviceConfig.allowedOrigins,
-            httpConfig: serviceConfig.httpConfig,
-            sessionMode: serviceConfig.sessionMode
-        };
-        ServerOptions? options = serviceConfig?.options;
-        if options is ServerOptions {
-            config.options = options;
-        }
-        return config;
-    }
-
     return {
         info: {
             name: "MCP Service",
@@ -89,8 +67,8 @@ isolated function extractHeaderValues(http:Headers headers) returns map<string[]
 # + headers - HTTP request headers
 # + requestMethod - The MCP request method (optional, used for AUTO mode logic)
 # + return - Effective session mode to use
-isolated function determineEffectiveSessionMode(StreamableHttpServiceConfiguration config, http:Headers headers, RequestMethod? requestMethod = ()) returns SessionMode {
-    SessionMode configuredMode = config.sessionMode;
+isolated function determineEffectiveSessionMode(StreamableHttpConfiguration config, http:Headers headers, RequestMethod? requestMethod = ()) returns HttpSessionMode {
+    HttpSessionMode configuredMode = config.sessionMode;
 
     if configuredMode == STATEFUL || configuredMode == STATELESS {
         return configuredMode;

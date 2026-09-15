@@ -22,14 +22,14 @@ import ballerina/time;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9091);
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {
         name: "MCP Crypto Server",
         version: "1.0.0"
     },
     sessionMode: mcp:STATELESS
 }
-service mcp:AdvancedService /mcp on mcpListener {
+service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
 
     remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {
@@ -78,7 +78,7 @@ service mcp:AdvancedService /mcp on mcpListener {
         };
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session) returns mcp:CallToolResult|mcp:ServerError {
+    remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session) returns mcp:CallToolResult|mcp:ServerError {
         record {} arguments = params.arguments ?: {};
 
         // Extract metadata from client request if present
@@ -156,7 +156,7 @@ service mcp:AdvancedService /mcp on mcpListener {
             originalText: text
         };
 
-        record {} responseMeta = {
+        mcp:ResultMetaObject responseMeta = {
             "executionTimeMs": executionTime,
             "inputLength": text.length(),
             "outputLength": hashedValue.length()
@@ -221,7 +221,7 @@ service mcp:AdvancedService /mcp on mcpListener {
             originalInput: text
         };
 
-        record {} responseMeta = {
+        mcp:ResultMetaObject responseMeta = {
             "executionTimeMs": executionTime,
             "inputLength": text.length(),
             "outputLength": resultValue.length()

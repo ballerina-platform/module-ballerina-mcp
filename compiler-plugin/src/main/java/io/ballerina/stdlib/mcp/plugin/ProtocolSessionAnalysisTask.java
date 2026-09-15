@@ -87,12 +87,9 @@ public class ProtocolSessionAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
                 continue;
             }
             String name = symbol.get().getName().orElse("");
-            if ("StreamableHttpServiceConfig".equals(name)) {
+            if ("StreamableHttpConfig".equals(name)) {
                 selected = annotation;
                 break;
-            }
-            if ("ServiceConfig".equals(name)) {
-                selected = annotation;
             }
         }
         if (selected == null || selected.annotValue().isEmpty()) {

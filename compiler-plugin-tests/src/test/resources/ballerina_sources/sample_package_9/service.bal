@@ -19,10 +19,10 @@ import ballerina/mcp;
 
 // A raw http:Request parameter is a transport-specific property and is not accessible in the
 // transport-agnostic mcp:Service (MCP_109).
-@mcp:ServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "sample-9", version: "1.0.0"}
 }
-service mcp:Service /mcp on new mcp:StreamableHttpListener(9309) {
+service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9309) {
 
     @mcp:Tool {description: "raw request object on the transport-agnostic service"}
     remote function badRequest(http:Request request, string name) returns string {

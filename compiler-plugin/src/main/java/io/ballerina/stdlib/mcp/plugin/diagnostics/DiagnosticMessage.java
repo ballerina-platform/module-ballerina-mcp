@@ -25,8 +25,8 @@ public enum DiagnosticMessage {
     ERROR_101("Failed to generate the parameter schema definition for the function ''{0}''." +
             " Specify the parameter schema manually using the `@mcp:McpTool` annotation's parameter field."),
     ERROR_102("Parameter ''{1}'' in function ''{0}'' has an unsupported type. Supported types are {2}."),
-    ERROR_103("Session parameter ''{1}'' in function ''{0}'' must be the first parameter."),
-    ERROR_104("Session parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'."),
+    ERROR_103("HttpSession parameter ''{1}'' in function ''{0}'' must be the first parameter."),
+    ERROR_104("HttpSession parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'."),
     ERROR_105("Meta parameter ''{1}'' in function ''{0}'' must be the last parameter."),
     ERROR_106("Meta parameter ''{1}'' in function ''{0}'' must be optional (e.g., 'mcp:Meta?')."),
     ERROR_107("Duplicate parameter ''{1}'' in function ''{0}''. " +
@@ -43,12 +43,12 @@ public enum DiagnosticMessage {
     ERROR_112("Remote method ''{0}'' in an 'mcp:StreamableHttpAdvancedService' must return ''{1}''."),
     ERROR_113("Remote method ''{0}'' is not supported in an 'mcp:StreamableHttpAdvancedService'. " +
             "Only 'onListTools' and 'onCallTool' are allowed."),
-    ERROR_114("Required Session parameter ''{0}'' is not supported in modern protocol mode. " +
+    ERROR_114("Required HttpSession parameter ''{0}'' is not supported in modern protocol mode. " +
             "Use explicit application state or select legacy protocol mode."),
-    WARNING_102("Required Session parameter ''{0}'' restricts this service to legacy MCP in auto protocol mode."),
-    WARNING_103("Session parameter ''{0}'' is always nil for modern MCP requests. " +
+    WARNING_102("Required HttpSession parameter ''{0}'' restricts this service to legacy MCP in auto protocol mode."),
+    WARNING_103("HttpSession parameter ''{0}'' is always nil for modern MCP requests. " +
             "Remove it or migrate session-dependent behavior to explicit application state."),
-    WARNING_104("Session parameter ''{0}'' may be nil for modern MCP requests in auto protocol mode. " +
+    WARNING_104("HttpSession parameter ''{0}'' may be nil for modern MCP requests in auto protocol mode. " +
             "Handle nil explicitly or select legacy protocol mode if this service requires sessions."),
     WARNING_101("The Ballerina version is not supported for endpoints.yaml. " +
             "Try using Ballerina 2201.13.6 or above.");

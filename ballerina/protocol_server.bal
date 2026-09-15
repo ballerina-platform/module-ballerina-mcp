@@ -50,7 +50,7 @@ isolated function unsupportedProtocolResponse(string requestedVersion, string[] 
 isolated function modernError(int errorCode, string errorMessage, RequestId requestId)
         returns http:BadRequest => {body: createJsonRpcError(errorCode, errorMessage, requestId)};
 
-isolated function modernCapabilities(StreamableHttpServiceConfiguration serviceConfig, boolean supportsSubscriptions = false) returns ServerCapabilities {
+isolated function modernCapabilities(StreamableHttpConfiguration serviceConfig, boolean supportsSubscriptions = false) returns ServerCapabilities {
     ServerCapabilities serverCapabilities = {...(serviceConfig.options?.capabilities ?: {})};
     // No runtime for these optional capabilities is installed by this module.
     foreach string capabilityName in ["tasks", "logging", "prompts", "resources", "completions"] {
@@ -64,8 +64,10 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
         boolean cacheable = false) returns http:Ok {
     Result wireResult = {...resultValue};
     wireResult["resultType"] = wireResult["resultType"] ?: "complete";
-    record {} resultMeta = {...(wireResult._meta ?: {})};
-    resultMeta[SERVER_INFO_META_KEY] = serverInfo;
+    ResultMetaObject resultMeta = {...(wireResult._meta ?: {})};
+    Implementation effectiveServerInfo = resultMeta.serverInfo ?: serverInfo;
+    _ = resultMeta.removeIfHasKey("serverInfo");
+    resultMeta[SERVER_INFO_META_KEY] = effectiveServerInfo;
     wireResult._meta = resultMeta;
     if cacheable {
         wireResult["ttlMs"] = wireResult["ttlMs"] ?: 0;
@@ -74,14 +76,14 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
     return {body: {jsonrpc: JSONRPC_VERSION, id: requestId, result: wireResult}};
 }
 
-isolated function handleModernRequest(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
+isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpServiceConfiguration serviceConfig) returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:Response {
+        StreamableHttpConfiguration serviceConfig) returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:Response {
     string|http:HeaderNotFoundError originHeader = requestHeaders.getHeader("origin");
     if originHeader is string {
         boolean allowedOrigin = false;
-        foreach string allowedValue in serviceConfig.allowedOrigins {
-            if allowedValue == originHeader {
+        foreach string allowedValue in serviceConfig.httpConfig.cors.allowOrigins {
+            if allowedValue == "*" || allowedValue == originHeader {
                 allowedOrigin = true;
                 break;
             }
@@ -233,8 +235,8 @@ isolated function handleModernRequest(Service|AdvancedService|StreamableHttpServ
     return modernResult(callResult, serviceConfig.info, requestMessage.id);
 }
 
-isolated function listProtocolTools(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
-        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig)
+isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
+        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpConfiguration serviceConfig)
         returns ListToolsResult|error {
     ListToolsResult|Error listResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
@@ -246,9 +248,7 @@ isolated function listProtocolTools(Service|AdvancedService|StreamableHttpServic
         } else {
             listResult = advancedResult;
         }
-    } else if mcpService is AdvancedService {
-        listResult = trapListToolsFailure(trap invokeOnListTools(mcpService));
-    } else if mcpService is Service|StreamableHttpService {
+    } else if mcpService is StreamableHttpService {
         return listProtocolToolsForRemoteFunctions(mcpService);
     }
     else {
@@ -257,11 +257,11 @@ isolated function listProtocolTools(Service|AdvancedService|StreamableHttpServic
     return (check listResult).cloneWithType();
 }
 
-isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
+isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         CallToolParams callParams, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpServiceConfiguration serviceConfig) returns CallToolResult|InputRequiredResult|error {
+        StreamableHttpConfiguration serviceConfig) returns CallToolResult|InputRequiredResult|error {
     CallToolParams applicationParams = callParams.clone();
-    Meta applicationMeta = {...(callParams._meta ?: {})};
+    RequestMetaObject applicationMeta = {...(callParams._meta ?: {})};
     foreach string metaKey in [PROTOCOL_META_KEY, CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LOG_LEVEL_META_KEY] {
         _ = applicationMeta.removeIfHasKey(metaKey);
     }
@@ -283,9 +283,7 @@ isolated function callProtocolTool(Service|AdvancedService|StreamableHttpService
         } else {
             callResult = advancedResult.cloneWithType();
         }
-    } else if mcpService is AdvancedService {
-        callResult = trap invokeOnCallTool(mcpService, applicationParams, ());
-    } else if mcpService is Service|StreamableHttpService {
+    } else if mcpService is StreamableHttpService {
         CallToolResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
                 applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);

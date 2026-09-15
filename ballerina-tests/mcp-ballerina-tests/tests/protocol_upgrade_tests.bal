@@ -19,12 +19,12 @@ import ballerina/test;
 
 listener mcp:StreamableHttpListener upgradeListener = check new (8788);
 
-@mcp:StreamableHttpServiceConfig {
-    info: {name: "protocol-upgrade", version: "1.4.0"},
+@mcp:StreamableHttpConfig {
+    info: {name: "protocol-upgrade", version: "2.0.0"},
     protocolMode: "auto"
 }
 service mcp:StreamableHttpService /upgrade on upgradeListener {
-    remote isolated function versionedEcho(string inputValue, mcp:Meta? requestMeta) returns string {
+    remote isolated function versionedEcho(string inputValue, mcp:RequestMetaObject? requestMeta) returns string {
         return inputValue + (requestMeta is () ? ":no-meta" : ":meta");
     }
 }
@@ -34,17 +34,17 @@ function testBuiltPackageSupportsBothProtocolEras() returns error? {
     test:assertEquals(mcp:LATEST_PROTOCOL_VERSION, "2026-07-28",
             msg = "Integration tests must resolve the package being built, not a cached earlier release");
     mcp:StreamableHttpClient modernClient = check new ("http://localhost:8788/upgrade", protocolMode = "auto");
-    check modernClient->initialize();
+    _ = check modernClient->connect();
     mcp:DiscoverResult discoveryResult = check modernClient->discover();
     test:assertTrue(discoveryResult.supportedVersions.some(versionValue => versionValue == "2026-07-28"));
     mcp:CallToolResult modernResult = check modernClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
     mcp:TextContent modernText = check modernResult.content[0].ensureType();
     test:assertEquals(modernText.text, "hello:no-meta");
-    test:assertEquals(modernResult._meta, ());
+    test:assertEquals(modernResult._meta?.serverInfo?.name, "protocol-upgrade");
     check modernClient->close();
 
     mcp:StreamableHttpClient legacyClient = check new ("http://localhost:8788/upgrade", protocolMode = "legacy");
-    check legacyClient->initialize();
+    _ = check legacyClient->connect();
     mcp:CallToolResult legacyResult = check legacyClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
     mcp:TextContent legacyText = check legacyResult.content[0].ensureType();
     test:assertEquals(legacyText.text, "hello:no-meta");

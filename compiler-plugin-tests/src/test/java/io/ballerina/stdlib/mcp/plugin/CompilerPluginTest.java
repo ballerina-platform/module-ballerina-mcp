@@ -120,31 +120,10 @@ public class CompilerPluginTest {
     }
 
     @Test
-    public void testHeaderParamRequiresStreamableHttpService() {
-        DiagnosticResult diagnosticResult = compile("sample_package_6");
-        Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "accesses transport-specific properties", MCP_109);
-    }
-
-    @Test
     public void testSessionParamStatelessViaTransportConfig() {
         DiagnosticResult diagnosticResult = compile("sample_package_7");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
         assertError(diagnosticResult, 0, "is not allowed when sessionMode is STATELESS", MCP_104);
-    }
-
-    @Test
-    public void testRawHeadersParamRequiresStreamableHttpService() {
-        DiagnosticResult diagnosticResult = compile("sample_package_8");
-        Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "accesses transport-specific properties", MCP_109);
-    }
-
-    @Test
-    public void testRequestParamRequiresStreamableHttpService() {
-        DiagnosticResult diagnosticResult = compile("sample_package_9");
-        Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "accesses transport-specific properties", MCP_109);
     }
 
     @Test
@@ -211,8 +190,8 @@ public class CompilerPluginTest {
         Diagnostic diagnostic = (Diagnostic) diagnosticResult.errors().toArray()[0];
         Assert.assertFalse(diagnostic.message().contains("mcp:CallToolParams"),
                 "onListTools supported-types message must not list 'mcp:CallToolParams': " + diagnostic.message());
-        Assert.assertFalse(diagnostic.message().contains("mcp:Session"),
-                "onListTools supported-types message must not list 'mcp:Session': " + diagnostic.message());
+        Assert.assertFalse(diagnostic.message().contains("mcp:HttpSession"),
+                "onListTools supported-types message must not list 'mcp:HttpSession': " + diagnostic.message());
     }
 
     @Test

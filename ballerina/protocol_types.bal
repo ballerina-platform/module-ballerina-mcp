@@ -59,6 +59,18 @@ public type DiscoverResult record {
     "public"|"private" cacheScope = "private";
 };
 
+# Information established when a client connects to a server.
+public type ConnectionInfo record {|
+    # Effective protocol version selected for subsequent requests.
+    string protocolVersion;
+    # Server identity, when the peer supplied it.
+    Implementation serverInfo?;
+    # Capabilities advertised by the server.
+    ServerCapabilities capabilities;
+    # Optional guidance supplied by the server.
+    string instructions?;
+|};
+
 # Embedded server input request. Only declared client capabilities may be requested.
 public type InputRequest record {|
     # The requested input operation.
@@ -69,7 +81,7 @@ public type InputRequest record {|
 
 # Additional input required before the original operation can complete.
 public type InputRequiredResult record {
-    *Result;
+    *ResultFields;
     # Identifies an interim result requiring a continuation.
     "input_required" resultType = "input_required";
     # Input requests keyed by server-assigned identifiers.

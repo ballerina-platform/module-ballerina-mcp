@@ -20,12 +20,12 @@ import ballerina/jballerina.java;
 # Represents a non-error type that can be cloned.
 public type Cloneable (any & readonly)|xml|Cloneable[]|map<Cloneable>|table<map<Cloneable>>;
 
-# Represents the type of a value stored in the `Session` object.
-public type SessionEntry Cloneable|isolated object {};
+# Represents the type of a value stored in the `HttpSession` object.
+public type HttpSessionEntry Cloneable|isolated object {};
 
 # Represents an MCP session storage object used to maintain session state across requests.
-public isolated class Session {
-    private final map<SessionEntry> entries = {};
+public isolated class HttpSession {
+    private final map<HttpSessionEntry> entries = {};
     private final string sessionId;
 
     # Creates a new MCP session with the given session ID.
@@ -46,7 +46,7 @@ public isolated class Session {
     #
     # + key - Represents the entry key
     # + value - Represents the entry value
-    public isolated function set(string key, SessionEntry value) {
+    public isolated function set(string key, HttpSessionEntry value) {
         if value is Cloneable {
             lock {
                 self.entries[key] = value.clone();
@@ -62,7 +62,7 @@ public isolated class Session {
     #
     # + key - The key identifying the entry
     # + return - The value associated with the key
-    public isolated function get(string key) returns SessionEntry {
+    public isolated function get(string key) returns HttpSessionEntry {
         lock {
             Cloneable|isolated object {} value = self.entries.get(key);
             if value is Cloneable {
@@ -96,7 +96,7 @@ public isolated class Session {
     # + key - The key identifying the entry
     # + targetType - The expected type of the entry
     # + return - The casted value or an error if the entry is missing or of the wrong type
-    public isolated function getWithType(string key, typedesc<SessionEntry> targetType = <>)
+    public isolated function getWithType(string key, typedesc<HttpSessionEntry> targetType = <>)
     returns targetType|Error = @java:Method {
         'class: "io.ballerina.stdlib.mcp.Session"
     } external;
@@ -106,7 +106,7 @@ public isolated class Session {
     # + key - The key identifying the entry to remove
     public isolated function remove(string key) {
         lock {
-            SessionEntry|error err = trap self.entries.remove(key);
+            HttpSessionEntry|error err = trap self.entries.remove(key);
             if err is error {
                 panic err;
             }

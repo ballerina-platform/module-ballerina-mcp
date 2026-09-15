@@ -25,7 +25,7 @@ public function main() returns mcp:ClientError? {
     log:printInfo("Starting MCP Weather Client Demo");
 
     // Initialize the client with client information
-    check mcpClient->initialize({
+    _ = check mcpClient->connect({
         name: "MCP Weather Client Demo",
         version: "1.0.0"
     });

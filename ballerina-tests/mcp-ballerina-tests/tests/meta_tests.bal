@@ -17,13 +17,13 @@
 import ballerina/mcp;
 import ballerina/test;
 
-listener mcp:Listener metaListener = check new (8767);
+listener mcp:StreamableHttpListener metaListener = check new (8767);
 
-@mcp:ServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "meta-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:Service /mcp on metaListener {
+isolated service mcp:StreamableHttpService /mcp on metaListener {
 
     # Greets the caller, echoing the request's trace id when client metadata is supplied.
     #
@@ -31,8 +31,8 @@ isolated service mcp:Service /mcp on metaListener {
     # + meta - Optional request metadata injected by the framework
     # + greeting - Greeting to prepend to the name
     # + return - A greeting message that reflects whether metadata was received
-    isolated remote function greetWithMeta(string name, mcp:Meta? meta, string greeting) returns string {
-        if meta is mcp:Meta {
+    isolated remote function greetWithMeta(string name, mcp:RequestMetaObject? meta, string greeting) returns string {
+        if meta is mcp:RequestMetaObject {
             anydata traceId = meta["traceId"];
             return string `${greeting}, ${name}! trace=${traceId.toString()}`;
         }
@@ -45,7 +45,7 @@ final mcp:Implementation metaClientInfo = {name: "meta-test-client", version: "1
 
 @test:Config
 function testMetaToolSchemaExcludesMetaParam() returns error? {
-    check metaClient->initialize(metaClientInfo);
+    _ = check metaClient->connect(metaClientInfo);
     mcp:ListToolsResult result = check metaClient->listTools();
 
     test:assertEquals(result.tools.length(), 1);
@@ -75,8 +75,10 @@ function testMetaReceivedOnServer() returns error? {
     test:assertEquals(textContent.text, "Hello, World! trace=trace-xyz",
         msg = "Server must access the client-supplied _meta via the mcp:Meta parameter");
 
-    // The request _meta must not be auto-echoed onto the result (not mandated by the MCP spec).
-    test:assertTrue(result._meta is (),
+    // The request _meta is not echoed. Modern responses expose only the server identity added by the transport.
+    mcp:ResultMetaObject resultMeta = check result._meta.ensureType();
+    test:assertEquals(resultMeta.serverInfo?.name, "meta-test-server");
+    test:assertFalse(resultMeta.hasKey("traceId"),
         msg = "Request _meta must not be echoed back onto the response");
 }
 

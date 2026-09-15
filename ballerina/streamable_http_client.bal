@@ -28,7 +28,8 @@ public distinct isolated client class StreamableHttpClient {
     private final int maxInputRounds;
     private final InputHandler? inputHandler;
     private boolean modernSelected = false;
-    private boolean initialized = false;
+    private boolean connected = false;
+    private string? negotiatedProtocolVersion = ();
     private Implementation clientInfo = {name: "MCP Client", version: "1.0.0"};
     private ClientCapabilities clientCapabilities = {};
     private map<ToolDefinition> toolSchemas = {};
@@ -53,17 +54,18 @@ public distinct isolated client class StreamableHttpClient {
         self.transport = check new (serverUrl, config);
     }
 
-    # Initializes the MCP connection by performing protocol handshake and capability exchange.
+    # Connects to the MCP server and negotiates the protocol version.
     #
     # + clientInfo - Client implementation information
     # + capabilities - Client capabilities to advertise
     # + headers - Optional headers to include with the request
-    # + return - `ClientError` if initialization fails, `()` on success
-    isolated remote function initialize(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
-            ClientCapabilities capabilities = {}, map<string|string[]> headers = {}) returns ClientError? {
+    # + return - Negotiated connection information or a client error
+    isolated remote function connect(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
+            ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
+            returns ConnectionInfo|ClientError {
         lock {
-            if self.initialized {
-                return;
+            if self.connected {
+                return self.getConnectionInfo();
             }
             self.clientInfo = clientInfo.cloneReadOnly();
             self.clientCapabilities = capabilities.cloneReadOnly();
@@ -71,7 +73,11 @@ public distinct isolated client class StreamableHttpClient {
 
             // If a session ID exists, assume reconnection and skip initialization.
             if sessionId is string {
-                return;
+                self.negotiatedProtocolVersion = LATEST_LEGACY_PROTOCOL_VERSION;
+                self.transport.setProtocolVersion(LATEST_LEGACY_PROTOCOL_VERSION);
+                self.serverCapabilities = {};
+                self.connected = true;
+                return self.getConnectionInfo();
             }
         }
 
@@ -82,14 +88,14 @@ public distinct isolated client class StreamableHttpClient {
                     DiscoverResult & readonly discoveredInfo = discovered.cloneReadOnly();
                     lock {
                         self.modernSelected = true;
-                        self.initialized = true;
+                        self.connected = true;
+                        self.negotiatedProtocolVersion = MODERN_PROTOCOL_VERSION;
+                        self.transport.setProtocolVersion(MODERN_PROTOCOL_VERSION);
                         self.discovery = discoveredInfo;
                         self.serverCapabilities = discoveredInfo.capabilities;
-                        record {} discoveryMeta = (discoveredInfo._meta ?: {}).clone();
-                        anydata identity = discoveryMeta[SERVER_INFO_META_KEY];
-                        self.serverInfo = identity is Implementation ? identity.cloneReadOnly() : ();
+                        self.serverInfo = discoveredInfo._meta?.serverInfo;
                     }
-                    return;
+                    return self.getConnectionInfo();
                 }
                 if self.protocolMode == "modern" {
                     return error ProtocolVersionError("Server does not support the modern protocol version");
@@ -98,7 +104,31 @@ public distinct isolated client class StreamableHttpClient {
                 return discovered;
             }
         }
-        // The initialize handshake can negotiate only handshake-era versions.
+        return self.initializeLegacyConnection(clientInfo, capabilities, headers);
+    }
+
+    # Performs the legacy initialize handshake explicitly and connects this client.
+    #
+    # + clientInfo - Client implementation information
+    # + capabilities - Client capabilities to advertise
+    # + headers - Optional headers to include with the request
+    # + return - Negotiated legacy connection information or a client error
+    isolated remote function initializeLegacy(
+            Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
+            ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
+            returns ConnectionInfo|ClientError {
+        lock {
+            if self.connected {
+                return error ClientInitializationError("Client is already connected");
+            }
+            self.clientInfo = clientInfo.cloneReadOnly();
+            self.clientCapabilities = capabilities.cloneReadOnly();
+        }
+        return self.initializeLegacyConnection(clientInfo, capabilities, headers);
+    }
+
+    private isolated function initializeLegacyConnection(Implementation clientInfo,
+            ClientCapabilities capabilities, map<string|string[]> headers) returns ConnectionInfo|ClientError {
         InitializeRequest initRequest = {
             params: {
                 protocolVersion: LATEST_LEGACY_PROTOCOL_VERSION,
@@ -129,6 +159,7 @@ public distinct isolated client class StreamableHttpClient {
         lock {
             self.serverCapabilities = response.capabilities.cloneReadOnly();
             self.serverInfo = response.serverInfo.cloneReadOnly();
+            self.negotiatedProtocolVersion = protocolVersion;
             // Record the negotiated version so it is sent as the MCP-Protocol-Version header
             // on all subsequent requests (including the initialized notification below).
             self.transport.setProtocolVersion(protocolVersion);
@@ -136,19 +167,9 @@ public distinct isolated client class StreamableHttpClient {
 
         check self.sendNotificationMessage(<InitializedNotification>{}, headers);
         lock {
-            self.initialized = true;
+            self.connected = true;
         }
-    }
-
-    # Opens a server-sent events (SSE) stream for asynchronous server-to-client communication.
-    #
-    # + return - Stream of JsonRpcMessages or a ClientError.
-    isolated remote function subscribeToServerMessages() returns stream<JsonRpcMessage, StreamError?>|ClientError {
-        check self.ensureInitialized({});
-        if self.isModern() {
-            return self->listen({toolsListChanged: true});
-        }
-        return self.transport.establishEventStream();
+        return self.getConnectionInfo();
     }
 
     # Retrieves the list of available tools from the server.
@@ -158,7 +179,7 @@ public distinct isolated client class StreamableHttpClient {
     # + return - List of available tools or a ClientError.
     isolated remote function listTools(map<string|string[]> headers = {}, Cursor? cursor = ())
             returns ListToolsResult|ClientError {
-        check self.ensureInitialized(headers);
+        check self.ensureConnected();
         RequestParams listParams = {};
         if cursor is Cursor {
             listParams["cursor"] = cursor;
@@ -207,11 +228,11 @@ public distinct isolated client class StreamableHttpClient {
     # + return - Result of the tool execution or a ClientError.
     isolated remote function callTool(CallToolParams params, map<string|string[]> headers = {})
             returns CallToolResult|ClientError {
-        check self.ensureInitialized(headers);
+        check self.ensureConnected();
         if self.isModern() {
             CallToolParams currentParams = params.clone();
             foreach int roundNumber in 0 ... self.maxInputRounds {
-                CallToolResult|InputRequiredResult callResult = check self->callToolWithResult(currentParams, headers);
+                CallToolResult|InputRequiredResult callResult = check self->callToolOnce(currentParams, headers);
                 if callResult is CallToolResult {
                     return callResult.cloneReadOnly();
                 }
@@ -223,7 +244,7 @@ public distinct isolated client class StreamableHttpClient {
                 foreach var [inputId, inputRequest] in (inputResult.inputRequests ?: {}).entries() {
                     InputHandler? inputHandler = self.inputHandler;
                     if inputHandler is () {
-                        return error ToolCallError("Input handler is not configured; use callToolWithResult() for manual continuation",
+                        return error ToolCallError("Input handler is not configured; use callToolOnce() for manual continuation",
                                 inputRequired = callResult);
                     }
                     inputResponses[inputId] = check inputHandler(inputRequest);
@@ -270,7 +291,8 @@ public distinct isolated client class StreamableHttpClient {
                 check self.transport.terminateSession();
                 self.serverCapabilities = ();
                 self.serverInfo = ();
-                self.initialized = false;
+                self.connected = false;
+                self.negotiatedProtocolVersion = ();
                 self.modernSelected = false;
                 self.discovery = ();
                 self.toolSchemas = {};
@@ -282,15 +304,15 @@ public distinct isolated client class StreamableHttpClient {
         }
     }
 
-    # Opens a modern change-notification subscription. The first event acknowledges the accepted filters.
+    # Opens a notification stream. Modern peers use subscriptions/listen; legacy peers use the GET event stream.
     # + notifications - Requested notification types
     # + headers - Additional request headers
     # + return - Notification stream, or a client error; close the stream to cancel it
     isolated remote function listen(SubscriptionFilter notifications = {toolsListChanged: true},
-            map<string|string[]> headers = {}) returns stream<JsonRpcNotification, StreamError?>|ClientError {
-        check self.ensureInitialized(headers);
+            map<string|string[]> headers = {}) returns stream<JsonRpcMessage, StreamError?>|ClientError {
+        check self.ensureConnected();
         if !self.isModern() {
-            return error ClientError("subscriptions/listen requires modern MCP");
+            return self.transport.establishEventStream();
         }
         JsonRpcRequest requestMessage;
         lock {
@@ -319,14 +341,44 @@ public distinct isolated client class StreamableHttpClient {
         return self.discoverModern(headers);
     }
 
+    # Adopts a previously obtained modern discovery result without another network request.
+    #
+    # + discovered - Previously obtained discovery result
+    # + clientInfo - Client implementation information
+    # + capabilities - Client capabilities to advertise on subsequent requests
+    # + return - Adopted connection information or a client error
+    public isolated function adoptDiscovery(DiscoverResult discovered,
+            Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
+            ClientCapabilities capabilities = {}) returns ConnectionInfo|ClientError {
+        if !discovered.supportedVersions.some(versionValue => versionValue == MODERN_PROTOCOL_VERSION) {
+            return error ProtocolVersionError("Discovery result does not advertise the modern protocol version");
+        }
+        Implementation? discoveredServerInfo = discovered._meta?.serverInfo;
+        lock {
+            if self.connected {
+                return error ClientInitializationError("Client is already connected");
+            }
+            self.clientInfo = clientInfo.cloneReadOnly();
+            self.clientCapabilities = capabilities.cloneReadOnly();
+            self.modernSelected = true;
+            self.connected = true;
+            self.negotiatedProtocolVersion = MODERN_PROTOCOL_VERSION;
+            self.transport.setProtocolVersion(MODERN_PROTOCOL_VERSION);
+            self.discovery = discovered.cloneReadOnly();
+            self.serverCapabilities = discovered.capabilities.cloneReadOnly();
+            self.serverInfo = discoveredServerInfo is Implementation ? discoveredServerInfo.cloneReadOnly() : ();
+        }
+        return self.getConnectionInfo();
+    }
+
     # Executes a single request, preserving arbitrary structured output and input-required results.
     # Continuations supply inputResponses and the unchanged requestState in params.
     # + params - Tool arguments and optional continuation inputs
     # + headers - Additional HTTP request headers
     # + return - A completed result, input-required result, or client error
-    isolated remote function callToolWithResult(CallToolParams params, map<string|string[]> headers = {})
+    isolated remote function callToolOnce(CallToolParams params, map<string|string[]> headers = {})
             returns CallToolResult|InputRequiredResult|ClientError {
-        check self.ensureInitialized(headers);
+        check self.ensureConnected();
         if !self.isModern() {
             return self->callTool(params, headers);
         }
@@ -411,18 +463,37 @@ public distinct isolated client class StreamableHttpClient {
         }
     }
 
-    private isolated function ensureInitialized(map<string|string[]> headers) returns ClientError? {
+    private isolated function getConnectionInfo() returns ConnectionInfo|ClientError {
         lock {
-            if self.initialized || self.transport.getSessionId() is string {
+            string? protocolVersion = self.negotiatedProtocolVersion;
+            ServerCapabilities? capabilities = self.serverCapabilities;
+            if protocolVersion is () || capabilities is () {
+                return error ClientInitializationError("Client connection information is unavailable");
+            }
+            ConnectionInfo connection = {protocolVersion, capabilities};
+            if self.serverInfo is Implementation {
+                connection.serverInfo = self.serverInfo;
+            }
+            string? instructions = self.discovery?.instructions;
+            if instructions is string {
+                connection.instructions = instructions;
+            }
+            return connection.cloneReadOnly();
+        }
+    }
+
+    private isolated function ensureConnected() returns ClientError? {
+        lock {
+            if self.connected {
                 return;
             }
-            return self->initialize(headers = headers.cloneReadOnly());
+            return error ClientInitializationError("Client is not connected; call connect() first");
         }
     }
 
     private isolated function discoverModern(map<string|string[]> headers) returns DiscoverResult|ClientError {
         Result wireResult = check self.sendModernRequest("server/discover", {}, headers);
-        DiscoverResult|error discovery = wireResult.cloneWithType();
+        DiscoverResult|error discovery = applicationResult(wireResult, preserveCacheHints = true).cloneWithType();
         if discovery is error || wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
                 !wireResult.hasKey("cacheScope") {
             return error ResponseParsingError("Invalid discovery result");
@@ -436,7 +507,7 @@ public distinct isolated client class StreamableHttpClient {
         lock {
             self.requestId += 1;
             RequestParams wireParams = {...requestParams.cloneReadOnly()};
-            Meta requestMeta = {...(wireParams._meta ?: {})};
+            RequestMetaObject requestMeta = {...(wireParams._meta ?: {})};
             requestMeta[PROTOCOL_META_KEY] = MODERN_PROTOCOL_VERSION;
             requestMeta[CLIENT_INFO_META_KEY] = self.clientInfo;
             requestMeta[CAPABILITIES_META_KEY] = self.clientCapabilities;

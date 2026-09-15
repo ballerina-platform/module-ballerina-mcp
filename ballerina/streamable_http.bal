@@ -292,13 +292,8 @@ isolated class StreamableHttpClientTransport {
             returns JsonRpcMessage|StreamableHttpTransportError {
         do {
             json payload = check response.getJsonPayload();
-            JsonRpcMessage|http:ErrorPayload result = check payload.cloneWithType();
-            if result is JsonRpcMessage {
-                return result;
-            }
-            return error HttpClientError(
-                string `Received error response from server: ${result.toJsonString()}`
-            );
+            JsonRpcMessage result = check payload.cloneWithType();
+            return result;
         } on fail error e {
             return error ResponseParsingError(
                 string `Unable to parse JSON response: ${e.message()}`

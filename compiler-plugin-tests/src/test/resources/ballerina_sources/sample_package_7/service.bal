@@ -18,14 +18,14 @@ import ballerina/mcp;
 
 // sessionMode declared via the transport-specific @mcp:StreamableHttpServiceConfig annotation
 // must be honored by the plugin: a Session parameter under STATELESS is an error (MCP_104).
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "sample-7", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9307) {
 
     @mcp:Tool {description: "session param under stateless transport config"}
-    remote function badSession(mcp:Session session, string name) returns string {
+    remote function badSession(mcp:HttpSession session, string name) returns string {
         return name;
     }
 }

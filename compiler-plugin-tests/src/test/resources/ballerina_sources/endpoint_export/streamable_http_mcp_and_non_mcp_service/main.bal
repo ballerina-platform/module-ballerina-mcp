@@ -3,7 +3,7 @@ import ballerina/mcp;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9094);
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "streamable-mixed", version: "1.0.0"}
 }
 service mcp:StreamableHttpService /streamable on mcpListener {

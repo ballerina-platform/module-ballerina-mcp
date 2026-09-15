@@ -19,13 +19,13 @@ import ballerina/test;
 
 // An mcp:AdvancedService builds the whole CallToolResult, so it can attach server-originated
 // response _meta regardless of whether the client sent request _meta.
-listener mcp:Listener advancedMetaListener = check new (8768);
+listener mcp:StreamableHttpListener advancedMetaListener = check new (8768);
 
-@mcp:ServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "advanced-meta-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-service mcp:AdvancedService /mcp on advancedMetaListener {
+service mcp:StreamableHttpAdvancedService /mcp on advancedMetaListener {
 
     remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {
@@ -39,10 +39,10 @@ service mcp:AdvancedService /mcp on advancedMetaListener {
         };
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session)
+    remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
             returns mcp:CallToolResult|mcp:ServerError {
         // Server-originated metadata, independent of the request.
-        record {} responseMeta = {"serverId": "srv-1"};
+        mcp:ResultMetaObject responseMeta = {"serverId": "srv-1"};
 
         // Optionally fold in a client-supplied key, if present.
         if params._meta is record {} {
@@ -65,7 +65,7 @@ final mcp:Implementation advancedMetaClientInfo = {name: "advanced-meta-test-cli
 
 @test:Config
 function testAdvancedServiceOriginatesResponseMetaWithoutRequestMeta() returns error? {
-    check advancedMetaClient->initialize(advancedMetaClientInfo);
+    _ = check advancedMetaClient->connect(advancedMetaClientInfo);
 
     // The client sends no _meta, yet the server attaches its own response _meta.
     mcp:CallToolResult result = check advancedMetaClient->callTool({name: "ping"});
