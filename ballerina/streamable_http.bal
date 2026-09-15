@@ -19,7 +19,7 @@ import ballerina/http;
 # Configuration options for the Streamable HTTP client transport.
 #
 # + sessionId - Optional session identifier for continued interactions.
-public type StreamableHttpClientTransportConfig record {|
+public type StreamableHttpClientConfig record {|
     *http:ClientConfiguration;
     string sessionId?;
     # Auto probes discovery and falls back to the legacy handshake.
@@ -44,11 +44,11 @@ isolated class StreamableHttpClientTransport {
     # + serverUrl - The URL of the server endpoint.
     # + config - Optional configuration, such as session ID.
     # + return - A StreamableHttpTransportError if initialization fails; otherwise, nil.
-    isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config)
+    isolated function init(string serverUrl, *StreamableHttpClientConfig config)
             returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
 
-        StreamableHttpClientTransportConfig {sessionId, protocolMode: _, maxInputRounds: _, inputHandler: _, ...clientConfig} = config;
+        StreamableHttpClientConfig {sessionId, protocolMode: _, maxInputRounds: _, inputHandler: _, ...clientConfig} = config;
         clientConfig.followRedirects = clientConfig.followRedirects ?: {
             enabled: true
         };

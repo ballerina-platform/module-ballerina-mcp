@@ -94,14 +94,14 @@ public class Utils {
     public static final String ADVANCED_LIST_TOOLS_SUPPORTED_PARAM_TYPES =
             "'http:Headers', 'http:Request', or an '@http:Header' parameter";
 
-    public enum SessionMode {
+    public enum HttpSessionMode {
         STATEFUL("stateful"),
         STATELESS("stateless"),
         AUTO("auto");
 
         private final String value;
 
-        SessionMode(String value) {
+        HttpSessionMode(String value) {
             this.value = value;
         }
 
@@ -109,11 +109,11 @@ public class Utils {
             return value;
         }
 
-        public static SessionMode fromString(String value) {
+        public static HttpSessionMode fromString(String value) {
             if (value == null) {
                 return AUTO;
             }
-            for (SessionMode mode : values()) {
+            for (HttpSessionMode mode : values()) {
                 if (mode.value.equalsIgnoreCase(value)) {
                     return mode;
                 }
@@ -217,22 +217,6 @@ public class Utils {
         return isFromMcpModule && isServiceType;
     }
 
-    /**
-     * Returns whether the service enclosing the given remote function is an `mcp:StreamableHttpService` — the only
-     * basic service type whose tools may bind transport-specific (HTTP) request information.
-     */
-    static boolean isStreamableHttpService(FunctionDefinitionNode functionDefinitionNode,
-                                           SemanticModel semanticModel) {
-        Optional<Symbol> parentSymbol = semanticModel.symbol(functionDefinitionNode.parent());
-        if (parentSymbol.isEmpty() || parentSymbol.get().kind() != SymbolKind.SERVICE_DECLARATION) {
-            return false;
-        }
-        return ((ServiceDeclarationSymbol) parentSymbol.get()).typeDescriptor()
-                .flatMap(TypeSymbol::getName)
-                .map(STREAMABLE_HTTP_BASIC_SERVICE_NAME::equals)
-                .orElse(false);
-    }
-
     public static boolean isAnydataType(TypeSymbol typeSymbol, SyntaxNodeAnalysisContext context) {
         return typeSymbol.subtypeOf(context.semanticModel().types().ANYDATA);
     }
@@ -247,7 +231,7 @@ public class Utils {
 
         String functionName = functionSymbol.getName().orElse(UNKNOWN_SYMBOL);
         Location alternativeLocation = functionDefinitionNode.location();
-        SessionMode sessionMode = getSessionMode(functionDefinitionNode, context.semanticModel());
+        HttpSessionMode sessionMode = getSessionMode(functionDefinitionNode, context.semanticModel());
 
         var parameterSymbolList = functionTypeSymbol.params().get();
         boolean hasSessionParam = false;
@@ -262,21 +246,6 @@ public class Utils {
 
             boolean isSessionType = isSessionType(parameterType);
             boolean isMetaParam = isMetaParameter(parameterType);
-
-            // Header binding, http:Headers, and http:Request parameters expose transport-specific
-            // (HTTP) request information, so they are only allowed in an mcp:StreamableHttpService.
-            // (The type system separately guarantees an mcp:StreamableHttpService can only be
-            // attached to an mcp:StreamableHttpListener.)
-            boolean isHttpBoundParam = hasHttpHeaderAnnotation(parameterSymbol) || isHttpHeadersType(parameterType)
-                    || isHttpRequestType(parameterType);
-            if (isHttpBoundParam && !isStreamableHttpService(functionDefinitionNode, context.semanticModel())) {
-                Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                        CompilationDiagnostic.TRANSPORT_SPECIFIC_PARAM_NOT_ALLOWED,
-                        parameterSymbol.getLocation().orElse(alternativeLocation),
-                        functionName, parameterName);
-                context.reportDiagnostic(diagnostic);
-                return false;
-            }
 
             if (hasHttpHeaderAnnotation(parameterSymbol)) {
                 if (!isValidHeaderParamType(parameterType, context)) {
@@ -329,7 +298,7 @@ public class Utils {
                     return false;
                 }
 
-                if (sessionMode == SessionMode.STATELESS && !isOptionalType(parameterType)) {
+                if (sessionMode == HttpSessionMode.STATELESS && !isOptionalType(parameterType)) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
                             CompilationDiagnostic.SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
@@ -395,7 +364,7 @@ public class Utils {
     }
 
     /**
-     * Check if a TypeSymbol is optional/nullable (e.g., mcp:Meta?).
+     * Check if a TypeSymbol is optional/nullable (e.g., mcp:RequestMetaObject?).
      * An optional type is a union type that includes NIL as one of its members.
      *
      * @param typeSymbol The type symbol to check
@@ -419,7 +388,7 @@ public class Utils {
     }
 
     /**
-     * Check if a parameter is of Meta type (either mcp:Meta or mcp:Meta?).
+     * Check if a parameter is request metadata (either mcp:RequestMetaObject or mcp:RequestMetaObject?).
      * Returns true if the parameter is Meta type, and also indicates if it's optional.
      *
      * @param typeSymbol The type symbol to check
@@ -431,7 +400,7 @@ public class Utils {
             return true;
         }
 
-        // Check if it's an optional Meta type (mcp:Meta?)
+        // Check if it is an optional request metadata type (mcp:RequestMetaObject?).
         if (typeSymbol.typeKind() == TypeDescKind.UNION) {
             UnionTypeSymbol unionTypeSymbol = (UnionTypeSymbol) typeSymbol;
             for (TypeSymbol memberType : unionTypeSymbol.memberTypeDescriptors()) {
@@ -537,11 +506,11 @@ public class Utils {
                 : typeSymbol;
     }
 
-    private static SessionMode getSessionMode(FunctionDefinitionNode functionDefinitionNode,
+    private static HttpSessionMode getSessionMode(FunctionDefinitionNode functionDefinitionNode,
                                               SemanticModel semanticModel) {
         ServiceDeclarationNode serviceNode = (ServiceDeclarationNode) functionDefinitionNode.parent();
         if (serviceNode.metadata().isEmpty() || serviceNode.metadata().get().annotations().isEmpty()) {
-            return SessionMode.AUTO;
+            return HttpSessionMode.AUTO;
         }
 
         AnnotationNode transportConfigAnnotation =
@@ -549,7 +518,7 @@ public class Utils {
         if (transportConfigAnnotation != null) {
             return getSessionModeFieldValue(transportConfigAnnotation, semanticModel);
         }
-        return SessionMode.AUTO;
+        return HttpSessionMode.AUTO;
     }
 
     private static AnnotationNode findMcpAnnotation(ServiceDeclarationNode serviceNode, String annotationName) {
@@ -561,9 +530,10 @@ public class Utils {
         return null;
     }
 
-    private static SessionMode getSessionModeFieldValue(AnnotationNode annotationNode, SemanticModel semanticModel) {
+    private static HttpSessionMode getSessionModeFieldValue(AnnotationNode annotationNode,
+                                                            SemanticModel semanticModel) {
         if (annotationNode.annotValue().isEmpty()) {
-            return SessionMode.AUTO;
+            return HttpSessionMode.AUTO;
         }
 
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().get().fields();
@@ -578,10 +548,10 @@ public class Utils {
             }
         }
 
-        return SessionMode.AUTO;
+        return HttpSessionMode.AUTO;
     }
 
-    private static SessionMode resolveSessionModeValue(io.ballerina.compiler.syntax.tree.ExpressionNode valueExpr,
+    private static HttpSessionMode resolveSessionModeValue(io.ballerina.compiler.syntax.tree.ExpressionNode valueExpr,
                                                        SemanticModel semanticModel) {
         Optional<Symbol> symbol = semanticModel.symbol(valueExpr);
         if (symbol.isPresent()) {
@@ -594,7 +564,7 @@ public class Utils {
                     Object constValue = enumMemberSymbol.constValue();
                     if (constValue instanceof ConstantValue) {
                         String enumValue = ((ConstantValue) constValue).value().toString();
-                        return SessionMode.fromString(enumValue);
+                        return HttpSessionMode.fromString(enumValue);
                     }
                 }
             }
@@ -606,10 +576,10 @@ public class Utils {
             if (literalValue.startsWith("\"") && literalValue.endsWith("\"")) {
                 literalValue = literalValue.substring(1, literalValue.length() - 1);
             }
-            return SessionMode.fromString(literalValue);
+            return HttpSessionMode.fromString(literalValue);
         }
 
-        return SessionMode.AUTO;
+        return HttpSessionMode.AUTO;
     }
 
     private static boolean isMcpAnnotation(AnnotationNode annotation, String annotationName) {

@@ -28,15 +28,13 @@ public enum DiagnosticMessage {
     ERROR_103("HttpSession parameter ''{1}'' in function ''{0}'' must be the first parameter."),
     ERROR_104("HttpSession parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'."),
     ERROR_105("Meta parameter ''{1}'' in function ''{0}'' must be the last parameter."),
-    ERROR_106("Meta parameter ''{1}'' in function ''{0}'' must be optional (e.g., 'mcp:Meta?')."),
+    ERROR_106("Request metadata parameter ''{1}'' in function ''{0}'' must be optional " +
+            "(e.g., 'mcp:RequestMetaObject?')."),
     ERROR_107("Duplicate parameter ''{1}'' in function ''{0}''. " +
             "Only one parameter of type ''{2}'' is allowed."),
     ERROR_108("Invalid type of header param ''{1}'' in function ''{0}'': expected one of the 'string', 'int', " +
             "'float', 'decimal', 'boolean' types, an array of the above types, or a record which consists of " +
             "the above types."),
-    ERROR_109("Parameter ''{1}'' in function ''{0}'' accesses transport-specific properties, which are not " +
-            "accessible in the transport-agnostic 'mcp:Service'. Use a transport-specific service type such " +
-            "as 'mcp:StreamableHttpService'."),
     ERROR_110("A service of type 'mcp:StreamableHttpAdvancedService' must define a remote method ''{0}''."),
     ERROR_111("Remote method ''{0}'' in an 'mcp:StreamableHttpAdvancedService' must declare exactly one " +
             "parameter of type 'mcp:CallToolParams'."),

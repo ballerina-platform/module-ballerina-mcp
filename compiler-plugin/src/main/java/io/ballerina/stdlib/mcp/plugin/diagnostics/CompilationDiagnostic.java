@@ -40,7 +40,6 @@ public enum CompilationDiagnostic {
     META_PARAM_MUST_BE_OPTIONAL(DiagnosticMessage.ERROR_106, DiagnosticCode.MCP_106, ERROR),
     DUPLICATE_PARAMETER(DiagnosticMessage.ERROR_107, DiagnosticCode.MCP_107, ERROR),
     INVALID_HEADER_PARAMETER_TYPE(DiagnosticMessage.ERROR_108, DiagnosticCode.MCP_108, ERROR),
-    TRANSPORT_SPECIFIC_PARAM_NOT_ALLOWED(DiagnosticMessage.ERROR_109, DiagnosticCode.MCP_109, ERROR),
     ADVANCED_SERVICE_MISSING_METHOD(DiagnosticMessage.ERROR_110, DiagnosticCode.MCP_110, ERROR),
     ADVANCED_ON_CALL_TOOL_PARAMS(DiagnosticMessage.ERROR_111, DiagnosticCode.MCP_111, ERROR),
     ADVANCED_INVALID_RETURN_TYPE(DiagnosticMessage.ERROR_112, DiagnosticCode.MCP_112, ERROR),

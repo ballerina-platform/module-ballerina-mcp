@@ -46,7 +46,6 @@ public class CompilerPluginTest {
     private static final String MCP_104 = "MCP_104";
     private static final String MCP_107 = "MCP_107";
     private static final String MCP_108 = "MCP_108";
-    private static final String MCP_109 = "MCP_109";
     private static final String MCP_110 = "MCP_110";
     private static final String MCP_111 = "MCP_111";
     private static final String MCP_112 = "MCP_112";
@@ -198,7 +197,7 @@ public class CompilerPluginTest {
     public void testMetaParameterCanAppearBeforeDataParameters() {
         DiagnosticResult diagnosticResult = compile("sample_package_18");
         Assert.assertEquals(errorCount(diagnosticResult), 0,
-                "an optional mcp:Meta parameter must be accepted outside the final position: "
+                "an optional mcp:RequestMetaObject parameter must be accepted outside the final position: "
                         + diagnosticResult.errors().toString());
     }
     @Test

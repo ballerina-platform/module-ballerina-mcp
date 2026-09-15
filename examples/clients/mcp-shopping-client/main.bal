@@ -66,7 +66,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
     log:printInfo(string `\n=== ${customerName}'s Shopping Session ===`);
 
     // Create a new client (each client gets its own session)
-    mcp:StreamableHttpClientTransportConfig config = {
+    mcp:StreamableHttpClientConfig config = {
         auth: {
             username: "ballerina",
             issuer: "wso2",

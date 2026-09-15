@@ -16,7 +16,7 @@
 
 import ballerina/mcp;
 
-// onListTools does not accept mcp:CallToolParams or mcp:Session; the reported supported types
+// onListTools does not accept mcp:CallToolParams or mcp:HttpSession; the reported supported types
 // must be specific to onListTools and must not list those two (MCP_102).
 @mcp:StreamableHttpConfig {
     info: {name: "sample-17", version: "1.0.0"}

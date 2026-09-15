@@ -119,9 +119,9 @@ A comprehensive example demonstrating STATEFUL session mode with persistent shop
 - Thread-safe session storage
 
 **Available Tools:**
-- `addToCart(session: mcp:Session, productName: string, price: decimal)` - Add item to cart
-- `viewCart(session: mcp:Session)` - View current cart contents
-- `clearCart(session: mcp:Session)` - Clear all items from cart
+- `addToCart(session: mcp:HttpSession, productName: string, price: decimal)` - Add item to cart
+- `viewCart(session: mcp:HttpSession)` - View current cart contents
+- `clearCart(session: mcp:HttpSession)` - Clear all items from cart
 
 **How to run:**
 ```bash

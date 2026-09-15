@@ -56,9 +56,9 @@ function testMetaToolSchemaExcludesMetaParam() returns error? {
     test:assertTrue(properties.hasKey("name"),
         msg = "Schema must include the 'name' data parameter");
     test:assertTrue(properties.hasKey("greeting"),
-        msg = "Schema must include data parameters declared after mcp:Meta");
+        msg = "Schema must include data parameters declared after mcp:RequestMetaObject");
     test:assertFalse(properties.hasKey("meta"),
-        msg = "The injected mcp:Meta parameter must not appear in the tool input schema");
+        msg = "The injected mcp:RequestMetaObject parameter must not appear in the tool input schema");
 }
 
 @test:Config {dependsOn: [testMetaToolSchemaExcludesMetaParam]}
@@ -69,11 +69,11 @@ function testMetaReceivedOnServer() returns error? {
         _meta: {"traceId": "trace-xyz"}
     });
 
-    // The server-side tool reads the injected client _meta via the mcp:Meta parameter
+    // The server-side tool reads the injected client _meta via the mcp:RequestMetaObject parameter
     // and reflects it in the result text.
     mcp:TextContent textContent = check result.content[0].ensureType();
     test:assertEquals(textContent.text, "Hello, World! trace=trace-xyz",
-        msg = "Server must access the client-supplied _meta via the mcp:Meta parameter");
+        msg = "Server must access the client-supplied _meta via the mcp:RequestMetaObject parameter");
 
     // The request _meta is not echoed. Modern responses expose only the server identity added by the transport.
     mcp:ResultMetaObject resultMeta = check result._meta.ensureType();
@@ -91,5 +91,5 @@ function testMetaIsNilWhenClientOmitsIt() returns error? {
 
     mcp:TextContent textContent = check result.content[0].ensureType();
     test:assertEquals(textContent.text, "Hello, World! no-meta",
-        msg = "Tool must observe a nil mcp:Meta when the client sends no _meta");
+        msg = "Tool must observe nil request metadata when the client sends no _meta");
 }

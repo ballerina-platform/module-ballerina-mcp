@@ -137,29 +137,6 @@ public final class McpServiceMethodHelper {
     }
 
     /**
-     * Invoke the 'onListTools' remote method on the given MCP service object.
-     *
-     * @param env        The Ballerina runtime environment.
-     * @param mcpService The MCP service object.
-     * @return           Result of remote method invocation.
-     */
-    public static Object invokeOnListTools(Environment env, BObject mcpService) {
-        return env.getRuntime().callMethod(mcpService, ON_LIST_TOOLS_METHOD, null);
-    }
-
-    /**
-     * Invoke the 'onCallTool' remote method on the given MCP service object with parameters.
-     *
-     * @param env        The Ballerina runtime environment.
-     * @param mcpService The MCP service object.
-     * @param params     Parameters for the tool invocation.
-     * @return           Result of remote method invocation.
-     */
-    public static Object invokeOnCallTool(Environment env, BObject mcpService, BMap<?, ?> params, Object session) {
-        return env.getRuntime().callMethod(mcpService, ON_CALL_TOOL_METHOD, null, params, session);
-    }
-
-    /**
      * Invoke the 'onCallTool' remote method of a Streamable HTTP advanced service. The method's
      * declared parameters are inspected and bound flexibly (CallToolParams, HttpSession, http:Headers,
      * http:Request, and '@http:Header' parameters), mirroring how basic service tools are bound.
@@ -743,7 +720,7 @@ public final class McpServiceMethodHelper {
             return true;
         }
 
-        // Check if it's an optional Meta type (mcp:Meta?)
+        // Check if it is an optional request metadata type (mcp:RequestMetaObject?).
         if (paramType instanceof UnionType unionType) {
             return unionType.getMemberTypes().stream()
                     .anyMatch(type -> type.getPackage() != null

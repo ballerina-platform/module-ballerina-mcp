@@ -17,7 +17,7 @@
 import ballerina/mcp;
 import ballerina/test;
 
-// An mcp:AdvancedService builds the whole CallToolResult, so it can attach server-originated
+// An mcp:StreamableHttpAdvancedService builds the whole CallToolResult, so it can attach server-originated
 // response _meta regardless of whether the client sent request _meta.
 listener mcp:StreamableHttpListener advancedMetaListener = check new (8768);
 

@@ -3,13 +3,11 @@
   "listeners": [
     {
       "id": "$listener1",
-      "doc": "MCP listener over the Streamable HTTP transport, wrapping an http:Listener and dispatching each tool call to the matching method. Prefer this over mcp:Listener as that is deprecated.",
+      "doc": "MCP listener over the Streamable HTTP transport, wrapping an http:Listener and dispatching MCP requests to the attached service.",
       "type": {
         "name": "StreamableHttpListener"
       },
       "services": [
-        "$service",
-        "$advancedService",
         "$streamableHttpService",
         "$streamableHttpAdvancedService"
       ],
@@ -19,118 +17,6 @@
   ],
   "serviceTypes": [
     {
-      "id": "$service",
-      "doc": "An MCP server exposing each remote method as a tool, discovered automatically from its signature.",
-      "type": {
-        "name": "Service"
-      },
-      "concrete": false,
-      "multipleListenersAllowed": false,
-      "annotations": [
-        "$serviceConfig"
-      ],
-      "identifier": {
-        "presence": "optional",
-        "form": [
-          "basePath"
-        ]
-      },
-      "handlers": {
-        "backedByConcreteType": false,
-        "options": [
-          {
-            "id": "$service.tool",
-            "name": "*",
-            "kind": "remote",
-            "addMode": "many",
-            "doc": "One remote method per MCP tool. The method name becomes the tool name and its parameters become the tool's input schema, both discovered automatically, with no explicit registration. By default the tool's description is derived from the functions docstring use this as the preferred method instead of using an annotation.",
-            "annotations": [
-              "$tool"
-            ],
-            "params": [
-              {
-                "id": "$service.tool.session",
-                "name": "session",
-                "doc": "The client session, when the server is running in a stateful session mode.",
-                "type": {
-                  "name": "Session"
-                },
-                "presence": "optional"
-              },
-              {
-                "id": "$service.tool.toolArg",
-                "doc": "One tool argument. Repeat the slot once per argument the tool accepts; the user names each one and the names and types become the tool's input schema.",
-                "type": {
-                  "name": "anydata",
-                  "builtin": true
-                },
-                "presence": "optional",
-                "addMode": "many"
-              },
-              {
-                "id": "$service.tool.meta",
-                "name": "meta",
-                "doc": "The request metadata (`_meta`) the client attached to this tool call, e.g. a progress token. Injected by the runtime and excluded from the tool's input schema, so it is never a tool argument. Declare it nilable -- write `mcp:Meta? meta`; a non-nilable `mcp:Meta` is a compile error. At most one per method; its position in the signature is unconstrained.",
-                "type": {
-                  "name": "Meta"
-                },
-                "presence": "optional"
-              }
-            ],
-            "returns": {
-              "id": "$service.tool.returns",
-              "type": [
-                {
-                  "name": "anydata",
-                  "builtin": true
-                },
-                {
-                  "name": "error",
-                  "builtin": true
-                }
-              ],
-              "dataBinding": {
-                "typedescs": [
-                  {
-                    "constraint": {
-                      "name": "anydata",
-                      "builtin": true
-                    },
-                    "shapes": [
-                      {
-                        "form": "bare"
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "$advancedService",
-      "doc": "The advanced MCP server form, where tool listing and invocation are handled explicitly rather than discovered automatically.",
-      "type": {
-        "name": "AdvancedService"
-      },
-      "concrete": true,
-      "multipleListenersAllowed": false,
-      "annotations": [
-        "$serviceConfig"
-      ],
-      "identifier": {
-        "presence": "optional",
-        "form": [
-          "basePath"
-        ]
-      },
-      "handlers": {
-        "backedByConcreteType": true
-      }
-    },
-    {
       "id": "$streamableHttpService",
       "doc": "An MCP server exposing each remote method as a tool over the streamable HTTP transport, discovered automatically from its signature.",
       "type": {
@@ -139,7 +25,7 @@
       "concrete": false,
       "multipleListenersAllowed": false,
       "annotations": [
-        "$streamableHttpServiceConfig"
+        "$streamableHttpConfig"
       ],
       "identifier": {
         "presence": "optional",
@@ -165,7 +51,7 @@
                 "name": "session",
                 "doc": "The client session, when the server is running in a stateful session mode.",
                 "type": {
-                  "name": "Session"
+                  "name": "HttpSession"
                 },
                 "presence": "optional"
               },
@@ -182,9 +68,9 @@
               {
                 "id": "$streamableHttpService.tool.meta",
                 "name": "meta",
-                "doc": "The request metadata (`_meta`) the client attached to this tool call, e.g. a progress token. Injected by the runtime and excluded from the tool's input schema, so it is never a tool argument. Declare it nilable -- write `mcp:Meta? meta`; a non-nilable `mcp:Meta` is a compile error. At most one per method; its position in the signature is unconstrained.",
+                "doc": "The request metadata (`_meta`) the client attached to this tool call, e.g. a progress token. Injected by the runtime and excluded from the tool's input schema, so it is never a tool argument. Declare it nilable -- write `mcp:RequestMetaObject? meta`; a non-nilable `mcp:RequestMetaObject` is a compile error. At most one per method; its position in the signature is unconstrained.",
                 "type": {
-                  "name": "Meta"
+                  "name": "RequestMetaObject"
                 },
                 "presence": "optional"
               },
@@ -291,7 +177,7 @@
       "concrete": false,
       "multipleListenersAllowed": false,
       "annotations": [
-        "$streamableHttpServiceConfig"
+        "$streamableHttpConfig"
       ],
       "identifier": {
         "presence": "optional",
@@ -404,7 +290,7 @@
                 "name": "session",
                 "doc": "The client session, when the server is running in a stateful session mode.",
                 "type": {
-                  "name": "Session"
+                  "name": "HttpSession"
                 },
                 "presence": "optional"
               },
@@ -477,6 +363,9 @@
                   "name": "CallToolResult"
                 },
                 {
+                  "name": "InputRequiredResult"
+                },
+                {
                   "name": "ServerError"
                 }
               ]
@@ -488,17 +377,9 @@
   ],
   "annotations": [
     {
-      "id": "$serviceConfig",
+      "id": "$streamableHttpConfig",
       "type": {
-        "name": "ServiceConfig"
-      },
-      "attachPoint": "service",
-      "presence": "optional"
-    },
-    {
-      "id": "$streamableHttpServiceConfig",
-      "type": {
-        "name": "StreamableHttpServiceConfig"
+        "name": "StreamableHttpConfig"
       },
       "attachPoint": "service",
       "presence": "optional"

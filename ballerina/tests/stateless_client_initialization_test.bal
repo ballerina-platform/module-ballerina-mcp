@@ -48,7 +48,7 @@ function testClientConstructionWithUnreachableServer() returns error? {
 
 @test:Config {}
 function testClientConstructionWithConfig() returns error? {
-    StreamableHttpClientTransportConfig config = {
+    StreamableHttpClientConfig config = {
         timeout: 30,
         followRedirects: {enabled: true}
     };

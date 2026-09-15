@@ -627,7 +627,7 @@ public type McpToolConfig record {|
     InputSchema schema?;
     # The JSON schema generated from, or explicitly assigned for, the successful return value.
     # It is advertised only to clients using the modern protocol.
-    map<json> outputSchema?;
+    OutputSchema outputSchema?;
     # Whether modern requests should receive structured output for this tool.
     boolean structuredOutput = true;
 |};

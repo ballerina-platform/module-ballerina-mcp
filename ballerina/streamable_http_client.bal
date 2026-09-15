@@ -41,7 +41,7 @@ public distinct isolated client class StreamableHttpClient {
     # + serverUrl - MCP server URL
     # + config - Client transport configuration
     # + return - `ClientError` if transport creation fails, `()` on success
-    public isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config) returns ClientError? {
+    public isolated function init(string serverUrl, *StreamableHttpClientConfig config) returns ClientError? {
         if config.maxInputRounds < 0 {
             return error ClientInitializationError("maxInputRounds must be non-negative");
         }
