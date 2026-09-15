@@ -114,6 +114,20 @@ remote isolated function balances(string accountId) returns decimal[] {
 JSON Schema keywords that the module does not declare. Until Ballerina provides native JSON Schema evaluation, these
 documents are carried as metadata; Ballerina type binding remains responsible for ordinary tool arguments.
 
+To mirror a regular-service tool argument into the modern MCP parameter header, annotate the argument with
+`@mcp:Argument`. The argument remains in `tools/call.params.arguments`; the generated input schema carries the
+standard `x-mcp-header` extension used by interoperable clients and servers.
+
+```ballerina
+remote isolated function weather(
+        @mcp:Argument {headerName: "Region"} string region) returns Weather|error {
+    // ...
+}
+```
+
+This produces a `region` property containing `"x-mcp-header": "Region"`. Use `@http:Header` when a value comes only
+from an HTTP header and must not be part of the MCP tool arguments.
+
 ## Sessions
 
 Legacy requests support three `HttpSessionMode` values:

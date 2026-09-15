@@ -228,4 +228,10 @@ public class CompilerPluginTest {
         DiagnosticResult result = compile("sample_package_25");
         Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
     }
+
+    @Test
+    public void testMcpArgumentHeaderAnnotation() {
+        DiagnosticResult result = compile("sample_package_26");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+    }
 }

@@ -635,6 +635,16 @@ public type McpToolConfig record {|
 # Annotation to mark a function as an MCP tool configuration.
 public annotation McpToolConfig Tool on object function;
 
+# Configuration for an MCP tool argument.
+public type ArgumentConfig record {|
+    # Mirrors the argument into the corresponding `Mcp-Param-*` request header. The argument
+    # remains present in `tools/call.params.arguments`.
+    string headerName;
+|};
+
+# Configures an argument of a tool remote function.
+public const annotation ArgumentConfig Argument on parameter;
+
 # Represents the options for configuring an MCP server.
 public type ServerOptions record {|
     # Capabilities to advertise as being supported by this server.

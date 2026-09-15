@@ -43,6 +43,18 @@ service mcp:StreamableHttpService /structuredGeneric on structuredListener {
     remote isolated function booleanValue() returns boolean => true;
 }
 
+@mcp:StreamableHttpConfig {info: {name: "argument-headers", version: "1.0.0"}}
+service mcp:StreamableHttpService /argumentHeaders on structuredListener {
+    remote isolated function mirrorArguments(
+            @mcp:Argument {headerName: "Region"} string region,
+            @mcp:Argument {headerName: "Retry-Count"} int retries,
+            @mcp:Argument {headerName: "Confidence"} float confidence,
+            @mcp:Argument {headerName: "Ratio"} decimal ratio,
+            @mcp:Argument {headerName: "Enabled"} boolean enabled) returns string {
+        return string `${region}:${retries}:${confidence}:${ratio}:${enabled}`;
+    }
+}
+
 @test:Config {}
 function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
     mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
@@ -92,6 +104,40 @@ function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
     mcp:CallToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
     assertStructuredValue(booleanResult, true);
     check genericClient->close();
+}
+
+@test:Config {}
+function testMcpArgumentHeadersFromGeneratedSchema() returns error? {
+    mcp:StreamableHttpClient argumentClient = check new ("http://localhost:8789/argumentHeaders",
+            protocolMode = "modern");
+    _ = check argumentClient->connect();
+    mcp:ListToolsResult listedTools = check argumentClient->listTools();
+    mcp:ToolDefinition mirrorTool = check listedTools.tools[0].ensureType();
+    map<json> properties = check mirrorTool.inputSchema.properties.ensureType();
+    map<json> expectedHeaders = {
+        "region": "Region",
+        "retries": "Retry-Count",
+        "confidence": "Confidence",
+        "ratio": "Ratio",
+        "enabled": "Enabled"
+    };
+    foreach string parameterName in expectedHeaders.keys() {
+        map<json> propertySchema = check properties[parameterName].cloneWithType();
+        test:assertEquals(propertySchema["x-mcp-header"], expectedHeaders[parameterName]);
+    }
+
+    mcp:CallToolResult result = check argumentClient->callTool({
+        name: "mirrorArguments",
+        arguments: {
+            "region": "世界",
+            "retries": 3,
+            "confidence": 0.75,
+            "ratio": 1.25d,
+            "enabled": true
+        }
+    });
+    test:assertEquals(result.isError, ());
+    check argumentClient->close();
 }
 
 function assertSchemaType(mcp:ToolDefinition toolInfo, string expectedType) returns error? {

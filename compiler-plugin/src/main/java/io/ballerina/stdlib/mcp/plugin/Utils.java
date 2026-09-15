@@ -19,6 +19,7 @@
 package io.ballerina.stdlib.mcp.plugin;
 
 import io.ballerina.compiler.api.SemanticModel;
+import io.ballerina.compiler.api.symbols.AnnotationAttachmentSymbol;
 import io.ballerina.compiler.api.symbols.AnnotationSymbol;
 import io.ballerina.compiler.api.symbols.ArrayTypeSymbol;
 import io.ballerina.compiler.api.symbols.ConstantSymbol;
@@ -56,7 +57,12 @@ import io.ballerina.tools.diagnostics.Diagnostic;
 import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 import io.ballerina.tools.diagnostics.Location;
 
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Util class for the compiler plugin.
@@ -65,6 +71,8 @@ public class Utils {
 
     public static final String BALLERINA_ORG = "ballerina";
     public static final String TOOL_ANNOTATION_NAME = "Tool";
+    public static final String ARGUMENT_ANNOTATION_NAME = "Argument";
+    public static final String ARGUMENT_HEADER_NAME_FIELD = "headerName";
     public static final String MCP_PACKAGE_NAME = "mcp";
     public static final String STREAMABLE_HTTP_BASIC_SERVICE_NAME = "StreamableHttpService";
     public static final String STREAMABLE_HTTP_ADVANCED_SERVICE_NAME = "StreamableHttpAdvancedService";
@@ -82,6 +90,7 @@ public class Utils {
     public static final String UNKNOWN_SYMBOL = "unknown";
     public static final String STREAMABLE_HTTP_CONFIG_ANNOTATION_NAME = "StreamableHttpConfig";
     public static final String SESSION_MODE_FIELD = "sessionMode";
+    private static final Pattern MCP_HEADER_NAME = Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
 
     // Human-readable lists of supported parameter types, used in the INVALID_PARAMETER_TYPE diagnostic.
     public static final String BASIC_TOOL_SUPPORTED_PARAM_TYPES =
@@ -238,6 +247,7 @@ public class Utils {
         boolean hasMetaParam = false;
         boolean hasHeadersParam = false;
         boolean hasRequestParam = false;
+        Set<String> argumentHeaderNames = new HashSet<>();
 
         for (int i = 0; i < parameterSymbolList.size(); i++) {
             ParameterSymbol parameterSymbol = parameterSymbolList.get(i);
@@ -246,6 +256,36 @@ public class Utils {
 
             boolean isSessionType = isSessionType(parameterType);
             boolean isMetaParam = isMetaParameter(parameterType);
+            boolean hasMcpArgument = hasMcpArgumentAnnotation(parameterSymbol);
+
+            if (hasMcpArgument) {
+                if (hasHttpHeaderAnnotation(parameterSymbol) || isSessionType || isMetaParam
+                        || isHttpHeadersType(parameterType) || isHttpRequestType(parameterType)
+                        || !isValidMcpHeaderArgumentType(parameterType, context)) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.INVALID_MCP_ARGUMENT_TYPE,
+                            parameterSymbol.getLocation().orElse(alternativeLocation), functionName, parameterName);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+                String headerName = getMcpArgumentHeaderName(parameterSymbol).orElse("");
+                if (!MCP_HEADER_NAME.matcher(headerName).matches()) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.INVALID_MCP_ARGUMENT_HEADER_NAME,
+                            parameterSymbol.getLocation().orElse(alternativeLocation),
+                            functionName, parameterName, headerName);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+                if (!argumentHeaderNames.add(headerName.toLowerCase(Locale.ROOT))) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.DUPLICATE_MCP_ARGUMENT_HEADER_NAME,
+                            parameterSymbol.getLocation().orElse(alternativeLocation),
+                            functionName, parameterName, headerName);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+            }
 
             if (hasHttpHeaderAnnotation(parameterSymbol)) {
                 if (!isValidHeaderParamType(parameterType, context)) {
@@ -427,6 +467,43 @@ public class Utils {
         return parameterSymbol.annotations().stream()
                 .anyMatch(annotation -> HEADER_ANNOTATION_NAME.equals(annotation.getName().orElse(""))
                         && isHttpModuleSymbol(annotation));
+    }
+
+    static boolean hasMcpArgumentAnnotation(ParameterSymbol parameterSymbol) {
+        return parameterSymbol.annotations().stream()
+                .anyMatch(annotation -> ARGUMENT_ANNOTATION_NAME.equals(annotation.getName().orElse(""))
+                        && isMcpModuleSymbol(annotation));
+    }
+
+    static Optional<String> getMcpArgumentHeaderName(ParameterSymbol parameterSymbol) {
+        for (AnnotationAttachmentSymbol attachment : parameterSymbol.annotAttachments()) {
+            AnnotationSymbol annotation = attachment.typeDescriptor();
+            if (!ARGUMENT_ANNOTATION_NAME.equals(annotation.getName().orElse(""))
+                    || !isMcpModuleSymbol(annotation)) {
+                continue;
+            }
+            Optional<ConstantValue> attachmentValue = attachment.attachmentValue();
+            if (attachmentValue.isEmpty() || !(attachmentValue.get().value() instanceof Map<?, ?> fields)) {
+                return Optional.empty();
+            }
+            Object headerName = fields.get(ARGUMENT_HEADER_NAME_FIELD);
+            if (headerName instanceof ConstantValue constantValue && constantValue.value() instanceof String value) {
+                return Optional.of(value);
+            }
+            if (headerName instanceof String value) {
+                return Optional.of(value);
+            }
+            return Optional.empty();
+        }
+        return Optional.empty();
+    }
+
+    static boolean isValidMcpHeaderArgumentType(TypeSymbol typeSymbol, SyntaxNodeAnalysisContext context) {
+        TypeSymbol rawType = getRawType(typeSymbol);
+        var types = context.semanticModel().types();
+        return rawType.subtypeOf(types.STRING) || rawType.subtypeOf(types.INT)
+                || rawType.subtypeOf(types.FLOAT) || rawType.subtypeOf(types.DECIMAL)
+                || rawType.subtypeOf(types.BOOLEAN);
     }
 
     /**

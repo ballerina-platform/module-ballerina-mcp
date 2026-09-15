@@ -123,6 +123,14 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty() ?
                 NodeFactory.createSeparatedNodeList() : annotationNode.annotValue().get().fields();
         Map<String, ExpressionNode> fieldValues = extractFieldValues(fields);
+        if (fieldValues.containsKey(SCHEMA_FIELD_NAME)
+                && functionSymbol.typeDescriptor().params()
+                        .map(params -> params.stream().anyMatch(Utils::hasMcpArgumentAnnotation)).orElse(false)) {
+            Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                    CompilationDiagnostic.MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA,
+                    functionNodeLocation, functionName);
+            reportDiagnostic(diagnostic);
+        }
         if (fieldValues.containsKey(DESCRIPTION_FIELD_NAME)) {
             description = fieldValues.get(DESCRIPTION_FIELD_NAME).toSourceCode();
         }

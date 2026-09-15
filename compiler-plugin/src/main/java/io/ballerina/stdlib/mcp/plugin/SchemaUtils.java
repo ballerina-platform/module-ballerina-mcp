@@ -38,10 +38,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask.EMPTY_STRING;
 import static io.ballerina.stdlib.mcp.plugin.Utils.hasHttpHeaderAnnotation;
+import static io.ballerina.stdlib.mcp.plugin.Utils.getMcpArgumentHeaderName;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isHttpHeadersType;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isHttpRequestType;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isMetaParameter;
@@ -88,6 +90,10 @@ public class SchemaUtils {
                 String parameterDescription = Utils.getParameterDescription(functionSymbol, parameterName);
                 schema.setDescription(parameterDescription);
                 String jsonSchema = SchemaUtils.getJsonSchema(schema);
+                Optional<String> headerName = getMcpArgumentHeaderName(parameterSymbol);
+                if (headerName.isPresent()) {
+                    jsonSchema = addMcpHeader(jsonSchema, headerName.get());
+                }
                 individualParamSchema.put(parameterName, jsonSchema);
             } catch (RuntimeException e) {
                 throw new Exception(e);
@@ -102,6 +108,11 @@ public class SchemaUtils {
                 .collect(Collectors.joining(", ", "[", "]"));
         return String.format("{\"type\":\"object\",\"required\":%s,\"properties\":%s}",
                 required, properties);
+    }
+
+    private static String addMcpHeader(String jsonSchema, String headerName) {
+        return jsonSchema.substring(0, jsonSchema.length() - 1)
+                + ",\"x-mcp-header\":\"" + headerName + "\"}";
     }
 
     public static String getReturnSchema(FunctionSymbol functionSymbol, SyntaxNodeAnalysisContext context)
