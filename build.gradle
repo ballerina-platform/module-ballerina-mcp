@@ -27,6 +27,9 @@ allprojects {
     version = project.version
 
     apply plugin: 'jacoco'
+    jacoco {
+        toolVersion = jacocoVersion
+    }
     apply plugin: 'maven-publish'
 
     repositories {
@@ -112,9 +115,20 @@ release {
     }
 }
 
-task build {
-    dependsOn(':mcp-ballerina:build')
-    dependsOn(':mcp-native:build')
-    dependsOn(':mcp-compiler-plugin-tests:test')
-    dependsOn(':mcp-ballerina-tests:test')
+if (tasks.names.contains('build')) {
+    tasks.named('build') {
+        dependsOn(':mcp-ballerina:build')
+        dependsOn(':mcp-native:build')
+        dependsOn(':mcp-compiler-plugin-tests:test')
+        dependsOn(':mcp-ballerina-tests:test')
+
+    }
+} else {
+    tasks.register('build') {
+        dependsOn(':mcp-ballerina:build')
+        dependsOn(':mcp-native:build')
+        dependsOn(':mcp-compiler-plugin-tests:test')
+        dependsOn(':mcp-ballerina-tests:test')
+
+    }
 }

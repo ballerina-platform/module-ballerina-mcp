@@ -16,6 +16,13 @@
  */
 
 import org.apache.tools.ant.taskdefs.condition.Os
+import org.gradle.process.ExecOperations
+
+import javax.inject.Inject
+
+abstract class BallerinaExecHelper {
+    @Inject abstract ExecOperations getExecOperations()
+}
 
 plugins {
     id 'groovy'
@@ -58,13 +65,14 @@ task updateTomlFiles {
 }
 
 task commitTomlFiles {
+    def execHelper = project.objects.newInstance(BallerinaExecHelper)
     doLast {
         def files = ""
         testSuites.each{ testPackage ->
             files += "${project.projectDir}/${testPackage}/Ballerina.toml ${project.projectDir}/${testPackage}/Dependencies.toml "
         }
 
-        project.exec {
+        execHelper.execOperations.exec {
             ignoreExitValue true
             if (Os.isFamily(Os.FAMILY_WINDOWS)) {
                 commandLine 'cmd', '/c', "git commit -m \"[Automated] Update test package TOML files\" ${files}"
@@ -113,6 +121,7 @@ task initializeVariables {
 }
 
 task ballerinaTest {
+    def execHelper = project.objects.newInstance(BallerinaExecHelper)
     dependsOn(":${packageName}-${packageOrg}:build")
     dependsOn(updateTomlFiles)
     dependsOn(initializeVariables)
@@ -121,7 +130,7 @@ task ballerinaTest {
     doLast {
         testSuites.each { testPackage ->
             if (!skipTests) {
-                exec {
+                execHelper.execOperations.exec {
                     workingDir "${project.projectDir}/${testPackage}"
                     environment "JAVA_OPTS", "-DBALLERINA_DEV_COMPILE_BALLERINA_ORG=true"
                     if (Os.isFamily(Os.FAMILY_WINDOWS)) {
