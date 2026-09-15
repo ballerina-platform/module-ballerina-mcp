@@ -312,14 +312,16 @@ public type BaseMetadata record {|
     string title?;
 |};
 
-# Represents a sized icon that can be displayed in a user interface.
+# Represents an optionally sized icon that can be displayed in a user interface.
 public type Icon record {
-    # The MIME type of the icon (e.g. image/png, image/jpeg, image/svg+xml, image/webp)
-    string mimeType;
-    # The URL or base64-encoded data of the icon
-    string data;
-    # The size of the icon (e.g. 16, 32, 64, 128, 256)
-    int size?;
+    # URI pointing to an icon resource, including HTTP(S) and data URIs.
+    string src;
+    # Optional MIME type override when the source type is unavailable or generic.
+    string mimeType?;
+    # Supported sizes in WxH form, or `any` for scalable formats.
+    string[] sizes?;
+    # Theme for which the icon was designed.
+    "dark"|"light" theme?;
 };
 
 # Optional set of sized icons that the client can display in a user interface.
@@ -517,17 +519,18 @@ public type ToolExecution record {|
     TaskSupport taskSupport = TASK_SUPPORT_FORBIDDEN;
 |};
 
-# A JSON Schema object describing the parameters or output of a tool.
-public type JsonSchema record {
-    # The JSON Schema version
+# An object-root JSON Schema describing tool arguments.
+public type InputSchema record {|
+    # JSON Schema dialect, defaulting to JSON Schema 2020-12.
     string \$schema?;
-    # The type of the schema
+    # Tool input schemas always have an object root.
     "object" 'type;
-    # The properties of the schema
-    map<anydata> properties?;
-    # The required properties of the schema
+    # Schemas for tool arguments.
+    map<json> properties?;
+    # Required argument names.
     string[] required?;
-};
+    json...;
+|};
 
 # Definition for a tool the client can call.
 public type ToolDefinition record {
@@ -536,7 +539,7 @@ public type ToolDefinition record {
     # A human-readable description of the tool.
     string description?;
     # A JSON Schema object defining the expected parameters for the tool.
-    JsonSchema inputSchema;
+    InputSchema inputSchema;
     # Execution-related properties for this tool.
     ToolExecution execution?;
     # An optional general JSON Schema object defining the tool's structured output.
@@ -600,7 +603,7 @@ public type McpToolConfig record {|
     # The description of the tool.
     string description?;
     # The JSON schema for the tool's parameters.
-    map<json> schema?;
+    InputSchema schema?;
     # The JSON schema generated from, or explicitly assigned for, the successful return value.
     # It is advertised only to clients using the modern protocol.
     map<json> outputSchema?;

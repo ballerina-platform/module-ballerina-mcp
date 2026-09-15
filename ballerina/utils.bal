@@ -102,7 +102,7 @@ isolated function legacyToolListResult(ListToolsResult resultValue) returns List
     foreach ToolDefinition toolInfo in legacyResult.tools {
         OutputSchema? outputSchema = toolInfo.outputSchema;
         if outputSchema is OutputSchema {
-            JsonSchema|error objectSchema = outputSchema.cloneWithType();
+            InputSchema|error objectSchema = outputSchema.cloneWithType();
             if objectSchema is error {
                 _ = toolInfo.removeIfHasKey("outputSchema");
             }

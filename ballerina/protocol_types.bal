@@ -34,11 +34,15 @@ public const MISSING_REQUIRED_CLIENT_CAPABILITY = -32021;
 # The requested protocol version is not supported.
 public const UNSUPPORTED_PROTOCOL_VERSION = -32022;
 
-# JSON Schema output definition. Input schemas continue to require an object root.
-public type OutputSchema record {
+# A general JSON Schema value represented until native language support is available.
+public type JsonSchema map<json>;
+
+# JSON Schema output definition. Output schemas may describe any JSON value.
+public type OutputSchema record {|
     # JSON Schema dialect, defaulting to JSON Schema 2020-12.
     string \$schema?;
-};
+    json...;
+|};
 
 # Server discovery response. Identity is carried in _meta.
 public type DiscoverResult record {

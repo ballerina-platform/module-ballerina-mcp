@@ -308,7 +308,7 @@ function testModernRejectsLegacyInitializedNotification() returns error? {
 
 @test:Config {}
 function testHeaderTraversalIgnoresSchemaDataArrays() returns error? {
-    JsonSchema toolSchema = {
+    InputSchema toolSchema = {
         'type: "object",
         required: ["count"],
         properties: {

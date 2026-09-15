@@ -29,8 +29,8 @@ function testImplementation() {
         description: "An MCP server",
         websiteUrl: "https://example.com",
         icons: [
-            {mimeType: "image/png", data: "icon16", size: 16},
-            {mimeType: "image/svg+xml", data: "<svg/>"}
+            {src: "data:image/png;base64,icon16", mimeType: "image/png", sizes: ["16x16"]},
+            {src: "data:image/svg+xml;base64,svg", mimeType: "image/svg+xml", sizes: ["any"]}
         ]
     };
     test:assertEquals(impl.title, "My Server");
@@ -38,7 +38,7 @@ function testImplementation() {
     test:assertEquals(impl.websiteUrl, "https://example.com");
     Icon[] icons = impl.icons ?: [];
     test:assertEquals(icons.length(), 2);
-    test:assertEquals(icons[0].size, 16);
+    test:assertEquals(icons[0].sizes, ["16x16"]);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,12 +148,12 @@ function testToolDefinition() {
             "properties": {"result": {}}
         },
         execution: {taskSupport: "optional"},
-        icons: [{mimeType: "image/png", data: "icon", size: 32}]
+        icons: [{src: "data:image/png;base64,icon", mimeType: "image/png", sizes: ["32x32"]}]
     };
     test:assertEquals(tool.title, "Calculate");
     test:assertEquals(tool.outputSchema is OutputSchema ? tool.outputSchema["type"] : (), "object");
     test:assertEquals(tool.execution?.taskSupport, "optional");
-    test:assertEquals((tool.icons ?: [])[0].size, 32);
+    test:assertEquals((tool.icons ?: [])[0].sizes, ["32x32"]);
 }
 
 // ---------------------------------------------------------------------------

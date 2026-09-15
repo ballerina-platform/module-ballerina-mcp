@@ -232,7 +232,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "1.4.0"
+version = "2.0.0"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},

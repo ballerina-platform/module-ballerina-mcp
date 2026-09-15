@@ -25,11 +25,11 @@ isolated function decodeProtocolHeader(string headerValue) returns string|Error 
     'class: "io.ballerina.stdlib.mcp.ProtocolHeaders"
 } external;
 
-isolated function toolParameterHeaders(JsonSchema toolSchema, record {} toolArguments) returns map<string>|Error = @java:Method {
+isolated function toolParameterHeaders(InputSchema toolSchema, record {} toolArguments) returns map<string>|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.ProtocolHeaders"
 } external;
 
-isolated function validateToolHeaders(JsonSchema toolSchema, record {} toolArguments, http:Headers requestHeaders)
+isolated function validateToolHeaders(InputSchema toolSchema, record {} toolArguments, http:Headers requestHeaders)
         returns Error? {
     map<string> expectedHeaders = check toolParameterHeaders(toolSchema, toolArguments);
     foreach var [headerName, expectedValue] in expectedHeaders.entries() {
