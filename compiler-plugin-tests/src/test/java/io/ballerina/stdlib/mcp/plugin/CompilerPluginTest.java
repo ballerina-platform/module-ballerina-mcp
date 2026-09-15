@@ -234,4 +234,27 @@ public class CompilerPluginTest {
         DiagnosticResult result = compile("sample_package_26");
         Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
     }
+
+    @Test
+    public void testMcpArgumentHeaderDiagnostics() {
+        DiagnosticResult invalidType = compile("sample_package_27");
+        Assert.assertEquals(errorCount(invalidType), 1L);
+        assertError(invalidType, 0, "cannot use @mcp:Argument", "MCP_115");
+
+        DiagnosticResult invalidName = compile("sample_package_28");
+        Assert.assertEquals(errorCount(invalidName), 1L);
+        assertError(invalidName, 0, "Invalid MCP argument header name 'Bad Header'", "MCP_116");
+
+        DiagnosticResult duplicateName = compile("sample_package_29");
+        Assert.assertEquals(errorCount(duplicateName), 1L);
+        assertError(duplicateName, 0, "Duplicate MCP argument header name 'region'", "MCP_117");
+
+        DiagnosticResult explicitSchema = compile("sample_package_30");
+        Assert.assertEquals(errorCount(explicitSchema), 1L);
+        assertError(explicitSchema, 0, "cannot combine @mcp:Argument", "MCP_118");
+
+        DiagnosticResult conflictingBinding = compile("sample_package_31");
+        Assert.assertEquals(errorCount(conflictingBinding), 1L);
+        assertError(conflictingBinding, 0, "cannot use @mcp:Argument", "MCP_115");
+    }
 }
