@@ -16,6 +16,13 @@
  */
 
 import org.apache.tools.ant.taskdefs.condition.Os
+import org.gradle.process.ExecOperations
+
+import javax.inject.Inject
+
+abstract class BallerinaExecHelper {
+    @Inject abstract ExecOperations getExecOperations()
+}
 
 plugins {
     id 'io.ballerina.plugin'
@@ -66,8 +73,9 @@ task updateTomlFiles {
 }
 
 task commitTomlFiles {
+    def execHelper = project.objects.newInstance(BallerinaExecHelper)
     doLast {
-        project.exec {
+        execHelper.execOperations.exec {
             ignoreExitValue true
             if (Os.isFamily(Os.FAMILY_WINDOWS)) {
                 commandLine 'cmd', '/c', "git commit -m \"[Automated] Update the native jar versions\" Ballerina.toml Dependencies.toml"
@@ -79,16 +87,17 @@ task commitTomlFiles {
 }
 
 task startMcpServer() {
+    def execHelper = project.objects.newInstance(BallerinaExecHelper)
     doLast {
         if (!Os.isFamily(Os.FAMILY_WINDOWS)) {
             def stdOut = new ByteArrayOutputStream()
-            exec {
+            execHelper.execOperations.exec {
                 commandLine 'sh', '-c', "docker ps --filter name=weather-info-server"
                 standardOutput = stdOut
             }
             if (!stdOut.toString().contains("weather-info-server")) {
                 println "Starting MCP Weather Info Server..."
-                exec {
+                execHelper.execOperations.exec {
                     commandLine 'sh', '-c', "docker compose -f $project.projectDir/tests/resources/weather-info-server/compose.yml up -d"
                     standardOutput = stdOut
                 }
@@ -99,16 +108,17 @@ task startMcpServer() {
 }
 
 task stopMcpServer() {
+    def execHelper = project.objects.newInstance(BallerinaExecHelper)
     doLast {
         if (!Os.isFamily(Os.FAMILY_WINDOWS)) {
             def stdOut = new ByteArrayOutputStream()
-            exec {
+            execHelper.execOperations.exec {
                 commandLine 'sh', '-c', "docker ps --filter name=weather-info-server"
                 standardOutput = stdOut
             }
             if (stdOut.toString().contains("weather-info-server")) {
                 println "Stopping MCP Weather Info Server..."
-                exec {
+                execHelper.execOperations.exec {
                     commandLine 'sh', '-c', "docker compose -f $project.projectDir/tests/resources/weather-info-server/compose.yml down"
                     standardOutput = stdOut
                 }

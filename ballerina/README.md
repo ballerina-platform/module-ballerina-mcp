@@ -4,6 +4,13 @@ The `ballerina/mcp` module builds MCP clients and servers over Streamable HTTP. 
 `2026-07-28` and can still communicate with servers and clients using the initialize-based protocol through
 `2025-11-25`.
 
+### Key Features
+
+- MCP client and server implementation for LLM tool integration
+- Automatic tool discovery and type-safe schema generation
+- Flexible session management (STATEFUL, STATELESS, AUTO modes) for the legacy protocol
+- Streamable HTTP transport with Server-Sent Events (SSE)
+
 ## Protocol modes
 
 Set `protocolMode` on the client or in `@mcp:StreamableHttpConfig`.
