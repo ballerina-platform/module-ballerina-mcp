@@ -116,7 +116,7 @@ public class SchemaUtils {
     }
 
     public static String getReturnSchema(FunctionSymbol functionSymbol, SyntaxNodeAnalysisContext context)
-            throws Exception {
+            throws SchemaGenerationException {
         TypeSymbol returnType = functionSymbol.typeDescriptor().returnTypeDescriptor().orElse(null);
         if (returnType == null) {
             return null;
@@ -133,7 +133,7 @@ public class SchemaUtils {
     }
 
     private static List<String> getSuccessfulReturnSchemas(TypeSymbol returnType, TypeMapper typeMapper)
-            throws Exception {
+            throws SchemaGenerationException {
         if (returnType.typeKind() == TypeDescKind.TYPE_REFERENCE) {
             return getSuccessfulReturnSchemas(((TypeReferenceTypeSymbol) returnType).typeDescriptor(), typeMapper);
         }
@@ -155,7 +155,7 @@ public class SchemaUtils {
             Schema schema = typeMapper.getSchema(returnType);
             return List.of(getJsonSchema(schema));
         } catch (RuntimeException e) {
-            throw new Exception(e);
+            throw new SchemaGenerationException(e);
         }
     }
 

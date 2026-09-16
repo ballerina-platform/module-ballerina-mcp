@@ -179,7 +179,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         try {
             return Objects.requireNonNullElse(SchemaUtils.getReturnSchema(functionSymbol, this.context),
                     NIL_EXPRESSION);
-        } catch (Exception e) {
+        } catch (SchemaGenerationException e) {
             Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION,
                     functionSymbol.getLocation().orElse(alternativeFunctionLocation),
                     functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function"));
