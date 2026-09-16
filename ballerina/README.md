@@ -1,4 +1,4 @@
-# Ballerina MCP
+## Overview
 
 The `ballerina/mcp` module builds MCP clients and servers over Streamable HTTP. Version 2.0 supports MCP
 `2026-07-28` and can still communicate with servers and clients using the initialize-based protocol through
