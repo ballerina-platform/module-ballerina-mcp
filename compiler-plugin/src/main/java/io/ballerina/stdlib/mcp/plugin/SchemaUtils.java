@@ -55,7 +55,7 @@ public class SchemaUtils {
     }
 
     public static String getParameterSchema(FunctionSymbol functionSymbol, SyntaxNodeAnalysisContext context)
-            throws Exception {
+            throws SchemaGenerationException {
         FunctionTypeSymbol functionTypeSymbol = functionSymbol.typeDescriptor();
         List<ParameterSymbol> parameterSymbolList =
                 functionTypeSymbol.params().orElse(Collections.emptyList());
@@ -86,7 +86,7 @@ public class SchemaUtils {
                 String jsonSchema = SchemaUtils.getJsonSchema(schema);
                 individualParamSchema.put(parameterName, jsonSchema);
             } catch (RuntimeException e) {
-                throw new Exception(e);
+                throw new SchemaGenerationException(e);
             }
         }
         String properties = individualParamSchema.entrySet().stream()
