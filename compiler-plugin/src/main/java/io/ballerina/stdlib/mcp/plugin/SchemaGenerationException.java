@@ -19,7 +19,7 @@
 package io.ballerina.stdlib.mcp.plugin;
 
 /**
- * Signals that a tool parameter's JSON schema could not be generated.
+ * Signals that a tool's input or output JSON schema could not be generated.
  */
 public class SchemaGenerationException extends Exception {
     public SchemaGenerationException(RuntimeException cause) {

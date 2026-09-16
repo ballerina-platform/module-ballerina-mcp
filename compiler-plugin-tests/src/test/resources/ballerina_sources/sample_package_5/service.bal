@@ -18,7 +18,7 @@ import ballerina/http;
 import ballerina/mcp;
 
 // Header parameters must be string/int/float/decimal/boolean based (MCP_108).
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "sample-5", version: "1.0.0"}
 }
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9305) {

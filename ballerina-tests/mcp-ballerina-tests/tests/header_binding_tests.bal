@@ -29,7 +29,7 @@ type TestCallerHeaders record {|
     string tenantId?;
 |};
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "header-binding-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -79,7 +79,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "strict-header-binding-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS,
     httpConfig: {treatNilableAsOptional: false}
@@ -143,8 +143,8 @@ isolated function getRawTextResult(json payload) returns string|error {
 
 @test:Config
 function testHeaderBindingClientInit() returns error? {
-    check headerClient->initialize({name: "header-test-client", version: "1.0.0"});
-    check strictHeaderClient->initialize({name: "strict-header-test-client", version: "1.0.0"});
+    _ = check headerClient->connect({name: "header-test-client", version: "1.0.0"});
+    _ = check strictHeaderClient->connect({name: "strict-header-test-client", version: "1.0.0"});
 }
 
 @test:Config {dependsOn: [testHeaderBindingClientInit]}
@@ -155,7 +155,7 @@ function testHeaderParamsExcludedFromSchema() returns error? {
         if tool.name != "readAuth" {
             continue;
         }
-        map<record {}> properties = check tool.inputSchema.properties.ensureType();
+        map<anydata> properties = tool.inputSchema.properties ?: {};
         test:assertTrue(properties.hasKey("name"), msg = "tool argument must stay in the schema");
         test:assertFalse(properties.hasKey("authorization"),
             msg = "@http:Header parameter must be excluded from the tool input schema");

@@ -19,6 +19,7 @@
 package io.ballerina.stdlib.mcp.plugin;
 
 import io.ballerina.compiler.api.SemanticModel;
+import io.ballerina.compiler.api.symbols.AnnotationAttachmentSymbol;
 import io.ballerina.compiler.api.symbols.AnnotationSymbol;
 import io.ballerina.compiler.api.symbols.ArrayTypeSymbol;
 import io.ballerina.compiler.api.symbols.ConstantSymbol;
@@ -56,7 +57,12 @@ import io.ballerina.tools.diagnostics.Diagnostic;
 import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 import io.ballerina.tools.diagnostics.Location;
 
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Util class for the compiler plugin.
@@ -65,42 +71,46 @@ public class Utils {
 
     public static final String BALLERINA_ORG = "ballerina";
     public static final String TOOL_ANNOTATION_NAME = "Tool";
+    public static final String ARGUMENT_ANNOTATION_NAME = "Argument";
+    public static final String ARGUMENT_HEADER_NAME_FIELD = "headerName";
     public static final String MCP_PACKAGE_NAME = "mcp";
-    public static final String MCP_BASIC_SERVICE_NAME = "Service";
     public static final String STREAMABLE_HTTP_BASIC_SERVICE_NAME = "StreamableHttpService";
     public static final String STREAMABLE_HTTP_ADVANCED_SERVICE_NAME = "StreamableHttpAdvancedService";
-    public static final String SESSION_TYPE_NAME = "Session";
-    public static final String META_TYPE_NAME = "Meta";
+    public static final String SESSION_TYPE_NAME = "HttpSession";
+    public static final String META_TYPE_NAME = "RequestMetaObject";
     public static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
     public static final String CALL_TOOL_RESULT_TYPE_NAME = "CallToolResult";
     public static final String LIST_TOOLS_RESULT_TYPE_NAME = "ListToolsResult";
+    public static final String INPUT_REQUIRED_RESULT_TYPE_NAME = "InputRequiredResult";
+    public static final String SUBSCRIPTION_FILTER_TYPE_NAME = "SubscriptionFilter";
     public static final String HTTP_PACKAGE_NAME = "http";
     public static final String HEADERS_TYPE_NAME = "Headers";
     public static final String REQUEST_TYPE_NAME = "Request";
     public static final String HEADER_ANNOTATION_NAME = "Header";
     public static final String UNKNOWN_SYMBOL = "unknown";
-    public static final String SERVICE_CONFIG_ANNOTATION_NAME = "ServiceConfig";
-    public static final String STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME = "StreamableHttpServiceConfig";
+    public static final String STREAMABLE_HTTP_CONFIG_ANNOTATION_NAME = "StreamableHttpConfig";
     public static final String SESSION_MODE_FIELD = "sessionMode";
+    private static final Pattern MCP_HEADER_NAME = Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
 
     // Human-readable lists of supported parameter types, used in the INVALID_PARAMETER_TYPE diagnostic.
     public static final String BASIC_TOOL_SUPPORTED_PARAM_TYPES =
-            "'anydata' tool parameters, a first 'mcp:Session' parameter, an optional 'mcp:Meta' parameter, "
+            "'anydata' tool parameters, a first 'mcp:HttpSession' parameter, an optional "
+                    + "'mcp:RequestMetaObject' parameter, "
                     + "an 'http:Headers' parameter, an 'http:Request' parameter, or '@http:Header' parameters";
     public static final String ADVANCED_SUPPORTED_PARAM_TYPES =
-            "'mcp:CallToolParams', 'mcp:Session', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
-    // 'onListTools' does not accept 'mcp:CallToolParams' or 'mcp:Session'.
+            "'mcp:CallToolParams', 'mcp:HttpSession', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
+    // 'onListTools' does not accept 'mcp:CallToolParams' or 'mcp:HttpSession'.
     public static final String ADVANCED_LIST_TOOLS_SUPPORTED_PARAM_TYPES =
             "'http:Headers', 'http:Request', or an '@http:Header' parameter";
 
-    public enum SessionMode {
+    public enum HttpSessionMode {
         STATEFUL("stateful"),
         STATELESS("stateless"),
         AUTO("auto");
 
         private final String value;
 
-        SessionMode(String value) {
+        HttpSessionMode(String value) {
             this.value = value;
         }
 
@@ -108,11 +118,11 @@ public class Utils {
             return value;
         }
 
-        public static SessionMode fromString(String value) {
+        public static HttpSessionMode fromString(String value) {
             if (value == null) {
                 return AUTO;
             }
-            for (SessionMode mode : values()) {
+            for (HttpSessionMode mode : values()) {
                 if (mode.value.equalsIgnoreCase(value)) {
                     return mode;
                 }
@@ -191,7 +201,7 @@ public class Utils {
     }
 
     /**
-     * Returns whether the given node is an `mcp:Service` or `mcp:StreamableHttpService` declaration attached to a
+     * Returns whether the given node is an `mcp:StreamableHttpService` declaration attached to a
      * listener from the mcp module. These are the only services whose tool methods the source modifier may rewrite;
      * every other service declaration (including advanced mcp services and unrelated services such as `http:Service`)
      * must be left untouched.
@@ -210,27 +220,10 @@ public class Utils {
 
         boolean isServiceType = serviceSymbol.typeDescriptor()
                 .flatMap(TypeSymbol::getName)
-                .map(name -> MCP_BASIC_SERVICE_NAME.equals(name)
-                        || STREAMABLE_HTTP_BASIC_SERVICE_NAME.equals(name))
+                .map(STREAMABLE_HTTP_BASIC_SERVICE_NAME::equals)
                 .orElse(false);
 
         return isFromMcpModule && isServiceType;
-    }
-
-    /**
-     * Returns whether the service enclosing the given remote function is an `mcp:StreamableHttpService` — the only
-     * basic service type whose tools may bind transport-specific (HTTP) request information.
-     */
-    static boolean isStreamableHttpService(FunctionDefinitionNode functionDefinitionNode,
-                                           SemanticModel semanticModel) {
-        Optional<Symbol> parentSymbol = semanticModel.symbol(functionDefinitionNode.parent());
-        if (parentSymbol.isEmpty() || parentSymbol.get().kind() != SymbolKind.SERVICE_DECLARATION) {
-            return false;
-        }
-        return ((ServiceDeclarationSymbol) parentSymbol.get()).typeDescriptor()
-                .flatMap(TypeSymbol::getName)
-                .map(STREAMABLE_HTTP_BASIC_SERVICE_NAME::equals)
-                .orElse(false);
     }
 
     public static boolean isAnydataType(TypeSymbol typeSymbol, SyntaxNodeAnalysisContext context) {
@@ -247,13 +240,14 @@ public class Utils {
 
         String functionName = functionSymbol.getName().orElse(UNKNOWN_SYMBOL);
         Location alternativeLocation = functionDefinitionNode.location();
-        SessionMode sessionMode = getSessionMode(functionDefinitionNode, context.semanticModel());
+        HttpSessionMode sessionMode = getSessionMode(functionDefinitionNode, context.semanticModel());
 
         var parameterSymbolList = functionTypeSymbol.params().get();
         boolean hasSessionParam = false;
         boolean hasMetaParam = false;
         boolean hasHeadersParam = false;
         boolean hasRequestParam = false;
+        Set<String> argumentHeaderNames = new HashSet<>();
 
         for (int i = 0; i < parameterSymbolList.size(); i++) {
             ParameterSymbol parameterSymbol = parameterSymbolList.get(i);
@@ -262,20 +256,35 @@ public class Utils {
 
             boolean isSessionType = isSessionType(parameterType);
             boolean isMetaParam = isMetaParameter(parameterType);
+            boolean hasMcpArgument = hasMcpArgumentAnnotation(parameterSymbol);
 
-            // Header binding, http:Headers, and http:Request parameters expose transport-specific
-            // (HTTP) request information, so they are only allowed in an mcp:StreamableHttpService.
-            // (The type system separately guarantees an mcp:StreamableHttpService can only be
-            // attached to an mcp:StreamableHttpListener.)
-            boolean isHttpBoundParam = hasHttpHeaderAnnotation(parameterSymbol) || isHttpHeadersType(parameterType)
-                    || isHttpRequestType(parameterType);
-            if (isHttpBoundParam && !isStreamableHttpService(functionDefinitionNode, context.semanticModel())) {
-                Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                        CompilationDiagnostic.TRANSPORT_SPECIFIC_PARAM_NOT_ALLOWED,
-                        parameterSymbol.getLocation().orElse(alternativeLocation),
-                        functionName, parameterName);
-                context.reportDiagnostic(diagnostic);
-                return false;
+            if (hasMcpArgument) {
+                if (hasHttpHeaderAnnotation(parameterSymbol) || isSessionType || isMetaParam
+                        || isHttpHeadersType(parameterType) || isHttpRequestType(parameterType)
+                        || !isValidMcpHeaderArgumentType(parameterType, context)) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.INVALID_MCP_ARGUMENT_TYPE,
+                            parameterSymbol.getLocation().orElse(alternativeLocation), functionName, parameterName);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+                String headerName = getMcpArgumentHeaderName(parameterSymbol).orElse("");
+                if (!MCP_HEADER_NAME.matcher(headerName).matches()) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.INVALID_MCP_ARGUMENT_HEADER_NAME,
+                            parameterSymbol.getLocation().orElse(alternativeLocation),
+                            functionName, parameterName, headerName);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+                if (!argumentHeaderNames.add(headerName.toLowerCase(Locale.ROOT))) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.DUPLICATE_MCP_ARGUMENT_HEADER_NAME,
+                            parameterSymbol.getLocation().orElse(alternativeLocation),
+                            functionName, parameterName, headerName);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
             }
 
             if (hasHttpHeaderAnnotation(parameterSymbol)) {
@@ -329,7 +338,7 @@ public class Utils {
                     return false;
                 }
 
-                if (sessionMode == SessionMode.STATELESS) {
+                if (sessionMode == HttpSessionMode.STATELESS && !isOptionalType(parameterType)) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
                             CompilationDiagnostic.SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
@@ -374,8 +383,14 @@ public class Utils {
     }
 
     static boolean isSessionType(TypeSymbol typeSymbol) {
-        return SESSION_TYPE_NAME.equals(typeSymbol.getName().orElse(""))
-                && isMcpModuleSymbol(typeSymbol);
+        if (typeSymbol.typeKind() == TypeDescKind.UNION) {
+            return ((UnionTypeSymbol) typeSymbol).memberTypeDescriptors().stream()
+                    .filter(member -> member.typeKind() != TypeDescKind.NIL).allMatch(Utils::isSessionType);
+        }
+        if (SESSION_TYPE_NAME.equals(typeSymbol.getName().orElse("")) && isMcpModuleSymbol(typeSymbol)) {
+            return true;
+        }
+        return typeSymbol instanceof TypeReferenceTypeSymbol reference && isSessionType(reference.typeDescriptor());
     }
 
     static boolean isCallToolParamsType(TypeSymbol typeSymbol) {
@@ -389,13 +404,16 @@ public class Utils {
     }
 
     /**
-     * Check if a TypeSymbol is optional/nullable (e.g., mcp:Meta?).
+     * Check if a TypeSymbol is optional/nullable (e.g., mcp:RequestMetaObject?).
      * An optional type is a union type that includes NIL as one of its members.
      *
      * @param typeSymbol The type symbol to check
      * @return true if the type is optional/nullable, false otherwise
      */
     static boolean isOptionalType(TypeSymbol typeSymbol) {
+        if (typeSymbol instanceof TypeReferenceTypeSymbol reference) {
+            return isOptionalType(reference.typeDescriptor());
+        }
         if (typeSymbol.typeKind() != TypeDescKind.UNION) {
             return false;
         }
@@ -410,7 +428,7 @@ public class Utils {
     }
 
     /**
-     * Check if a parameter is of Meta type (either mcp:Meta or mcp:Meta?).
+     * Check if a parameter is request metadata (either mcp:RequestMetaObject or mcp:RequestMetaObject?).
      * Returns true if the parameter is Meta type, and also indicates if it's optional.
      *
      * @param typeSymbol The type symbol to check
@@ -422,7 +440,7 @@ public class Utils {
             return true;
         }
 
-        // Check if it's an optional Meta type (mcp:Meta?)
+        // Check if it is an optional request metadata type (mcp:RequestMetaObject?).
         if (typeSymbol.typeKind() == TypeDescKind.UNION) {
             UnionTypeSymbol unionTypeSymbol = (UnionTypeSymbol) typeSymbol;
             for (TypeSymbol memberType : unionTypeSymbol.memberTypeDescriptors()) {
@@ -449,6 +467,43 @@ public class Utils {
         return parameterSymbol.annotations().stream()
                 .anyMatch(annotation -> HEADER_ANNOTATION_NAME.equals(annotation.getName().orElse(""))
                         && isHttpModuleSymbol(annotation));
+    }
+
+    static boolean hasMcpArgumentAnnotation(ParameterSymbol parameterSymbol) {
+        return parameterSymbol.annotations().stream()
+                .anyMatch(annotation -> ARGUMENT_ANNOTATION_NAME.equals(annotation.getName().orElse(""))
+                        && isMcpModuleSymbol(annotation));
+    }
+
+    static Optional<String> getMcpArgumentHeaderName(ParameterSymbol parameterSymbol) {
+        for (AnnotationAttachmentSymbol attachment : parameterSymbol.annotAttachments()) {
+            AnnotationSymbol annotation = attachment.typeDescriptor();
+            if (!ARGUMENT_ANNOTATION_NAME.equals(annotation.getName().orElse(""))
+                    || !isMcpModuleSymbol(annotation)) {
+                continue;
+            }
+            Optional<ConstantValue> attachmentValue = attachment.attachmentValue();
+            if (attachmentValue.isEmpty() || !(attachmentValue.get().value() instanceof Map<?, ?> fields)) {
+                return Optional.empty();
+            }
+            Object headerName = fields.get(ARGUMENT_HEADER_NAME_FIELD);
+            if (headerName instanceof ConstantValue constantValue && constantValue.value() instanceof String value) {
+                return Optional.of(value);
+            }
+            if (headerName instanceof String value) {
+                return Optional.of(value);
+            }
+            return Optional.empty();
+        }
+        return Optional.empty();
+    }
+
+    static boolean isValidMcpHeaderArgumentType(TypeSymbol typeSymbol, SyntaxNodeAnalysisContext context) {
+        TypeSymbol rawType = getRawType(typeSymbol);
+        var types = context.semanticModel().types();
+        return rawType.subtypeOf(types.STRING) || rawType.subtypeOf(types.INT)
+                || rawType.subtypeOf(types.FLOAT) || rawType.subtypeOf(types.DECIMAL)
+                || rawType.subtypeOf(types.BOOLEAN);
     }
 
     /**
@@ -528,26 +583,19 @@ public class Utils {
                 : typeSymbol;
     }
 
-    private static SessionMode getSessionMode(FunctionDefinitionNode functionDefinitionNode,
+    private static HttpSessionMode getSessionMode(FunctionDefinitionNode functionDefinitionNode,
                                               SemanticModel semanticModel) {
         ServiceDeclarationNode serviceNode = (ServiceDeclarationNode) functionDefinitionNode.parent();
         if (serviceNode.metadata().isEmpty() || serviceNode.metadata().get().annotations().isEmpty()) {
-            return SessionMode.AUTO;
+            return HttpSessionMode.AUTO;
         }
 
-        // The transport-specific @mcp:StreamableHttpConfig annotation takes precedence over
-        // the deprecated sessionMode field of @mcp:ServiceConfig
         AnnotationNode transportConfigAnnotation =
-                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME);
+                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_CONFIG_ANNOTATION_NAME);
         if (transportConfigAnnotation != null) {
             return getSessionModeFieldValue(transportConfigAnnotation, semanticModel);
         }
-
-        AnnotationNode serviceConfigAnnotation = findMcpAnnotation(serviceNode, SERVICE_CONFIG_ANNOTATION_NAME);
-        if (serviceConfigAnnotation != null) {
-            return getSessionModeFieldValue(serviceConfigAnnotation, semanticModel);
-        }
-        return SessionMode.AUTO;
+        return HttpSessionMode.AUTO;
     }
 
     private static AnnotationNode findMcpAnnotation(ServiceDeclarationNode serviceNode, String annotationName) {
@@ -559,9 +607,10 @@ public class Utils {
         return null;
     }
 
-    private static SessionMode getSessionModeFieldValue(AnnotationNode annotationNode, SemanticModel semanticModel) {
+    private static HttpSessionMode getSessionModeFieldValue(AnnotationNode annotationNode,
+                                                            SemanticModel semanticModel) {
         if (annotationNode.annotValue().isEmpty()) {
-            return SessionMode.AUTO;
+            return HttpSessionMode.AUTO;
         }
 
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().get().fields();
@@ -576,10 +625,10 @@ public class Utils {
             }
         }
 
-        return SessionMode.AUTO;
+        return HttpSessionMode.AUTO;
     }
 
-    private static SessionMode resolveSessionModeValue(io.ballerina.compiler.syntax.tree.ExpressionNode valueExpr,
+    private static HttpSessionMode resolveSessionModeValue(io.ballerina.compiler.syntax.tree.ExpressionNode valueExpr,
                                                        SemanticModel semanticModel) {
         Optional<Symbol> symbol = semanticModel.symbol(valueExpr);
         if (symbol.isPresent()) {
@@ -592,7 +641,7 @@ public class Utils {
                     Object constValue = enumMemberSymbol.constValue();
                     if (constValue instanceof ConstantValue) {
                         String enumValue = ((ConstantValue) constValue).value().toString();
-                        return SessionMode.fromString(enumValue);
+                        return HttpSessionMode.fromString(enumValue);
                     }
                 }
             }
@@ -604,10 +653,10 @@ public class Utils {
             if (literalValue.startsWith("\"") && literalValue.endsWith("\"")) {
                 literalValue = literalValue.substring(1, literalValue.length() - 1);
             }
-            return SessionMode.fromString(literalValue);
+            return HttpSessionMode.fromString(literalValue);
         }
 
-        return SessionMode.AUTO;
+        return HttpSessionMode.AUTO;
     }
 
     private static boolean isMcpAnnotation(AnnotationNode annotation, String annotationName) {

@@ -44,7 +44,9 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.DESCRIPTION_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.OUTPUT_SCHEMA_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCHEMA_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.STRUCTURED_OUTPUT_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpServiceFunction;
 import static io.ballerina.stdlib.mcp.plugin.Utils.validateParameterTypes;
@@ -115,18 +117,33 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                         Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
         if (annotationNode == null) {
             String schema = getParameterSchema(functionSymbol, functionNodeLocation);
-            return new ToolAnnotationConfig(description, schema);
+            String outputSchema = getReturnSchema(functionSymbol, functionNodeLocation);
+            return new ToolAnnotationConfig(description, schema, outputSchema, "true");
         }
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty() ?
                 NodeFactory.createSeparatedNodeList() : annotationNode.annotValue().get().fields();
         Map<String, ExpressionNode> fieldValues = extractFieldValues(fields);
+        if (fieldValues.containsKey(SCHEMA_FIELD_NAME)
+                && functionSymbol.typeDescriptor().params()
+                        .map(params -> params.stream().anyMatch(Utils::hasMcpArgumentAnnotation)).orElse(false)) {
+            Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                    CompilationDiagnostic.MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA,
+                    functionNodeLocation, functionName);
+            reportDiagnostic(diagnostic);
+        }
         if (fieldValues.containsKey(DESCRIPTION_FIELD_NAME)) {
             description = fieldValues.get(DESCRIPTION_FIELD_NAME).toSourceCode();
         }
         String parameters = fieldValues.containsKey(SCHEMA_FIELD_NAME)
                 ? fieldValues.get(SCHEMA_FIELD_NAME).toSourceCode()
                 : getParameterSchema(functionSymbol, functionNodeLocation);
-        return new ToolAnnotationConfig(description, parameters);
+        String structuredOutput = fieldValues.containsKey(STRUCTURED_OUTPUT_FIELD_NAME)
+                ? fieldValues.get(STRUCTURED_OUTPUT_FIELD_NAME).toSourceCode() : "true";
+        String outputSchema = "false".equals(structuredOutput) ? NIL_EXPRESSION :
+                fieldValues.containsKey(OUTPUT_SCHEMA_FIELD_NAME)
+                        ? fieldValues.get(OUTPUT_SCHEMA_FIELD_NAME).toSourceCode()
+                        : getReturnSchema(functionSymbol, functionNodeLocation);
+        return new ToolAnnotationConfig(description, parameters, outputSchema, structuredOutput);
     }
 
     private Optional<FunctionSymbol> getFunctionSymbol(FunctionDefinitionNode functionDefinitionNode) {
@@ -149,6 +166,19 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
     private String getParameterSchema(FunctionSymbol functionSymbol, Location alternativeFunctionLocation) {
         try {
             return SchemaUtils.getParameterSchema(functionSymbol, this.context);
+        } catch (SchemaGenerationException e) {
+            Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION,
+                    functionSymbol.getLocation().orElse(alternativeFunctionLocation),
+                    functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function"));
+            reportDiagnostic(diagnostic);
+            return NIL_EXPRESSION;
+        }
+    }
+
+    private String getReturnSchema(FunctionSymbol functionSymbol, Location alternativeFunctionLocation) {
+        try {
+            return Objects.requireNonNullElse(SchemaUtils.getReturnSchema(functionSymbol, this.context),
+                    NIL_EXPRESSION);
         } catch (SchemaGenerationException e) {
             Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION,
                     functionSymbol.getLocation().orElse(alternativeFunctionLocation),

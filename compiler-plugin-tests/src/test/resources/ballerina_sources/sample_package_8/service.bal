@@ -17,14 +17,13 @@
 import ballerina/http;
 import ballerina/mcp;
 
-// A raw http:Headers parameter is a transport-specific property and is not accessible in the
-// transport-agnostic mcp:Service (MCP_109).
-@mcp:ServiceConfig {
+// A raw http:Headers parameter is available on the Streamable HTTP service.
+@mcp:StreamableHttpConfig {
     info: {name: "sample-8", version: "1.0.0"}
 }
-service mcp:Service /mcp on new mcp:StreamableHttpListener(9308) {
+service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9308) {
 
-    @mcp:Tool {description: "raw headers object on the transport-agnostic service"}
+    @mcp:Tool {description: "raw headers object on the Streamable HTTP service"}
     remote function badRaw(http:Headers headers, string name) returns string {
         return name;
     }

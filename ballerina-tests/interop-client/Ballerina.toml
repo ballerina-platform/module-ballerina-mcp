@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "interop_client"
+version = "0.1.0"

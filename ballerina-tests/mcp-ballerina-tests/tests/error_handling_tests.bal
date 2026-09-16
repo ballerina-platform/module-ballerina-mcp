@@ -23,7 +23,7 @@ type CartItem record {|
     int qty;
 |};
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "error-handling-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -57,7 +57,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "advanced-error-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -67,7 +67,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
         return {tools: [{name: "ping", description: "Pings the server", inputSchema: {"type": "object"}}]};
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
             returns mcp:CallToolResult|mcp:ServerError {
         if params.name == "failing" {
             return error mcp:ServerError("upstream API returned 503");
@@ -80,7 +80,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "stateful-error-server", version: "1.0.0"},
     sessionMode: mcp:STATEFUL
 }
@@ -90,34 +90,34 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     isolated remote function greet() returns string => "hello";
 }
 
-@mcp:ServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "list-tools-failing-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:AdvancedService /mcp on new mcp:Listener(8781) {
+isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8781) {
 
     isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return error mcp:ServerError("tool registry is unavailable");
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
             returns mcp:CallToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }
 }
 
-@mcp:ServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "list-tools-panicking-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:AdvancedService /mcp on new mcp:Listener(8782) {
+isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8782) {
 
     isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         int[] empty = [];
         return {tools: [{name: empty[5].toString(), inputSchema: {"type": "object"}}]};
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
             returns mcp:CallToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }

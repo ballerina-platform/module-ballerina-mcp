@@ -17,11 +17,11 @@
 import ballerina/mcp;
 import ballerina/test;
 
-@mcp:ServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "inline-listener-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:Service /mcp on new mcp:Listener(8765) {
+isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8765) {
 
     # Returns a greeting for the given name.
     # 
@@ -37,7 +37,7 @@ final mcp:Implementation clientInfo = {name: "test-client", version: "1.0.0"};
 
 @test:Config
 function testInlineListenerToolDiscovery() returns error? {
-    check mcpClient->initialize(clientInfo);
+    _ = check mcpClient->connect(clientInfo);
     mcp:ListToolsResult result = check mcpClient->listTools();
 
     test:assertEquals(result.tools.length(), 1,
@@ -51,7 +51,7 @@ function testInlineListenerToolSchema() returns error? {
 
     var inputSchema = result.tools[0].inputSchema;
     test:assertEquals(inputSchema.'type, "object");
-    map<record {}> properties = check inputSchema.properties.ensureType();
+    map<anydata> properties = inputSchema.properties ?: {};
     test:assertTrue(properties.hasKey("name"),
         msg = "Schema must include the 'name' parameter — compiler plugin generates the schema");
 }
@@ -65,13 +65,13 @@ function testInlineListenerCallTool() returns error? {
     test:assertEquals(textContent.text, "Hello, World!");
 }
 
-listener mcp:Listener ln = check new (8766);
+listener mcp:StreamableHttpListener ln = check new (8766);
 
-@mcp:ServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "inline-listener-test-server-2", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:Service /mcp on ln {
+isolated service mcp:StreamableHttpService /mcp on ln {
 
     # Returns a greeting for the given name.
     # 
@@ -87,7 +87,7 @@ final mcp:Implementation clientInfo2 = {name: "test-client-2", version: "1.0.0"}
 
 @test:Config
 function testListenerDeclToolDiscovery() returns error? {
-    check mcpClient2->initialize(clientInfo2);
+    _ = check mcpClient2->connect(clientInfo2);
     mcp:ListToolsResult result = check mcpClient2->listTools();
 
     test:assertEquals(result.tools.length(), 1,

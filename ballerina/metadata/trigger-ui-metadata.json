@@ -22,7 +22,7 @@
         "target": {
           "kind": "serviceAnnotationField",
           "serviceType": "$streamableHttpService",
-          "annotation": "$streamableHttpServiceConfig",
+          "annotation": "$streamableHttpConfig",
           "path": "info.name"
         },
         "metadata": {
@@ -34,7 +34,7 @@
             "kind": "SERVICE_ANNOTATION"
           },
           "argument": {
-            "originalName": "StreamableHttpServiceConfig"
+            "originalName": "StreamableHttpConfig"
           },
           "module": {
             "name": "mcp"
@@ -55,7 +55,7 @@
         "target": {
           "kind": "serviceAnnotationField",
           "serviceType": "$streamableHttpService",
-          "annotation": "$streamableHttpServiceConfig",
+          "annotation": "$streamableHttpConfig",
           "path": "info.version"
         },
         "metadata": {
@@ -67,7 +67,7 @@
             "kind": "SERVICE_ANNOTATION"
           },
           "argument": {
-            "originalName": "StreamableHttpServiceConfig"
+            "originalName": "StreamableHttpConfig"
           },
           "module": {
             "name": "mcp"
@@ -92,7 +92,7 @@
         },
         "metadata": {
           "label": "Service Type",
-          "description": "The MCP service type. New services use the Streamable HTTP transport; mcp:Service is deprecated and only resolved when already present in the source."
+          "description": "The MCP service type exposed over the Streamable HTTP transport."
         },
         "state": {
           "hidden": true,
@@ -262,7 +262,7 @@
             {
               "target": "$streamableHttpService.tool.meta",
               "metadata": {
-                "label": "Meta",
+                "label": "Request Metadata",
                 "description": "Binds the MCP request metadata (e.g. a progress token) attached to the tool call."
               },
               "state": {
@@ -290,8 +290,8 @@
                     "advanced": false
                   },
                   "key": "type",
-                  "placeholder": "mcp:Meta?",
-                  "default": "mcp:Meta?",
+                  "placeholder": "mcp:RequestMetaObject?",
+                  "default": "mcp:RequestMetaObject?",
                   "widget": {
                     "widgetKind": "TYPE",
                     "selected": true
@@ -750,7 +750,7 @@
             {
               "target": "$service.tool.meta",
               "metadata": {
-                "label": "Meta",
+                "label": "Request Metadata",
                 "description": "Binds the MCP request metadata (e.g. a progress token) attached to the tool call."
               },
               "state": {
@@ -778,8 +778,8 @@
                     "advanced": false
                   },
                   "key": "type",
-                  "placeholder": "mcp:Meta?",
-                  "default": "mcp:Meta?",
+                  "placeholder": "mcp:RequestMetaObject?",
+                  "default": "mcp:RequestMetaObject?",
                   "widget": {
                     "widgetKind": "TYPE",
                     "selected": true

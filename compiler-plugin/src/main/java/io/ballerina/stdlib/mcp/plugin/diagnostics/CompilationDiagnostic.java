@@ -40,11 +40,18 @@ public enum CompilationDiagnostic {
     META_PARAM_MUST_BE_OPTIONAL(DiagnosticMessage.ERROR_106, DiagnosticCode.MCP_106, ERROR),
     DUPLICATE_PARAMETER(DiagnosticMessage.ERROR_107, DiagnosticCode.MCP_107, ERROR),
     INVALID_HEADER_PARAMETER_TYPE(DiagnosticMessage.ERROR_108, DiagnosticCode.MCP_108, ERROR),
-    TRANSPORT_SPECIFIC_PARAM_NOT_ALLOWED(DiagnosticMessage.ERROR_109, DiagnosticCode.MCP_109, ERROR),
     ADVANCED_SERVICE_MISSING_METHOD(DiagnosticMessage.ERROR_110, DiagnosticCode.MCP_110, ERROR),
     ADVANCED_ON_CALL_TOOL_PARAMS(DiagnosticMessage.ERROR_111, DiagnosticCode.MCP_111, ERROR),
     ADVANCED_INVALID_RETURN_TYPE(DiagnosticMessage.ERROR_112, DiagnosticCode.MCP_112, ERROR),
     ADVANCED_UNKNOWN_REMOTE_METHOD(DiagnosticMessage.ERROR_113, DiagnosticCode.MCP_113, ERROR),
+    REQUIRED_SESSION_IN_MODERN_MODE(DiagnosticMessage.ERROR_114, DiagnosticCode.MCP_114, ERROR),
+    INVALID_MCP_ARGUMENT_TYPE(DiagnosticMessage.ERROR_115, DiagnosticCode.MCP_115, ERROR),
+    INVALID_MCP_ARGUMENT_HEADER_NAME(DiagnosticMessage.ERROR_116, DiagnosticCode.MCP_116, ERROR),
+    DUPLICATE_MCP_ARGUMENT_HEADER_NAME(DiagnosticMessage.ERROR_117, DiagnosticCode.MCP_117, ERROR),
+    MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA(DiagnosticMessage.ERROR_118, DiagnosticCode.MCP_118, ERROR),
+    REQUIRED_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_102, DiagnosticCode.MCP_WARNING_102, WARNING),
+    OPTIONAL_SESSION_IN_MODERN_MODE(DiagnosticMessage.WARNING_103, DiagnosticCode.MCP_WARNING_103, WARNING),
+    OPTIONAL_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_104, DiagnosticCode.MCP_WARNING_104, WARNING),
     UNSUPPORTED_ENDPOINT_METADATA(DiagnosticMessage.WARNING_101, DiagnosticCode.MCP_WARNING_101, WARNING);
 
     private final String diagnostic;

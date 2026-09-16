@@ -46,7 +46,6 @@ public class CompilerPluginTest {
     private static final String MCP_104 = "MCP_104";
     private static final String MCP_107 = "MCP_107";
     private static final String MCP_108 = "MCP_108";
-    private static final String MCP_109 = "MCP_109";
     private static final String MCP_110 = "MCP_110";
     private static final String MCP_111 = "MCP_111";
     private static final String MCP_112 = "MCP_112";
@@ -120,31 +119,10 @@ public class CompilerPluginTest {
     }
 
     @Test
-    public void testHeaderParamRequiresStreamableHttpService() {
-        DiagnosticResult diagnosticResult = compile("sample_package_6");
-        Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "accesses transport-specific properties", MCP_109);
-    }
-
-    @Test
     public void testSessionParamStatelessViaTransportConfig() {
         DiagnosticResult diagnosticResult = compile("sample_package_7");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
         assertError(diagnosticResult, 0, "is not allowed when sessionMode is STATELESS", MCP_104);
-    }
-
-    @Test
-    public void testRawHeadersParamRequiresStreamableHttpService() {
-        DiagnosticResult diagnosticResult = compile("sample_package_8");
-        Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "accesses transport-specific properties", MCP_109);
-    }
-
-    @Test
-    public void testRequestParamRequiresStreamableHttpService() {
-        DiagnosticResult diagnosticResult = compile("sample_package_9");
-        Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "accesses transport-specific properties", MCP_109);
     }
 
     @Test
@@ -189,7 +167,9 @@ public class CompilerPluginTest {
     public void testAdvancedInvalidReturnType() {
         DiagnosticResult diagnosticResult = compile("sample_package_15");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "must return 'mcp:CallToolResult|mcp:ServerError'", MCP_112);
+        assertError(diagnosticResult, 0,
+                "must return 'mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError'",
+                MCP_112);
     }
 
     @Test
@@ -209,15 +189,72 @@ public class CompilerPluginTest {
         Diagnostic diagnostic = (Diagnostic) diagnosticResult.errors().toArray()[0];
         Assert.assertFalse(diagnostic.message().contains("mcp:CallToolParams"),
                 "onListTools supported-types message must not list 'mcp:CallToolParams': " + diagnostic.message());
-        Assert.assertFalse(diagnostic.message().contains("mcp:Session"),
-                "onListTools supported-types message must not list 'mcp:Session': " + diagnostic.message());
+        Assert.assertFalse(diagnostic.message().contains("mcp:HttpSession"),
+                "onListTools supported-types message must not list 'mcp:HttpSession': " + diagnostic.message());
     }
 
     @Test
     public void testMetaParameterCanAppearBeforeDataParameters() {
         DiagnosticResult diagnosticResult = compile("sample_package_18");
         Assert.assertEquals(errorCount(diagnosticResult), 0,
-                "an optional mcp:Meta parameter must be accepted outside the final position: "
+                "an optional mcp:RequestMetaObject parameter must be accepted outside the final position: "
                         + diagnosticResult.errors().toString());
+    }
+    @Test
+    public void testProtocolSessionDiagnostics() {
+        String[] codes = {"MCP_WARNING_102", "MCP_114", "MCP_WARNING_104", "MCP_WARNING_103"};
+        for (int index = 0; index < codes.length; index++) {
+            DiagnosticResult result = compile("sample_package_" + (19 + index));
+            String code = codes[index];
+            Assert.assertTrue(result.diagnostics().stream().anyMatch(d -> d.diagnosticInfo().code().equals(code)),
+                    "Expected " + code + ": " + result.diagnostics());
+            Assert.assertEquals(errorCount(result), index == 1 ? 1L : 0L);
+        }
+        DiagnosticResult legacy = compile("sample_package_23");
+        Assert.assertEquals(errorCount(legacy), 0L);
+        Assert.assertFalse(legacy.diagnostics().stream()
+                .anyMatch(d -> d.diagnosticInfo().code().startsWith("MCP_WARNING_10")));
+    }
+    @Test
+    public void testOptionalSessionAliasInModernStatelessService() {
+        DiagnosticResult result = compile("sample_package_24");
+        Assert.assertEquals(errorCount(result), 0L);
+        Assert.assertEquals(result.diagnostics().stream()
+                .filter(d -> d.diagnosticInfo().code().equals("MCP_WARNING_103")).count(), 1L);
+    }
+
+    @Test
+    public void testModernResultsAndSubscriptionOnExistingAdvancedService() {
+        DiagnosticResult result = compile("sample_package_25");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testMcpArgumentHeaderAnnotation() {
+        DiagnosticResult result = compile("sample_package_26");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testMcpArgumentHeaderDiagnostics() {
+        DiagnosticResult invalidType = compile("sample_package_27");
+        Assert.assertEquals(errorCount(invalidType), 1L);
+        assertError(invalidType, 0, "cannot use @mcp:Argument", "MCP_115");
+
+        DiagnosticResult invalidName = compile("sample_package_28");
+        Assert.assertEquals(errorCount(invalidName), 1L);
+        assertError(invalidName, 0, "Invalid MCP argument header name 'Bad Header'", "MCP_116");
+
+        DiagnosticResult duplicateName = compile("sample_package_29");
+        Assert.assertEquals(errorCount(duplicateName), 1L);
+        assertError(duplicateName, 0, "Duplicate MCP argument header name 'region'", "MCP_117");
+
+        DiagnosticResult explicitSchema = compile("sample_package_30");
+        Assert.assertEquals(errorCount(explicitSchema), 1L);
+        assertError(explicitSchema, 0, "cannot combine @mcp:Argument", "MCP_118");
+
+        DiagnosticResult conflictingBinding = compile("sample_package_31");
+        Assert.assertEquals(errorCount(conflictingBinding), 1L);
+        assertError(conflictingBinding, 0, "cannot use @mcp:Argument", "MCP_115");
     }
 }

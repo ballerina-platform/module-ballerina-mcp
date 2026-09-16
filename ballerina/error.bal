@@ -21,61 +21,64 @@ public type Error distinct error;
 public type StreamError distinct Error & ClientError;
 
 # Error for failures during transport operations.
-public type TransportError distinct Error;
+public type TransportError distinct Error & ClientError;
+
+# Error for protocol negotiation, validation, or server response failures.
+public type ProtocolError distinct Error & ClientError;
 
 # Error for invalid or unexpected responses from the server.
-public type ServerResponseError distinct Error & ClientError;
+type ServerResponseError distinct ProtocolError;
 
 # Error for failures occurring within client operations.
 public type ClientError distinct Error;
 
 # Error for failures while processing SSE event streams.
-public type SseEventStreamError distinct StreamError;
+type SseEventStreamError distinct StreamError;
 
 # Error for JSON-RPC message transformation failures during streaming.
-public type JsonRpcMessageTransformationError distinct StreamError;
+type JsonRpcMessageTransformationError distinct StreamError;
 
 # Error when required data is missing from an SSE event.
-public type MissingSseDataError distinct JsonRpcMessageTransformationError;
+type MissingSseDataError distinct JsonRpcMessageTransformationError;
 
 # Error for failures converting JSON to JsonRpcMessage.
-public type TypeConversionError distinct JsonRpcMessageTransformationError;
+type TypeConversionError distinct JsonRpcMessageTransformationError;
 
 # Error when an invalid message type is received from the server.
-public type InvalidMessageTypeError distinct ServerResponseError;
+type InvalidMessageTypeError distinct ServerResponseError;
 
 # Error when the server response is malformed or unexpected.
-public type MalformedResponseError distinct ServerResponseError;
+type MalformedResponseError distinct ServerResponseError;
 
 # Error for failures during HTTP transport operations.
-public type StreamableHttpTransportError distinct TransportError & ClientError;
+type StreamableHttpTransportError distinct TransportError;
 
 # Error for failures during HTTP client operations.
-public type HttpClientError distinct StreamableHttpTransportError;
+type HttpClientError distinct StreamableHttpTransportError;
 
 # Error for unsupported content types in HTTP responses.
-public type UnsupportedContentTypeError distinct StreamableHttpTransportError;
+type UnsupportedContentTypeError distinct StreamableHttpTransportError;
 
 # Error for failures during session operations.
-public type SessionOperationError distinct StreamableHttpTransportError;
+type SessionOperationError distinct StreamableHttpTransportError;
 
 # Error for failures while parsing HTTP response content.
-public type ResponseParsingError distinct StreamableHttpTransportError;
+type ResponseParsingError distinct StreamableHttpTransportError & ProtocolError;
 
 # Error for failures during SSE stream establishment.
-public type SseStreamEstablishmentError distinct StreamableHttpTransportError;
+type SseStreamEstablishmentError distinct StreamableHttpTransportError;
 
 # Error for operations attempted before transport initialization.
-public type UninitializedTransportError distinct ClientError;
+type UninitializedTransportError distinct ClientError;
 
 # Error for failures during client initialization.
-public type ClientInitializationError distinct ClientError;
+type ClientInitializationError distinct ClientError;
 
 # Error for protocol version negotiation failures.
-public type ProtocolVersionError distinct ClientInitializationError;
+type ProtocolVersionError distinct ClientInitializationError & ProtocolError;
 
 # Error for failures during tool listing operations.
-public type ListToolsError distinct ClientError;
+type ListToolsError distinct ClientError;
 
 # Error for failures during tool execution operations.
 public type ToolCallError distinct ClientError;
@@ -88,4 +91,4 @@ type DispatcherError distinct ServerError;
 
 # Error for failures while binding tool parameters from the incoming request,
 # such as missing or invalid header values.
-public type ParameterBindingError distinct ServerError;
+type ParameterBindingError distinct ServerError;

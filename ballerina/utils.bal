@@ -75,3 +75,58 @@ isolated function extractResultFromMessage(JsonRpcMessage message) returns Serve
     }
     return error InvalidMessageTypeError("Received message from server is not a valid JsonRpcResponse.");
 }
+
+// Keep wire-only additions out of the established application result APIs.
+isolated function applicationResult(Result resultValue, boolean preserveCacheHints = false) returns Result {
+    Result applicationValue = {...resultValue};
+    string[] wireFields = preserveCacheHints ? ["resultType"] : ["resultType", "ttlMs", "cacheScope"];
+    foreach string fieldName in wireFields {
+        _ = applicationValue.removeIfHasKey(fieldName);
+    }
+    ResultMetaObject applicationMeta = {...(applicationValue._meta ?: {})};
+    anydata wireServerInfo = applicationMeta[SERVER_INFO_META_KEY];
+    if wireServerInfo is record {} {
+        Implementation|error serverInfo = wireServerInfo.cloneWithType();
+        if serverInfo is Implementation {
+            applicationMeta.serverInfo = serverInfo;
+        }
+    }
+    _ = applicationMeta.removeIfHasKey(SERVER_INFO_META_KEY);
+    if applicationMeta.length() == 0 {
+        _ = applicationValue.removeIfHasKey("_meta");
+    } else {
+        applicationValue._meta = applicationMeta;
+    }
+    return applicationValue;
+}
+
+// Keep legacy wire responses within the schema shape accepted by pre-2026 clients.
+isolated function legacyToolListResult(ListToolsResult resultValue) returns ListToolsResult|error {
+    ListToolsResult|error legacyResult = applicationResult(resultValue).cloneWithType();
+    if legacyResult is error {
+        return legacyResult;
+    }
+    foreach ToolDefinition toolInfo in legacyResult.tools {
+        OutputSchema? outputSchema = toolInfo.outputSchema;
+        if outputSchema is OutputSchema {
+            InputSchema|error objectSchema = outputSchema.cloneWithType();
+            if objectSchema is error {
+                _ = toolInfo.removeIfHasKey("outputSchema");
+            }
+        }
+    }
+    return legacyResult;
+}
+
+// Legacy CallToolResult allowed structured content only when its root was an object.
+isolated function legacyToolCallResult(CallToolResult resultValue) returns CallToolResult|error {
+    CallToolResult|error legacyResult = applicationResult(resultValue).cloneWithType();
+    if legacyResult is error {
+        return legacyResult;
+    }
+    json structuredContent = legacyResult["structuredContent"];
+    if legacyResult.hasKey("structuredContent") && !(structuredContent is map<json>) {
+        _ = legacyResult.removeIfHasKey("structuredContent");
+    }
+    return legacyResult;
+}

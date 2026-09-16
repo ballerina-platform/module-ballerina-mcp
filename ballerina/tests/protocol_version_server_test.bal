@@ -17,16 +17,16 @@
 import ballerina/http;
 import ballerina/test;
 
-listener Listener pvServerListener = check new (3201);
+listener StreamableHttpListener pvServerListener = check new (3201);
 
-@ServiceConfig {
+@StreamableHttpConfig {
     info: {
         name: "Protocol Version Test Server",
         version: "1.0.0"
     },
     sessionMode: STATELESS
 }
-service Service /mcp on pvServerListener {
+service StreamableHttpService /mcp on pvServerListener {
     @Tool {
         description: "Echoes the provided message back to the caller."
     }
@@ -83,7 +83,7 @@ function testServerFallsBackToLatestForUnsupportedVersion() returns error? {
     json body = check response.getJsonPayload();
     json result = check body.result;
     string negotiated = check result.protocolVersion.ensureType();
-    test:assertEquals(negotiated, LATEST_PROTOCOL_VERSION);
+    test:assertEquals(negotiated, LATEST_LEGACY_PROTOCOL_VERSION);
 }
 
 // Transport: initialize is exempt from header validation even if an invalid header is present.

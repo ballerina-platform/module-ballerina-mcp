@@ -16,14 +16,13 @@
 import ballerina/http;
 import ballerina/mcp;
 
-// A @http:Header parameter is a transport-specific property and is not accessible in the
-// transport-agnostic mcp:Service (MCP_109).
-@mcp:ServiceConfig {
+// A @http:Header parameter is available on the Streamable HTTP service.
+@mcp:StreamableHttpConfig {
     info: {name: "sample-6", version: "1.0.0"}
 }
-service mcp:Service /mcp on new mcp:StreamableHttpListener(9306) {
+service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9306) {
 
-    @mcp:Tool {description: "header binding on the transport-agnostic service"}
+    @mcp:Tool {description: "header binding on the Streamable HTTP service"}
     remote function badHeader(@http:Header string authorization, string name) returns string {
         return name + authorization;
     }

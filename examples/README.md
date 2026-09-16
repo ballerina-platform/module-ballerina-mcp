@@ -119,9 +119,9 @@ A comprehensive example demonstrating STATEFUL session mode with persistent shop
 - Thread-safe session storage
 
 **Available Tools:**
-- `addToCart(session: mcp:Session, productName: string, price: decimal)` - Add item to cart
-- `viewCart(session: mcp:Session)` - View current cart contents
-- `clearCart(session: mcp:Session)` - Clear all items from cart
+- `addToCart(session: mcp:HttpSession, productName: string, price: decimal)` - Add item to cart
+- `viewCart(session: mcp:HttpSession)` - View current cart contents
+- `clearCart(session: mcp:HttpSession)` - Clear all items from cart
 
 **How to run:**
 ```bash
@@ -203,3 +203,19 @@ cd clients/mcp-shopping-client-demo && bal run
 # Build and publish to local central
 ./gradlew clean build -x test -x check -PpublishToLocalCentral=true
 ```
+
+### Shopping with explicit cart handles (modern and legacy)
+
+**Location:** `servers/mcp-shopping-server-modern/`
+
+This example carries cart identity in ordinary tool arguments, so it works with modern sessionless requests and legacy
+clients. Call `createCart`, then pass the returned `cartId` to `addItem`, `viewCart`, and `closeCart`. Handles expire after
+30 minutes, and the demonstration store is limited to 1,000 carts. The store is in memory; a multi-instance deployment
+should use shared application storage and bind cart access to its authorization context.
+
+```sh
+cd servers/mcp-shopping-server-modern
+bal run -- -CcartPort=9092
+```
+
+The MCP endpoint is `http://127.0.0.1:9092/mcp`. The original shopping server remains the example for legacy protocol sessions.

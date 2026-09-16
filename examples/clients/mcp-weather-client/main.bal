@@ -25,7 +25,7 @@ public function main() returns mcp:ClientError? {
     log:printInfo("Starting MCP Weather Client Demo");
 
     // Initialize the client with client information
-    check mcpClient->initialize({
+    _ = check mcpClient->connect({
         name: "MCP Weather Client Demo",
         version: "1.0.0"
     });
@@ -73,7 +73,7 @@ function demonstrateCurrentWeather() returns mcp:ClientError? {
             arguments: {
                 "city": city
             },
-            // Attach request metadata; the server tool reads it via its mcp:Meta parameter (see server logs)
+            // Attach request metadata; the server tool reads it via its mcp:RequestMetaObject parameter (see server logs)
             _meta: {
                 "requestId": requestId
             }
@@ -105,7 +105,7 @@ function demonstrateWeatherForecast() returns mcp:ClientError? {
                 "location": testCase.location,
                 "days": testCase.days
             },
-            // Attach request metadata; the server tool reads it via its mcp:Meta parameter (see server logs)
+            // Attach request metadata; the server tool reads it via its mcp:RequestMetaObject parameter (see server logs)
             _meta: {
                 "requestId": requestId,
                 "forecastDays": testCase.days

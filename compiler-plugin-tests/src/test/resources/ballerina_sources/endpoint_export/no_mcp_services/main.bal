@@ -1,3 +1,3 @@
 import ballerina/mcp;
 
-listener mcp:Listener mcpListener = check new (9090);
+listener mcp:StreamableHttpListener mcpListener = check new (9090);

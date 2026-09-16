@@ -19,9 +19,15 @@ import ballerina/http;
 # Configuration options for the Streamable HTTP client transport.
 #
 # + sessionId - Optional session identifier for continued interactions.
-public type StreamableHttpClientTransportConfig record {|
+public type StreamableHttpClientConfig record {|
     *http:ClientConfiguration;
     string sessionId?;
+    # Auto probes discovery and falls back to the legacy handshake.
+    ProtocolMode protocolMode = "auto";
+    # Maximum number of input-required continuations per call.
+    int maxInputRounds = 8;
+    # Optional application callback for embedded input requests.
+    InputHandler inputHandler?;
 |};
 
 # Provides HTTP-based client transport with support for streaming.
@@ -31,17 +37,18 @@ isolated class StreamableHttpClientTransport {
     private string? sessionId;
     # Protocol version negotiated during initialization, sent on all subsequent requests.
     private string? protocolVersion = ();
+    private map<ClientSubscriptionStream> activeSubscriptions = {};
 
     # Initializes the HTTP client transport with the provided server URL.
     #
     # + serverUrl - The URL of the server endpoint.
     # + config - Optional configuration, such as session ID.
     # + return - A StreamableHttpTransportError if initialization fails; otherwise, nil.
-    isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config)
+    isolated function init(string serverUrl, *StreamableHttpClientConfig config)
             returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
 
-        StreamableHttpClientTransportConfig {sessionId, ...clientConfig} = config;
+        StreamableHttpClientConfig {sessionId, protocolMode: _, maxInputRounds: _, inputHandler: _, ...clientConfig} = config;
         clientConfig.followRedirects = clientConfig.followRedirects ?: {
             enabled: true
         };
@@ -113,6 +120,66 @@ isolated class StreamableHttpClientTransport {
         }
     }
 
+    isolated function sendProtocolRequest(JsonRpcRequest requestMessage, map<string|string[]> additionalHeaders,
+            map<string> parameterHeaders = {}) returns Result|ClientError {
+        map<string|string[]> requestHeaders = check prepareProtocolRequestHeaders(requestMessage, additionalHeaders, parameterHeaders);
+        http:Response|error httpResponse = self.httpClient->post("", requestMessage, headers = requestHeaders);
+        if httpResponse is error {
+            return error HttpClientError("Failed to send modern MCP request", httpResponse);
+        }
+        return readProtocolResponse(httpResponse, requestMessage.id);
+    }
+
+    isolated function openProtocolSubscription(JsonRpcRequest requestMessage, SubscriptionFilter requestedFilter,
+            map<string|string[]> additionalHeaders) returns stream<JsonRpcNotification, StreamError?>|ClientError {
+        map<string|string[]> requestHeaders = check prepareProtocolRequestHeaders(requestMessage, additionalHeaders);
+        http:Response|error httpResponse = self.httpClient->post("", requestMessage, headers = requestHeaders);
+        if httpResponse is error {
+            return error SseStreamEstablishmentError("Failed to open subscription", httpResponse);
+        }
+        if httpResponse.statusCode != 200 || !httpResponse.getContentType().includes(CONTENT_TYPE_SSE) {
+            Result|ClientError resultValue = readProtocolResponse(httpResponse, requestMessage.id);
+            return resultValue is ClientError ? resultValue : error SseStreamEstablishmentError("Expected a subscription SSE stream");
+        }
+        var eventStream = httpResponse.getSseEventStream();
+        if eventStream is error {
+            return error SseStreamEstablishmentError(eventStream.message());
+        }
+        ProtocolMessageStream messageStream = new (eventStream);
+        ClientSubscriptionStream streamIterator = new (messageStream, requestMessage.id, requestedFilter, self);
+        lock {
+            self.activeSubscriptions[requestMessage.id.toString()] = streamIterator;
+        }
+        return new stream<JsonRpcNotification, StreamError?>(streamIterator);
+    }
+
+    isolated function removeSubscription(RequestId subscriptionId) {
+        lock {
+            _ = self.activeSubscriptions.removeIfHasKey(subscriptionId.toString());
+        }
+    }
+
+    isolated function closeSubscriptions() returns StreamError? {
+        string[] & readonly subscriptionIds;
+        lock {
+            subscriptionIds = self.activeSubscriptions.keys().cloneReadOnly();
+        }
+        StreamError? firstError = ();
+        foreach string subscriptionId in subscriptionIds {
+            ClientSubscriptionStream? eventSource;
+            lock {
+                eventSource = self.activeSubscriptions[subscriptionId];
+            }
+            if eventSource is ClientSubscriptionStream {
+                StreamError? closeError = eventSource.close();
+                if firstError is () {
+                    firstError = closeError;
+                }
+            }
+        }
+        return firstError;
+    }
+
     # Establishes a Server-Sent Events (SSE) stream with the server.
     #
     # + return - A stream of JsonRpcMessages, or a StreamableHttpTransportError.
@@ -138,6 +205,7 @@ isolated class StreamableHttpClientTransport {
     isolated function terminateSession() returns StreamableHttpTransportError? {
         lock {
             if self.sessionId is () {
+                self.protocolVersion = ();
                 return;
             }
 
@@ -224,13 +292,8 @@ isolated class StreamableHttpClientTransport {
             returns JsonRpcMessage|StreamableHttpTransportError {
         do {
             json payload = check response.getJsonPayload();
-            JsonRpcMessage|http:ErrorPayload result = check payload.cloneWithType();
-            if result is JsonRpcMessage {
-                return result;
-            }
-            return error HttpClientError(
-                string `Received error response from server: ${result.toJsonString()}`
-            );
+            JsonRpcMessage result = check payload.cloneWithType();
+            return result;
         } on fail error e {
             return error ResponseParsingError(
                 string `Unable to parse JSON response: ${e.message()}`

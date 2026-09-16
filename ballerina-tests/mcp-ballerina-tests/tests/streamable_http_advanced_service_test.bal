@@ -20,7 +20,7 @@ import ballerina/test;
 
 // An advanced Streamable HTTP service whose onListTools/onCallTool bind transport-specific request
 // information the same way StreamableHttpService tools do: @http:Header, http:Headers, http:Request.
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "advanced-http-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -36,7 +36,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
         };
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session,
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session,
             @http:Header {name: "Authorization"} string? auth, http:Headers headers)
             returns mcp:CallToolResult|mcp:ServerError {
         string viaAnnotation = auth ?: "<none>";

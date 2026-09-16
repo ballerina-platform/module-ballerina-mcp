@@ -31,7 +31,7 @@ type CallerHeaders record {|
 
 // Every supported @http:Header parameter shape must compile without diagnostics on an
 // mcp:StreamableHttpService.
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "sample-1", version: "1.0.0"}
 }
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9301) {

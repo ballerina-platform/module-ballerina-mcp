@@ -17,7 +17,7 @@
 import ballerina/mcp;
 
 // onCallTool does not declare a CallToolParams parameter (MCP_111).
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "sample-13", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9313) {
@@ -26,7 +26,7 @@ service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener
         return {tools: []};
     }
 
-    remote function onCallTool(mcp:Session? session) returns mcp:CallToolResult|mcp:ServerError {
+    remote function onCallTool(mcp:HttpSession? session) returns mcp:CallToolResult|mcp:ServerError {
         return {content: []};
     }
 }

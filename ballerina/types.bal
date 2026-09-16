@@ -19,9 +19,10 @@ import ballerina/http;
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcError|JsonRpcResponse;
 
-public const LATEST_PROTOCOL_VERSION = "2025-11-25";
+public const LATEST_PROTOCOL_VERSION = "2026-07-28";
 public const SUPPORTED_PROTOCOL_VERSIONS = [
     LATEST_PROTOCOL_VERSION,
+    LATEST_LEGACY_PROTOCOL_VERSION,
     "2025-06-18",
     "2025-03-26",
     "2024-11-05",
@@ -40,8 +41,11 @@ public enum RequestMethod {
     REQUEST_CALL_TOOL = "tools/call"
 };
 
+# Selects protocol behavior independently of legacy HTTP session management.
+public type ProtocolMode "legacy"|"auto"|"modern";
+
 # Represents the session management modes supported by the MCP server transport.
-public enum SessionMode {
+public enum HttpSessionMode {
     # Stateful mode - sessions are managed by the transport
     STATEFUL = "stateful",
     # Stateless mode - no session management
@@ -62,8 +66,8 @@ public type ProgressToken string|int;
 # An opaque token used to represent a cursor for pagination.
 public type Cursor string;
 
-# Optional metadata for requests
-public type Meta record {
+# Application-facing metadata for requests.
+public type RequestMetaObject record {
     # If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress).
     # The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
     ProgressToken progressToken?;
@@ -72,7 +76,7 @@ public type Meta record {
 # Parameters for the request
 public type RequestParams record {
     # Optional metadata for the request
-    Meta _meta?;
+    RequestMetaObject _meta?;
 };
 
 # Represents a generic request in the protocol
@@ -89,15 +93,36 @@ public type Notification record {|
     string method;
     # Additional parameters for the notification
     record {
-        record {} _meta?;
+        NotificationMetaObject _meta?;
     } params?;
 |};
 
+# Application-facing metadata attached to a result.
+public type ResultMetaObject record {
+    # Server implementation that produced the response.
+    Implementation serverInfo?;
+};
+
+# Application-facing metadata attached to a notification.
+public type NotificationMetaObject record {
+    # Request identifier of the subscription that delivered the notification.
+    RequestId subscriptionId?;
+};
+
+# Fields shared by result records.
+type ResultFields record {
+    # Metadata attached to the result.
+    ResultMetaObject _meta?;
+};
+
+# Result discriminator. Known core results narrow this to a string singleton.
+public type ResultType string;
+
 # Base result type with common fields.
 public type Result record {
-    # This result property is reserved by the protocol to allow clients and servers
-    # to attach additional metadata to their responses.
-    record {} _meta?;
+    *ResultFields;
+    # Modern results carry a discriminator. It is absent on legacy wire responses.
+    ResultType resultType?;
 };
 
 # A uniquely identifying ID for a request in JSON-RPC.
@@ -210,6 +235,8 @@ public type InitializedNotification record {|
 # Capabilities a client may support. Known capabilities are defined here, in this schema,
 # but this is not a closed set: any client can define its own, additional capabilities.
 public type ClientCapabilities record {
+    # Optional protocol extensions supported by this implementation.
+    map<record {}> extensions?;
     # Experimental, non-standard capabilities that the client supports.
     map<anydata> experimental?;
     # Present if the client supports listing roots.
@@ -255,6 +282,8 @@ public type ClientCapabilities record {
 # Capabilities that a server may support. Known capabilities are defined here, in this schema,
 # but this is not a closed set: any server can define its own, additional capabilities.
 public type ServerCapabilities record {
+    # Optional protocol extensions supported by this implementation.
+    map<record {}> extensions?;
     # Experimental, non-standard capabilities that the server supports.
     map<anydata> experimental?;
     # Present if the server supports sending log messages to the client.
@@ -304,14 +333,16 @@ public type BaseMetadata record {|
     string title?;
 |};
 
-# Represents a sized icon that can be displayed in a user interface.
+# Represents an optionally sized icon that can be displayed in a user interface.
 public type Icon record {
-    # The MIME type of the icon (e.g. image/png, image/jpeg, image/svg+xml, image/webp)
-    string mimeType;
-    # The URL or base64-encoded data of the icon
-    string data;
-    # The size of the icon (e.g. 16, 32, 64, 128, 256)
-    int size?;
+    # URI pointing to an icon resource, including HTTP(S) and data URIs.
+    string src;
+    # Optional MIME type override when the source type is unavailable or generic.
+    string mimeType?;
+    # Supported sizes in WxH form, or `any` for scalable formats.
+    string[] sizes?;
+    # Theme for which the icon was designed.
+    "dark"|"light" theme?;
 };
 
 # Optional set of sized icons that the client can display in a user interface.
@@ -417,6 +448,10 @@ public type ListToolsResult record {
     *PaginatedResult;
     # A list of tools available on the server.
     ToolDefinition[] tools;
+    # Freshness hint in milliseconds. Modern servers default this to zero.
+    int ttlMs?;
+    # Whether a modern response may be shared between callers.
+    "public"|"private" cacheScope?;
 };
 
 # A content block that can be text, image, audio, resource link, or embedded resource.
@@ -424,11 +459,13 @@ public type ContentBlock TextContent|ImageContent|AudioContent|ResourceLink|Embe
 
 # The server's response to a tool call.
 public type CallToolResult record {
-    *Result;
+    *ResultFields;
+    # Identifies a completed modern result when disambiguating it from InputRequiredResult.
+    "complete" resultType?;
     # A list of content objects that represent the unstructured result of the tool call.
     ContentBlock[] content;
-    # An optional JSON object that represents the structured result of the tool call.
-    map<anydata> structuredContent?;
+    # An optional JSON value that represents the structured result of the tool call.
+    json structuredContent?;
     # Whether the tool call ended in an error.
     # If not set, this is assumed to be false (the call was successful).
     boolean isError?;
@@ -447,6 +484,10 @@ public type CallToolParams record {|
     *RequestParams;
     # The name of the tool to invoke
     string name;
+    # Responses to embedded input requests on a continuation.
+    map<InputResponse> inputResponses?;
+    # Opaque state echoed exactly from an input-required result.
+    string requestState?;
     # Optional arguments to pass to the tool
     record {} arguments?;
     # If present, this is a task-augmented request (MCP 2025-11-25 TaskAugmentedRequestParams).
@@ -499,17 +540,18 @@ public type ToolExecution record {|
     TaskSupport taskSupport = TASK_SUPPORT_FORBIDDEN;
 |};
 
-# A JSON Schema object describing the parameters or output of a tool.
-public type JsonSchema record {
-    # The JSON Schema version
+# An object-root JSON Schema describing tool arguments.
+public type InputSchema record {|
+    # JSON Schema dialect, defaulting to JSON Schema 2020-12.
     string \$schema?;
-    # The type of the schema
+    # Tool input schemas always have an object root.
     "object" 'type;
-    # The properties of the schema
-    map<anydata> properties?;
-    # The required properties of the schema
+    # Schemas for tool arguments.
+    map<json> properties?;
+    # Required argument names.
     string[] required?;
-};
+    json...;
+|};
 
 # Definition for a tool the client can call.
 public type ToolDefinition record {
@@ -518,11 +560,11 @@ public type ToolDefinition record {
     # A human-readable description of the tool.
     string description?;
     # A JSON Schema object defining the expected parameters for the tool.
-    JsonSchema inputSchema;
+    InputSchema inputSchema;
     # Execution-related properties for this tool.
     ToolExecution execution?;
-    # An optional JSON Schema object defining the structure of the tool's output.
-    JsonSchema outputSchema?;
+    # An optional general JSON Schema object defining the tool's structured output.
+    OutputSchema outputSchema?;
     # Optional additional tool information.
     ToolAnnotations annotations?;
 };
@@ -582,11 +624,26 @@ public type McpToolConfig record {|
     # The description of the tool.
     string description?;
     # The JSON schema for the tool's parameters.
-    map<json> schema?;
+    InputSchema schema?;
+    # The JSON schema generated from, or explicitly assigned for, the successful return value.
+    # It is advertised only to clients using the modern protocol.
+    OutputSchema outputSchema?;
+    # Whether modern requests should receive structured output for this tool.
+    boolean structuredOutput = true;
 |};
 
 # Annotation to mark a function as an MCP tool configuration.
 public annotation McpToolConfig Tool on object function;
+
+# Configuration for an MCP tool argument.
+public type ArgumentConfig record {|
+    # Mirrors the argument into the corresponding `Mcp-Param-*` request header. The argument
+    # remains present in `tools/call.params.arguments`.
+    string headerName;
+|};
+
+# Configures an argument of a tool remote function.
+public const annotation ArgumentConfig Argument on parameter;
 
 # Represents the options for configuring an MCP server.
 public type ServerOptions record {|
@@ -598,38 +655,12 @@ public type ServerOptions record {|
     boolean enforceStrictCapabilities?;
 |};
 
-# Transport-agnostic configuration for an MCP service, defining server metadata and options.
-public type ServiceConfiguration record {|
-    # Server implementation information
-    Implementation info;
-    # Optional server configuration options
-    ServerOptions options?;
-    # HTTP service configuration for the underlying transport.
-    #
-    # # Deprecated
-    # HTTP configuration is transport-specific. Use the `httpConfig` field of the
-    # `@mcp:StreamableHttpServiceConfig` annotation on an `mcp:StreamableHttpService` instead.
-    @deprecated
-    http:HttpServiceConfig httpConfig = {};
-    # Controls the session management mode for the transport.
-    # - STATEFUL → Sessions are managed by the transport with session IDs
-    # - STATELESS → No session management, each request is independent
-    # - AUTO → Automatically determined based on client initialization behavior (default)
-    #
-    # # Deprecated
-    # Session management is transport-specific. Use the `sessionMode` field of the
-    # `@mcp:StreamableHttpServiceConfig` annotation on an `mcp:StreamableHttpService` instead.
-    @deprecated
-    SessionMode sessionMode = AUTO;
-|};
-
-# Annotation to provide configuration to MCP services.
-public annotation ServiceConfiguration ServiceConfig on service;
-
 # Configuration for an MCP service exposed over the Streamable HTTP transport.
-public type StreamableHttpServiceConfiguration record {|
+public type StreamableHttpConfiguration record {|
     # Server implementation information
     Implementation info;
+    # Protocol selection. Auto preserves legacy requests and accepts modern requests when the service supports them.
+    ProtocolMode protocolMode = "auto";
     # Optional server configuration options
     ServerOptions options?;
     # HTTP service configuration for the underlying transport
@@ -638,24 +669,12 @@ public type StreamableHttpServiceConfiguration record {|
     # - STATEFUL → Sessions are managed by the transport with session IDs
     # - STATELESS → No session management, each request is independent
     # - AUTO → Automatically determined based on client initialization behavior (default)
-    SessionMode sessionMode = AUTO;
+    HttpSessionMode sessionMode = AUTO;
 |};
 
 # Annotation to provide configuration to Streamable HTTP MCP services.
-public annotation StreamableHttpServiceConfiguration StreamableHttpServiceConfig on service;
-
-# Defines a transport-agnostic MCP service interface that handles incoming MCP requests with
-# manual control over tool listing and invocation.
-public type AdvancedService distinct service object {
-    remote isolated function onListTools() returns ListToolsResult|ServerError;
-    remote isolated function onCallTool(CallToolParams params, Session? session = ()) returns CallToolResult|ServerError;
-};
- 
-# Defines a transport-agnostic basic MCP service interface. Tools are declared as `remote`
-# functions and cannot access transport-specific request information.
-public type Service distinct service object {
-
-};
+# Annotation to configure an MCP service exposed over Streamable HTTP.
+public annotation StreamableHttpConfiguration StreamableHttpConfig on service;
 
 # Defines a basic MCP service interface exposed over the Streamable HTTP transport. Tool
 # `remote` functions may additionally bind HTTP request information (e.g. `@http:Header`
@@ -665,10 +684,85 @@ public type StreamableHttpService distinct service object {
 };
 
 # Defines an MCP service interface exposed over the Streamable HTTP transport with manual control
-# over tool listing and invocation. The service must declare `onListTools` and `onCallTool` `remote`
-# methods. In addition to `mcp:CallToolParams` and an optional `mcp:Session`, these methods may bind
-# transport-specific request information the same way `mcp:StreamableHttpService` tools can — via
-# `@http:Header` parameters, an `http:Headers` parameter, and/or an `http:Request` parameter. The
-# compiler plugin validates the shape of these methods.
+# over tool listing and invocation. Handlers return `ListToolsResult` and
+# `CallToolResult|InputRequiredResult`. An optional `onSubscribe` method publishes modern change
+# notifications. In addition to protocol parameters, handlers may bind transport-specific request
+# information via `@http:Header`, `http:Headers`, or `http:Request`. The compiler plugin validates
+# the method shapes.
 public type StreamableHttpAdvancedService distinct service object {
 };
+
+# A general JSON Schema value represented until native language support is available.
+public type JsonSchema map<json>;
+
+# JSON Schema output definition. Output schemas may describe any JSON value.
+public type OutputSchema record {|
+    # JSON Schema dialect, defaulting to JSON Schema 2020-12.
+    string \$schema?;
+    json...;
+|};
+
+# Server discovery response. Identity is carried in _meta.
+public type DiscoverResult record {
+    *Result;
+    # Protocol revisions accepted by this service.
+    string[] supportedVersions;
+    # Implemented server features.
+    ServerCapabilities capabilities;
+    # Optional guidance for using this server.
+    string instructions?;
+    # Freshness hint in milliseconds; zero disables caching.
+    int ttlMs = 0;
+    # Whether a response may be shared between callers.
+    "public"|"private" cacheScope = "private";
+};
+
+# Information established when a client connects to a server.
+public type ConnectionInfo record {|
+    # Effective protocol version selected for subsequent requests.
+    string protocolVersion;
+    # Server identity, when the peer supplied it.
+    Implementation serverInfo?;
+    # Capabilities advertised by the server.
+    ServerCapabilities capabilities;
+    # Optional guidance supplied by the server.
+    string instructions?;
+|};
+
+# Embedded server input request. Only declared client capabilities may be requested.
+public type InputRequest record {|
+    # The requested input operation.
+    "elicitation/create"|"sampling/createMessage"|"roots/list" method;
+    # Parameters describing the requested input.
+    RequestParams params?;
+|};
+
+# Additional input required before the original operation can complete.
+public type InputRequiredResult record {
+    *ResultFields;
+    # Identifies an interim result requiring a continuation.
+    "input_required" resultType = "input_required";
+    # Input requests keyed by server-assigned identifiers.
+    map<InputRequest> inputRequests?;
+    # Opaque server state that clients must echo without modification.
+    string requestState?;
+};
+
+# An input result supplied by the application, for example an elicitation response.
+public type InputResponse record {
+};
+
+# Callback for gathering input requested by a server. It is invoked outside client locks.
+public type InputHandler isolated function (InputRequest inputRequest) returns InputResponse|ClientError;
+
+# Selects change notifications for a subscription.
+public type SubscriptionFilter record {|
+    # Subscribe to tool list changes.
+    boolean toolsListChanged = false;
+    # Subscribe to prompt list changes when supported by the peer.
+    boolean promptsListChanged = false;
+    # Subscribe to resource list changes when supported by the peer.
+    boolean resourcesListChanged = false;
+    # Resource URIs whose changes should be observed.
+    string[] resourceSubscriptions = [];
+|};

@@ -21,7 +21,8 @@ import ballerina/test;
 @test:Config {}
 function testSelectProtocolVersionEchoesSupportedVersions() {
     foreach string supportedVersion in SUPPORTED_PROTOCOL_VERSIONS {
-        test:assertEquals(selectProtocolVersion(supportedVersion), supportedVersion,
+        test:assertEquals(selectProtocolVersion(supportedVersion),
+                supportedVersion == MODERN_PROTOCOL_VERSION ? LATEST_LEGACY_PROTOCOL_VERSION : supportedVersion,
                 string `Server should echo the supported requested version '${supportedVersion}'`);
     }
 }
@@ -29,9 +30,9 @@ function testSelectProtocolVersionEchoesSupportedVersions() {
 // Version negotiation: for an unsupported request, the server must fall back to its latest version.
 @test:Config {}
 function testSelectProtocolVersionFallsBackToLatest() {
-    test:assertEquals(selectProtocolVersion("1.0.0"), LATEST_PROTOCOL_VERSION);
-    test:assertEquals(selectProtocolVersion("2099-01-01"), LATEST_PROTOCOL_VERSION);
-    test:assertEquals(selectProtocolVersion(""), LATEST_PROTOCOL_VERSION);
+    test:assertEquals(selectProtocolVersion("1.0.0"), LATEST_LEGACY_PROTOCOL_VERSION);
+    test:assertEquals(selectProtocolVersion("2099-01-01"), LATEST_LEGACY_PROTOCOL_VERSION);
+    test:assertEquals(selectProtocolVersion(""), LATEST_LEGACY_PROTOCOL_VERSION);
 }
 
 // Transport: an absent MCP-Protocol-Version header is tolerated (server assumes 2025-03-26).

@@ -25,6 +25,7 @@ import io.ballerina.runtime.api.flags.SymbolFlags;
 import io.ballerina.runtime.api.types.ArrayType;
 import io.ballerina.runtime.api.types.Field;
 import io.ballerina.runtime.api.types.Parameter;
+import io.ballerina.runtime.api.types.PredefinedTypes;
 import io.ballerina.runtime.api.types.RecordType;
 import io.ballerina.runtime.api.types.RemoteMethodType;
 import io.ballerina.runtime.api.types.ServiceType;
@@ -64,6 +65,11 @@ public final class McpServiceMethodHelper {
     private static final String DESCRIPTION_FIELD_NAME = "description";
     private static final String SCHEMA_FIELD_NAME = "schema";
     private static final String INPUT_SCHEMA_FIELD_NAME = "inputSchema";
+    private static final String OUTPUT_SCHEMA_FIELD_NAME = "outputSchema";
+    private static final String STRUCTURED_OUTPUT_FIELD_NAME = "structuredOutput";
+    private static final String STRUCTURED_CONTENT_FIELD_NAME = "structuredContent";
+    private static final String TTL_MILLIS_FIELD_NAME = "ttlMs";
+    private static final String CACHE_SCOPE_FIELD_NAME = "cacheScope";
     private static final String ARGUMENTS_FIELD_NAME = "arguments";
     private static final String CONTENT_FIELD_NAME = "content";
     private static final String TYPE_FIELD_NAME = "type";
@@ -83,10 +89,10 @@ public final class McpServiceMethodHelper {
     private static final String TEXT_VALUE_NAME = "text";
     private static final String MCP_SERVICE_FIELD = "mcpService";
 
-    // MCP Session and Meta-related constants
+    // MCP HTTP session and metadata-related constants
     private static final String MCP_PACKAGE_NAME = "mcp";
-    private static final String SESSION_TYPE_NAME = "Session";
-    private static final String META_TYPE_NAME = "Meta";
+    private static final String SESSION_TYPE_NAME = "HttpSession";
+    private static final String META_TYPE_NAME = "RequestMetaObject";
     private static final String META_FIELD_NAME = "_meta";
     private static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
 
@@ -110,32 +116,29 @@ public final class McpServiceMethodHelper {
 
     private McpServiceMethodHelper() {}
 
-    /**
-     * Invoke the 'onListTools' remote method on the given MCP service object.
-     *
-     * @param env        The Ballerina runtime environment.
-     * @param mcpService The MCP service object.
-     * @return           Result of remote method invocation.
-     */
-    public static Object invokeOnListTools(Environment env, BObject mcpService) {
-        return env.getRuntime().callMethod(mcpService, ON_LIST_TOOLS_METHOD, null);
+    public static Object invokeOnSubscribe(Environment env, BObject mcpService, BMap<?, ?> notifications) {
+        return env.getRuntime().callMethod(mcpService, "onSubscribe", null, notifications);
     }
 
-    /**
-     * Invoke the 'onCallTool' remote method on the given MCP service object with parameters.
-     *
-     * @param env        The Ballerina runtime environment.
-     * @param mcpService The MCP service object.
-     * @param params     Parameters for the tool invocation.
-     * @return           Result of remote method invocation.
-     */
-    public static Object invokeOnCallTool(Environment env, BObject mcpService, BMap<?, ?> params, Object session) {
-        return env.getRuntime().callMethod(mcpService, ON_CALL_TOOL_METHOD, null, params, session);
+    public static boolean hasSubscriptionHandler(BObject mcpService) {
+        return getRemoteMethod(mcpService, "onSubscribe").isPresent();
+    }
+
+    /** Returns whether a service has a session parameter that cannot receive nil. */
+    public static boolean requiresLegacySession(BObject mcpService) {
+        for (RemoteMethodType method : getRemoteMethods(mcpService)) {
+            for (Parameter parameter : method.getParameters()) {
+                if (isSessionParameter(parameter) && !parameter.type.isNilable()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
      * Invoke the 'onCallTool' remote method of a Streamable HTTP advanced service. The method's
-     * declared parameters are inspected and bound flexibly (CallToolParams, Session, http:Headers,
+     * declared parameters are inspected and bound flexibly (CallToolParams, HttpSession, http:Headers,
      * http:Request, and '@http:Header' parameters), mirroring how basic service tools are bound.
      *
      * @param env                    The Ballerina runtime environment.
@@ -199,6 +202,15 @@ public final class McpServiceMethodHelper {
      * @return           Record containing the list of tools.
      */
     public static Object listToolsForRemoteFunctions(BObject mcpService, BTypedesc typed) {
+        return listToolsForRemoteFunctions(mcpService, typed, false);
+    }
+
+    public static Object listProtocolToolsForRemoteFunctions(BObject mcpService, BTypedesc typed) {
+        return listToolsForRemoteFunctions(mcpService, typed, true);
+    }
+
+    private static Object listToolsForRemoteFunctions(BObject mcpService, BTypedesc typed,
+                                                      boolean includeOutputSchema) {
         RecordType resultRecordType = (RecordType) typed.getDescribingType();
         BMap<BString, Object> result = ValueCreator.createRecordValue(resultRecordType);
 
@@ -210,10 +222,15 @@ public final class McpServiceMethodHelper {
                     .filter(e -> e.getKey().getValue().contains(ANNOTATION_MCP_TOOL))
                     .findFirst()
                     .ifPresent(annotation -> tools.append(
-                            createToolRecord(toolsArrayType, remoteMethod, (BMap<?, ?>) annotation.getValue())
+                            createToolRecord(toolsArrayType, remoteMethod, (BMap<?, ?>) annotation.getValue(),
+                                    includeOutputSchema)
                     ));
         }
         result.put(fromString(TOOLS_FIELD_NAME), tools);
+        if (includeOutputSchema) {
+            result.put(fromString(TTL_MILLIS_FIELD_NAME), 0L);
+            result.put(fromString(CACHE_SCOPE_FIELD_NAME), fromString("private"));
+        }
         return result;
     }
 
@@ -230,6 +247,22 @@ public final class McpServiceMethodHelper {
                                                     Object session, BObject headers, BObject request,
                                                     BMap<?, ?> headerValues, boolean treatNilableAsOptional,
                                                     BTypedesc typed) {
+        return callToolForRemoteFunctions(env, mcpService, params, session, headers, request, headerValues,
+                treatNilableAsOptional, typed, false);
+    }
+
+    public static Object callProtocolToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
+                                                            Object session, BObject headers, BObject request,
+                                                            BMap<?, ?> headerValues, boolean treatNilableAsOptional,
+                                                            BTypedesc typed) {
+        return callToolForRemoteFunctions(env, mcpService, params, session, headers, request, headerValues,
+                treatNilableAsOptional, typed, true);
+    }
+
+    private static Object callToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
+                                                     Object session, BObject headers, BObject request,
+                                                     BMap<?, ?> headerValues, boolean treatNilableAsOptional,
+                                                     BTypedesc typed, boolean structuredResult) {
         BString toolName = (BString) params.get(fromString(NAME_FIELD_NAME));
 
         Optional<RemoteMethodType> method = getRemoteMethods(mcpService).stream()
@@ -255,8 +288,11 @@ public final class McpServiceMethodHelper {
         }
 
         Object[] args = (Object[]) argsOrError;
-        return createCallToolResult(typed,
-                env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args));
+        Object toolResult = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
+        if (structuredResult && isStructuredOutputEnabled(method.get())) {
+            return createStructuredCallToolResult(typed, toolResult);
+        }
+        return createCallToolResult(typed, toolResult);
     }
 
     /**
@@ -347,14 +383,34 @@ public final class McpServiceMethodHelper {
     }
 
     private static BMap<BString, Object> createToolRecord(ArrayType toolsArrayType, RemoteMethodType remoteMethod,
-                                                          BMap<?, ?> annotationValue) {
+                                                          BMap<?, ?> annotationValue,
+                                                          boolean includeOutputSchema) {
         RecordType toolRecordType = (RecordType) TypeUtils.getImpliedType(toolsArrayType.getElementType());
         BMap<BString, Object> tool = ValueCreator.createRecordValue(toolRecordType);
 
         tool.put(fromString(NAME_FIELD_NAME), fromString(remoteMethod.getName()));
         tool.put(fromString(DESCRIPTION_FIELD_NAME), annotationValue.get(fromString(DESCRIPTION_FIELD_NAME)));
         tool.put(fromString(INPUT_SCHEMA_FIELD_NAME), annotationValue.get(fromString(SCHEMA_FIELD_NAME)));
+        if (includeOutputSchema && isStructuredOutputEnabled(annotationValue)) {
+            Object outputSchema = annotationValue.get(fromString(OUTPUT_SCHEMA_FIELD_NAME));
+            if (outputSchema != null) {
+                tool.put(fromString(OUTPUT_SCHEMA_FIELD_NAME), outputSchema);
+            }
+        }
         return tool;
+    }
+
+    private static boolean isStructuredOutputEnabled(RemoteMethodType method) {
+        return method.getAnnotations().entrySet().stream()
+                .filter(entry -> entry.getKey().getValue().contains(ANNOTATION_MCP_TOOL))
+                .map(entry -> (BMap<?, ?>) entry.getValue())
+                .anyMatch(McpServiceMethodHelper::isStructuredOutputEnabled);
+    }
+
+    private static boolean isStructuredOutputEnabled(BMap<?, ?> annotationValue) {
+        Object enabled = annotationValue.get(fromString(STRUCTURED_OUTPUT_FIELD_NAME));
+        Object outputSchema = annotationValue.get(fromString(OUTPUT_SCHEMA_FIELD_NAME));
+        return !Boolean.FALSE.equals(enabled) && outputSchema != null;
     }
 
     private static Object buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments, Object session,
@@ -436,11 +492,15 @@ public final class McpServiceMethodHelper {
     }
 
     private static boolean isSessionParameter(Parameter param) {
-        // Session is commonly declared nilable ('mcp:Session?'), so look through the union as well.
+        // HttpSession is commonly declared nilable, so look through the union as well.
         return isMcpSessionType(param.type);
     }
 
     private static boolean isMcpSessionType(Type type) {
+        Type impliedType = TypeUtils.getImpliedType(type);
+        if (impliedType != type) {
+            return isMcpSessionType(impliedType);
+        }
         if (type instanceof UnionType unionType) {
             return unionType.getMemberTypes().stream().anyMatch(McpServiceMethodHelper::isMcpSessionType);
         }
@@ -660,7 +720,7 @@ public final class McpServiceMethodHelper {
             return true;
         }
 
-        // Check if it's an optional Meta type (mcp:Meta?)
+        // Check if it is an optional request metadata type (mcp:RequestMetaObject?).
         if (paramType instanceof UnionType unionType) {
             return unionType.getMemberTypes().stream()
                     .anyMatch(type -> type.getPackage() != null
@@ -722,6 +782,21 @@ public final class McpServiceMethodHelper {
             ((BMap<BString, Object>) callToolResult).put(fromString(IS_ERROR_FIELD_NAME), true);
         }
         return result;
+    }
+
+    private static Object createStructuredCallToolResult(BTypedesc typed, Object result) {
+        Object callToolResult = createCallToolResult(typed, result);
+        if (result instanceof BError || !(callToolResult instanceof BMap<?, ?> resultRecord)) {
+            return callToolResult;
+        }
+        try {
+            Object structuredContent = ValueUtils.convert(result, PredefinedTypes.TYPE_JSON);
+            ((BMap<BString, Object>) resultRecord).put(fromString(STRUCTURED_CONTENT_FIELD_NAME), structuredContent);
+            return resultRecord;
+        } catch (BError conversionError) {
+            return createCallToolError(typed,
+                    "Tool result cannot be represented as structured JSON: " + errorMessage(conversionError));
+        }
     }
 
     private static Object createCallToolResult(BTypedesc typed, Object result) {

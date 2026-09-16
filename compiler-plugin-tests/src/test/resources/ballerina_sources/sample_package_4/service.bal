@@ -18,7 +18,7 @@ import ballerina/http;
 import ballerina/mcp;
 
 // Only one parameter of type http:Headers is allowed per tool (MCP_107).
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "sample-4", version: "1.0.0"}
 }
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9304) {

@@ -25,24 +25,27 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
     return @http:ServiceConfig {
         ...httpServiceConfig
     } isolated service object {
-        private map<Session> sessionMap = {};
-        private StreamableHttpServiceConfiguration? cachedServiceConfig = ();
+        private map<HttpSession> sessionMap = {};
+        private StreamableHttpConfiguration? cachedServiceConfig = ();
 
         isolated resource function delete .(http:Headers headers)
-                returns http:BadRequest|http:NotFound|http:InternalServerError|http:Ok {
+                returns http:BadRequest|http:NotFound|http:InternalServerError|http:Ok|http:MethodNotAllowed {
             http:authenticateResource(self, "delete", []);
             http:BadRequest? protocolVersionError =
                     validateProtocolVersionHeader(getProtocolVersionFromHeaders(headers));
             if protocolVersionError !is () {
                 return protocolVersionError;
             }
-            StreamableHttpServiceConfiguration|Error config = self.getCachedServiceConfiguration();
+            StreamableHttpConfiguration|Error config = self.getCachedServiceConfiguration();
             if config is Error {
                 return <http:InternalServerError>{
                     body: createJsonRpcError(INTERNAL_ERROR, config.message())
                 };
             }
-            SessionMode sessionMode = config.sessionMode;
+            if config.protocolMode == "modern" || getProtocolVersionFromHeaders(headers) == MODERN_PROTOCOL_VERSION {
+                return http:METHOD_NOT_ALLOWED;
+            }
+            HttpSessionMode sessionMode = config.sessionMode;
 
             if sessionMode == STATELESS {
                 return <http:BadRequest>{
@@ -77,7 +80,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         isolated resource function post .(http:Request httpRequest, http:Headers headers)
                 returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:NotFound|
-                        http:Accepted|http:Ok {
+                        http:Accepted|http:Ok|http:Forbidden|http:Response {
             http:authenticateResource(self, "post", []);
             http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = validateRequiredHeaders(headers);
             if headerValidationError !is () {
@@ -87,6 +90,32 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             JsonRpcMessage|http:BadRequest request = parseJsonRpcMessage(httpRequest);
             if request is http:BadRequest {
                 return request;
+            }
+
+            StreamableHttpConfiguration|Error routeConfig = self.getCachedServiceConfiguration();
+            if routeConfig is Error {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, routeConfig.message());
+            }
+            if request is JsonRpcNotification && isModernRequest(request, headers) {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_REQUEST,
+                            "No core client notifications are supported by modern Streamable HTTP")
+                };
+            }
+            if request is JsonRpcRequest && isModernRequest(request, headers) {
+                var mcpService = getMcpServiceFromDispatcher(self);
+                if mcpService is Error {
+                    return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), request.id);
+                }
+                var modernResponse = trap handleModernRequest(mcpService, request, httpRequest, headers, routeConfig);
+                if modernResponse is error {
+                    return createJsonRpcErrorResponse(INTERNAL_ERROR, "Failed to process MCP request", request.id);
+                }
+                return modernResponse;
+            }
+            if routeConfig.protocolMode == "modern" {
+                return unsupportedProtocolResponse(getProtocolVersionFromHeaders(headers) ?: "legacy",
+                        [MODERN_PROTOCOL_VERSION], request is JsonRpcRequest ? request.id : ());
             }
 
             // The MCP-Protocol-Version header is required on all requests after initialization. The
@@ -113,14 +142,14 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             };
         }
 
-        private isolated function getCachedServiceConfiguration() returns StreamableHttpServiceConfiguration|Error {
+        private isolated function getCachedServiceConfiguration() returns StreamableHttpConfiguration|Error {
             lock {
                 if self.cachedServiceConfig is () {
-                    Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
+                    StreamableHttpService|StreamableHttpAdvancedService mcpService =
                             check getMcpServiceFromDispatcher(self);
                     self.cachedServiceConfig = getServiceConfiguration(mcpService);
                 }
-                return <StreamableHttpServiceConfiguration>self.cachedServiceConfig.clone();
+                return <StreamableHttpConfiguration>self.cachedServiceConfig.clone();
             }
         }
 
@@ -171,11 +200,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                         string `Invalid parameters for '${REQUEST_INITIALIZE}'`, id);
             }
 
-            StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
+            StreamableHttpConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), id);
             }
-            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_INITIALIZE);
+            HttpSessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_INITIALIZE);
 
             string requestedVersion = initRequest.params.protocolVersion;
             string protocolVersion = selectProtocolVersion(requestedVersion);
@@ -208,7 +237,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 }
 
                 string newSessionId = uuid:createRandomUuid();
-                Session session = new (newSessionId);
+                HttpSession session = new (newSessionId);
                 self.sessionMap[newSessionId] = session;
 
                 return <http:Ok>{
@@ -225,11 +254,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         private isolated function handleListToolsRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers)
             returns http:BadRequest|http:NotFound|http:Ok {
-            StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
+            StreamableHttpConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
             }
-            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_LIST_TOOLS);
+            HttpSessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_LIST_TOOLS);
 
             string? sessionId = ();
 
@@ -273,11 +302,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         private isolated function handleCallToolRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers)
             returns http:BadRequest|http:NotFound|http:Ok {
-            StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
+            StreamableHttpConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
             }
-            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_CALL_TOOL);
+            HttpSessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_CALL_TOOL);
 
             string? sessionId = ();
 
@@ -309,7 +338,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                         "Task-augmented tool calls are not supported", request.id);
             }
 
-            Session? session;
+            HttpSession? session;
             lock {
                 session = sessionId is string ? self.sessionMap[sessionId] : ();
             }
@@ -337,35 +366,46 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         private isolated function executeOnListTools(http:Headers headers, http:Request httpRequest,
                 boolean treatNilableAsOptional) returns ListToolsResult|Error {
-            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
+            StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
-                return trapListToolsFailure(trap invokeAdvancedOnListTools(mcpService, headers, httpRequest,
-                        extractHeaderValues(headers), treatNilableAsOptional));
+                ListToolsResult|error advancedResult =
+                        trap invokeAdvancedOnListTools(mcpService, headers, httpRequest,
+                            extractHeaderValues(headers), treatNilableAsOptional);
+                if advancedResult is error {
+                    return trapListToolsFailure(advancedResult);
+                }
+                ListToolsResult|error legacyResult = legacyToolListResult(advancedResult);
+                return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
-            if mcpService is AdvancedService {
-                return trapListToolsFailure(trap invokeOnListTools(mcpService));
-            }
-            if mcpService is Service|StreamableHttpService {
+            if mcpService is StreamableHttpService {
                 return trapListToolsFailure(trap listToolsForRemoteFunctions(mcpService));
             }
             return error DispatcherError("MCP service is not available");
         }
 
-        private isolated function executeOnCallTool(CallToolParams params, Session? session, http:Headers headers,
+        private isolated function executeOnCallTool(CallToolParams params, HttpSession? session, http:Headers headers,
                 http:Request httpRequest, boolean treatNilableAsOptional) returns CallToolResult|Error {
-            Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService =
+            StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
-                CallToolResult|error result = trap invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(),
-                        session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
-                return result is error ? toServerError(result, params.name) : result;
+                CallToolResult|InputRequiredResult|error result =
+                        trap invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(), session, headers,
+                            httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
+                if result is InputRequiredResult {
+                    return error ServerError("Input-required tool calls require modern MCP");
+                }
+                if result is error {
+                    return toServerError(result, params.name);
+                }
+                CallToolResult|error completedResult = result.cloneWithType();
+                if completedResult is error {
+                    return error ServerError("Input-required tool calls require modern MCP");
+                }
+                CallToolResult|error legacyResult = legacyToolCallResult(completedResult);
+                return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
-            if mcpService is AdvancedService {
-                CallToolResult|error result = trap invokeOnCallTool(mcpService, params.cloneReadOnly(), session);
-                return result is error ? toServerError(result, params.name) : result;
-            }
-            if mcpService is Service|StreamableHttpService {
+            if mcpService is StreamableHttpService {
                 CallToolResult|error result = trap callToolForRemoteFunctions(mcpService, params.cloneReadOnly(),
                         session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
                 if result is ParameterBindingError {

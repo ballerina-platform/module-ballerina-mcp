@@ -40,7 +40,7 @@ service /plain on new http:Listener(8776) {
 }
 
 // The mcp tool-bearing service that causes this document to be rewritten.
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "mixed-doc", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }

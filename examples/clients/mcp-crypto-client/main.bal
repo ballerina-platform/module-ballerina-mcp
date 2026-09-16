@@ -25,7 +25,7 @@ public function main() returns mcp:ClientError? {
     log:printInfo("Starting MCP Crypto Client Demo");
 
     // Initialize the client with client information
-    check mcpClient->initialize({
+    _ = check mcpClient->connect({
         name: "MCP Crypto Client Demo",
         version: "1.0.0"
     });

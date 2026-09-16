@@ -42,6 +42,7 @@ public class McpCodeModifier extends CodeModifier {
         codeModifierContext.addSyntaxNodeAnalysisTask(new RemoteFunctionAnalysisTask(modifierContextMap),
                 OBJECT_METHOD_DEFINITION);
         codeModifierContext.addSyntaxNodeAnalysisTask(new AdvancedServiceAnalysisTask(), SERVICE_DECLARATION);
+        codeModifierContext.addSyntaxNodeAnalysisTask(new ProtocolSessionAnalysisTask(), SERVICE_DECLARATION);
         codeModifierContext.addSourceModifierTask(new McpSourceModifier(modifierContextMap));
     }
 }

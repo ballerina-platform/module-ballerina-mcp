@@ -17,7 +17,7 @@
 import ballerina/mcp;
 
 // onCallTool returns the wrong type (MCP_112).
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "sample-15", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9315) {

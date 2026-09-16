@@ -107,7 +107,7 @@ function testClientSendsNegotiatedProtocolVersionHeader() returns error? {
     resetMockCapturedState();
 
     StreamableHttpClient 'client = check new (MOCK_SERVER_URL);
-    check 'client->initialize();
+    _ = check 'client->initializeLegacy();
 
     test:assertFalse(getMockInitHadVersionHeader(),
             "initialize request must not carry an MCP-Protocol-Version header");
@@ -124,7 +124,7 @@ function testClientSendsDowngradedProtocolVersionHeader() returns error? {
     resetMockCapturedState();
 
     StreamableHttpClient 'client = check new (MOCK_SERVER_URL);
-    check 'client->initialize();
+    _ = check 'client->connect();
 
     ListToolsResult _ = check 'client->listTools();
     test:assertEquals(getMockCapturedVersionHeader(), "2025-03-26",
@@ -137,7 +137,7 @@ function testClientRejectsUnsupportedNegotiatedVersion() returns error? {
     setMockNegotiatedVersion("1999-01-01");
 
     StreamableHttpClient 'client = check new (MOCK_SERVER_URL);
-    ClientError? result = 'client->initialize();
+    ConnectionInfo|ClientError result = 'client->connect();
     test:assertTrue(result is ProtocolVersionError,
             "client must reject an unsupported negotiated protocol version");
 }
