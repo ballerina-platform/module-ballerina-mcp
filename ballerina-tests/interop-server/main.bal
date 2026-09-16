@@ -22,6 +22,9 @@ listener mcp:StreamableHttpListener interopListener = new (interopPort);
 @mcp:StreamableHttpConfig {info: {name: "ballerina-interop", version: "2.0.0"}}
 service mcp:StreamableHttpService /mcp on interopListener {
     remote isolated function add(int firstValue, int secondValue) returns int => firstValue + secondValue;
+
+    remote isolated function echo(
+            @mcp:Argument {headerName: "Region"} string region) returns string => region;
 }
 
 @mcp:StreamableHttpConfig {info: {name: "ballerina-stateful-interop", version: "2.0.0"}}

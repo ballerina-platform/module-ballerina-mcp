@@ -202,6 +202,7 @@ function testProtocolHeaderEncoding() returns error? {
         test:assertEquals(check decodeProtocolHeader(encodeProtocolHeader(headerValue)), headerValue);
     }
     test:assertTrue(decodeProtocolHeader("bad\nvalue") is Error);
+    test:assertTrue(decodeProtocolHeader("=?base64?SGVsbG8?=") is Error);
     test:assertTrue(toolParameterHeaders({
                                              'type: "object",
                                              properties: {

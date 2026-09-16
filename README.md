@@ -47,9 +47,15 @@ The standard HTTP-header conformance scenario can be run against the Ballerina f
 npx --yes @modelcontextprotocol/conformance@0.2.0-alpha.11 server --url http://127.0.0.1:3210/mcp --scenario http-header-validation --spec-version 2026-07-28
 ```
 
-This scenario passed all 14 checks during the upgrade. The broader caching scenario passed tool-list caching and wire
-validation, but also requires prompt/resource fixtures outside this module's implemented feature set; it is not a
-complete conformance gate for this tools-focused library.
+The custom tool-argument header scenario can be run with:
+
+```sh
+npx --yes @modelcontextprotocol/conformance@0.2.0-alpha.11 server --url http://127.0.0.1:3210/mcp --scenario http-custom-header-server-validation --spec-version 2026-07-28
+```
+
+The standard and custom-header scenarios passed all 14 and 10 checks respectively during the upgrade. The broader
+caching scenario passed tool-list caching and wire validation, but also requires prompt/resource fixtures outside this
+module's implemented feature set; it is not a complete conformance gate for this tools-focused library.
 
 ## Issues and projects
 

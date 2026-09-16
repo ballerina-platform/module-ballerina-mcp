@@ -65,7 +65,11 @@ public final class ProtocolHeaders {
             if (!sentinel(text)) {
                 return value;
             }
-            byte[] decoded = Base64.getDecoder().decode(text.substring(PREFIX.length(), text.length() - 2));
+            String encoded = text.substring(PREFIX.length(), text.length() - 2);
+            byte[] decoded = Base64.getDecoder().decode(encoded);
+            if (!Base64.getEncoder().encodeToString(decoded).equals(encoded)) {
+                throw new IllegalArgumentException("Non-canonical MCP header encoding");
+            }
             return fromString(StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(decoded)).toString());
         } catch (IllegalArgumentException | CharacterCodingException exception) {
