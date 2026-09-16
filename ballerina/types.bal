@@ -691,3 +691,78 @@ public type StreamableHttpService distinct service object {
 # the method shapes.
 public type StreamableHttpAdvancedService distinct service object {
 };
+
+# A general JSON Schema value represented until native language support is available.
+public type JsonSchema map<json>;
+
+# JSON Schema output definition. Output schemas may describe any JSON value.
+public type OutputSchema record {|
+    # JSON Schema dialect, defaulting to JSON Schema 2020-12.
+    string \$schema?;
+    json...;
+|};
+
+# Server discovery response. Identity is carried in _meta.
+public type DiscoverResult record {
+    *Result;
+    # Protocol revisions accepted by this service.
+    string[] supportedVersions;
+    # Implemented server features.
+    ServerCapabilities capabilities;
+    # Optional guidance for using this server.
+    string instructions?;
+    # Freshness hint in milliseconds; zero disables caching.
+    int ttlMs = 0;
+    # Whether a response may be shared between callers.
+    "public"|"private" cacheScope = "private";
+};
+
+# Information established when a client connects to a server.
+public type ConnectionInfo record {|
+    # Effective protocol version selected for subsequent requests.
+    string protocolVersion;
+    # Server identity, when the peer supplied it.
+    Implementation serverInfo?;
+    # Capabilities advertised by the server.
+    ServerCapabilities capabilities;
+    # Optional guidance supplied by the server.
+    string instructions?;
+|};
+
+# Embedded server input request. Only declared client capabilities may be requested.
+public type InputRequest record {|
+    # The requested input operation.
+    "elicitation/create"|"sampling/createMessage"|"roots/list" method;
+    # Parameters describing the requested input.
+    RequestParams params?;
+|};
+
+# Additional input required before the original operation can complete.
+public type InputRequiredResult record {
+    *ResultFields;
+    # Identifies an interim result requiring a continuation.
+    "input_required" resultType = "input_required";
+    # Input requests keyed by server-assigned identifiers.
+    map<InputRequest> inputRequests?;
+    # Opaque server state that clients must echo without modification.
+    string requestState?;
+};
+
+# An input result supplied by the application, for example an elicitation response.
+public type InputResponse record {
+};
+
+# Callback for gathering input requested by a server. It is invoked outside client locks.
+public type InputHandler isolated function (InputRequest inputRequest) returns InputResponse|ClientError;
+
+# Selects change notifications for a subscription.
+public type SubscriptionFilter record {|
+    # Subscribe to tool list changes.
+    boolean toolsListChanged = false;
+    # Subscribe to prompt list changes when supported by the peer.
+    boolean promptsListChanged = false;
+    # Subscribe to resource list changes when supported by the peer.
+    boolean resourcesListChanged = false;
+    # Resource URIs whose changes should be observed.
+    string[] resourceSubscriptions = [];
+|};

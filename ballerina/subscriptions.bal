@@ -17,18 +17,6 @@
 import ballerina/http;
 import ballerina/jballerina.java;
 
-# Selects change notifications for a subscription.
-public type SubscriptionFilter record {|
-    # Subscribe to tool list changes.
-    boolean toolsListChanged = false;
-    # Subscribe to prompt list changes when supported by the peer.
-    boolean promptsListChanged = false;
-    # Subscribe to resource list changes when supported by the peer.
-    boolean resourcesListChanged = false;
-    # Resource URIs whose changes should be observed.
-    string[] resourceSubscriptions = [];
-|};
-
 isolated function invokeOnSubscribe(StreamableHttpAdvancedService mcpService, SubscriptionFilter notifications)
         returns stream<JsonRpcNotification, error?>|ServerError = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
