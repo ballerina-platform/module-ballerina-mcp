@@ -49,11 +49,11 @@ public final class Session {
             Object value = members.getOrThrow(key);
             Object convertedType = EnsureType.ensureType(value, targetType);
             if (convertedType instanceof BError) {
-                return ModuleUtils.createError("type conversion failed for value of key: " + key.getValue());
+                return ModuleUtils.createModuleError("type conversion failed for value of key: " + key.getValue());
             }
             return convertedType;
         } catch (RuntimeException e) {
-            return ModuleUtils.createError("no member found for key: " + key.getValue());
+            return ModuleUtils.createModuleError("no member found for key: " + key.getValue());
         }
     }
 }
