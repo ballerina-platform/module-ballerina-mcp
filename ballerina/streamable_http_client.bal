@@ -14,6 +14,23 @@
 // specific language governing permissions and limitations
 // under the License.
 
+# Adds the OAuth Client Credentials extension to the capabilities advertised by a client.
+#
+# + capabilities - Application supplied capabilities
+# + return - Capabilities including OAuth Client Credentials support
+isolated function withOAuthClientCredentialsCapability(ClientCapabilities capabilities)
+        returns ClientCapabilities {
+    ClientCapabilities advertised = capabilities.clone();
+    map<record {}> extensions = {};
+    map<record {}>? configuredExtensions = advertised.extensions;
+    if configuredExtensions is map<record {}> {
+        extensions = configuredExtensions.clone();
+    }
+    extensions[OAUTH_CLIENT_CREDENTIALS_EXTENSION] = {};
+    advertised.extensions = extensions;
+    return advertised;
+}
+
 # Represents an MCP client built on top of the Streamable HTTP transport.
 public distinct isolated client class StreamableHttpClient {
     # Transport for communication with the MCP server.
@@ -38,6 +55,10 @@ public distinct isolated client class StreamableHttpClient {
 
     # Creates a new MCP client with the specified transport configuration.
     #
+    # Set `config.auth` to an `mcp:OAuthConfig` to have the client obtain its own access
+    # tokens through MCP authorization, rather than supplying an `http:ClientAuthConfig`
+    # credential yourself.
+    #
     # + serverUrl - MCP server URL
     # + config - Client transport configuration
     # + return - `ClientError` if transport creation fails, `()` on success
@@ -52,6 +73,11 @@ public distinct isolated client class StreamableHttpClient {
         self.maxInputRounds = config.maxInputRounds;
         self.inputHandler = config.inputHandler;
         self.transport = check new (serverUrl, config);
+        // discover() can run before connect(), so its first modern request must already
+        // advertise the configured client credentials extension.
+        if self.transport.usesClientCredentialsGrant() {
+            self.clientCapabilities = withOAuthClientCredentialsCapability({});
+        }
     }
 
     # Connects to the MCP server and negotiates the protocol version.
@@ -63,12 +89,15 @@ public distinct isolated client class StreamableHttpClient {
     isolated remote function connect(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
             returns ConnectionInfo|ClientError {
+        ClientCapabilities advertisedCapabilities = self.transport.usesClientCredentialsGrant()
+            ? withOAuthClientCredentialsCapability(capabilities)
+            : capabilities.clone();
         lock {
             if self.connected {
                 return self.getConnectionInfo();
             }
             self.clientInfo = clientInfo.cloneReadOnly();
-            self.clientCapabilities = capabilities.cloneReadOnly();
+            self.clientCapabilities = advertisedCapabilities.cloneReadOnly();
             string? sessionId = self.transport.getSessionId();
 
             // If a session ID exists, assume reconnection and skip initialization.
@@ -104,7 +133,7 @@ public distinct isolated client class StreamableHttpClient {
                 return discovered;
             }
         }
-        return self.initializeLegacyConnection(clientInfo, capabilities, headers);
+        return self.initializeLegacyConnection(clientInfo, advertisedCapabilities, headers);
     }
 
     # Performs the legacy initialize handshake explicitly and connects this client.
@@ -117,14 +146,17 @@ public distinct isolated client class StreamableHttpClient {
             Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
             returns ConnectionInfo|ClientError {
+        ClientCapabilities advertisedCapabilities = self.transport.usesClientCredentialsGrant()
+            ? withOAuthClientCredentialsCapability(capabilities)
+            : capabilities.clone();
         lock {
             if self.connected {
                 return error ClientInitializationError("Client is already connected");
             }
             self.clientInfo = clientInfo.cloneReadOnly();
-            self.clientCapabilities = capabilities.cloneReadOnly();
+            self.clientCapabilities = advertisedCapabilities.cloneReadOnly();
         }
-        return self.initializeLegacyConnection(clientInfo, capabilities, headers);
+        return self.initializeLegacyConnection(clientInfo, advertisedCapabilities, headers);
     }
 
     private isolated function initializeLegacyConnection(Implementation clientInfo,
@@ -354,12 +386,15 @@ public distinct isolated client class StreamableHttpClient {
             return error ProtocolVersionError("Discovery result does not advertise the modern protocol version");
         }
         Implementation? discoveredServerInfo = discovered._meta?.serverInfo;
+        ClientCapabilities advertisedCapabilities = self.transport.usesClientCredentialsGrant()
+            ? withOAuthClientCredentialsCapability(capabilities)
+            : capabilities.clone();
         lock {
             if self.connected {
                 return error ClientInitializationError("Client is already connected");
             }
             self.clientInfo = clientInfo.cloneReadOnly();
-            self.clientCapabilities = capabilities.cloneReadOnly();
+            self.clientCapabilities = advertisedCapabilities.cloneReadOnly();
             self.modernSelected = true;
             self.connected = true;
             self.negotiatedProtocolVersion = MODERN_PROTOCOL_VERSION;
