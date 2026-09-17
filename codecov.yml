@@ -1,6 +1,12 @@
+# The Ballerina JaCoCo report splits each .bal file across synthetic packages
+# (values, global_vars, constants, lambdas, identifiers). Only the plain
+# `ballerina/<file>.bal` sections map onto real repo paths, so the rest must be
+# flattened back or their hits are dropped. Class and object method bodies live
+# under `values`, so without this the unit tests for them count as uncovered.
 fixes:
   - "io/ballerina/stdlib/mcp/plugin/::./compiler-plugin/src/main/java/io/ballerina/stdlib/mcp/plugin/"
   - "ballerina/mcp/**/::../ballerina/"
+  - "ballerina/**/::ballerina/"
 
 ignore:
   - "ballerina-tests"
