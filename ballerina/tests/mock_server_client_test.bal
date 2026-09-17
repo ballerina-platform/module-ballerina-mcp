@@ -31,8 +31,19 @@ isolated function mockJson(json body, int statusCode = 200) returns http:Respons
     return mockResponse;
 }
 
+// Counts calls per scenario so a mock can fail once and then succeed.
+isolated map<int> mockCallCounts = {};
+
+isolated function nextMockCall(string scenario) returns int {
+    lock {
+        int callNumber = (mockCallCounts[scenario] ?: 0) + 1;
+        mockCallCounts[scenario] = callNumber;
+        return callNumber;
+    }
+}
+
 isolated function mockDiscoverResult(RequestId requestId, string[] supportedVersions = [MODERN_PROTOCOL_VERSION],
-        boolean includeCacheHints = true) returns http:Response {
+        boolean includeCacheHints = true, string? instructions = ()) returns http:Response {
     map<json> resultValue = {
         "resultType": "complete",
         "supportedVersions": supportedVersions,
@@ -42,6 +53,9 @@ isolated function mockDiscoverResult(RequestId requestId, string[] supportedVers
     if includeCacheHints {
         resultValue["ttlMs"] = 0;
         resultValue["cacheScope"] = "private";
+    }
+    if instructions is string {
+        resultValue["instructions"] = instructions;
     }
     return mockJson({"jsonrpc": JSONRPC_VERSION, "id": requestId, "result": resultValue});
 }
@@ -179,6 +193,9 @@ service /mock on new http:Listener(3210) {
                 }
                 "sseMalformedEvent" => {
                     return mockSse(["{not-json"]);
+                }
+                "withInstructions" => {
+                    return mockDiscoverResult(requestId, instructions = "Call echo first.");
                 }
             }
             return mockDiscoverResult(requestId);
@@ -330,6 +347,42 @@ service /mock on new http:Listener(3210) {
 
         if method == REQUEST_CALL_TOOL {
             match scenario {
+                "inputRequiredNoHandler" => {
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {
+                            "resultType": "input_required",
+                            "inputRequests": {
+                                "answer": {
+                                    "method": "elicitation/create",
+                                    "params": {"mode": "form", "message": "Confirm"}
+                                }
+                            }
+                        }
+                    });
+                }
+                "unknownResultType" => {
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {"resultType": "partial", "content": []}
+                    });
+                }
+                "headerMismatchRetry" => {
+                    if nextMockCall(scenario) == 1 {
+                        return mockJson({
+                            "jsonrpc": JSONRPC_VERSION,
+                            "id": requestId,
+                            "error": {"code": HEADER_MISMATCH, "message": "Mcp-Name must match the tool name"}
+                        }, 400);
+                    }
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {"resultType": "complete", "content": []}
+                    });
+                }
                 "legacyWrongResult" => {
                     return mockJson({"jsonrpc": JSONRPC_VERSION, "id": requestId, "result": {"tools": []}});
                 }
@@ -595,4 +648,74 @@ function testCloseReportsSessionTerminationFailure() returns error? {
     if closeError is ClientError {
         test:assertTrue(closeError.message().includes("Failed to disconnect from server"));
     }
+}
+
+@test:Config {}
+function testModernClientRequiresAnInputHandlerForContinuations() returns error? {
+    StreamableHttpClient noHandler = check new (mockUrl("inputRequiredNoHandler"), protocolMode = "modern");
+    _ = check noHandler->connect(capabilities = {elicitation: {form: {}}});
+    var callResult = noHandler->callTool({name: "echo"});
+    test:assertTrue(callResult is ToolCallError);
+    if callResult is ToolCallError {
+        test:assertTrue(callResult.message().includes("Input handler is not configured"));
+        test:assertTrue(callResult.detail()["inputRequired"] is InputRequiredResult);
+    }
+}
+
+@test:Config {}
+function testModernClientRejectsUnknownResultTypes() returns error? {
+    StreamableHttpClient unknownType = check new (mockUrl("unknownResultType"), protocolMode = "modern");
+    _ = check unknownType->connect();
+    // An unrecognised discriminator is rejected while decoding, before the tool result is interpreted.
+    var callResult = unknownType->callTool({name: "echo"});
+    test:assertTrue(callResult is ResponseParsingError);
+    if callResult is ResponseParsingError {
+        test:assertEquals(callResult.message(), "Unsupported resultType");
+    }
+}
+
+@test:Config {}
+function testModernClientRefreshesToolSchemasOnHeaderMismatch() returns error? {
+    StreamableHttpClient retryClient = check new (mockUrl("headerMismatchRetry"), protocolMode = "modern");
+    _ = check retryClient->connect();
+    // The first attempt is rejected as a header mismatch; the client re-lists tools and retries once.
+    CallToolResult callResult = check retryClient->callTool({name: "echo"});
+    test:assertEquals(callResult.content, []);
+}
+
+@test:Config {}
+function testDiscoveredInstructionsReachTheConnectionInfo() returns error? {
+    StreamableHttpClient guidedClient = check new (mockUrl("withInstructions"), protocolMode = "modern");
+    ConnectionInfo connection = check guidedClient->connect();
+    test:assertEquals(connection.instructions, "Call echo first.");
+}
+
+@test:Config {}
+function testLegacyCallToolOnceDelegatesToCallTool() returns error? {
+    StreamableHttpClient legacyClient = check new (mockUrl("ok"), sessionId = "legacy-session");
+    _ = check legacyClient->connect();
+    CallToolResult|InputRequiredResult callResult = check legacyClient->callToolOnce({name: "echo"});
+    test:assertTrue(callResult is CallToolResult);
+}
+
+@test:Config {}
+function testAdditionalRequestHeadersAreReconciledWithProtocolHeaders() returns error? {
+    StreamableHttpClient modernClient = check new (mockUrl("ok"), protocolMode = "modern");
+    _ = check modernClient->connect();
+
+    // Transport-owned headers supplied by the caller are dropped rather than forwarded.
+    ListToolsResult toolList = check modernClient->listTools({
+        [SESSION_ID_HEADER]: "ignored",
+        "last-event-id": "ignored",
+        "x-trace-id": "trace-1"
+    });
+    test:assertEquals(toolList.tools.length(), 1);
+
+    // A caller header that contradicts a generated protocol header is a client error.
+    var conflictResult = modernClient->listTools({[METHOD_HEADER]: "server/discover"});
+    test:assertTrue(conflictResult is HttpClientError);
+    if conflictResult is HttpClientError {
+        test:assertTrue(conflictResult.message().includes("conflicts with generated protocol header"));
+    }
+    check modernClient->close();
 }

@@ -145,6 +145,14 @@ function testLegacyEventStreamSurfacesTransformationErrors() returns error? {
     var missingDataItem = missingDataEvents.next();
     test:assertTrue(missingDataItem is MissingSseDataError);
     check missingDataEvents.close();
+
+    StreamableHttpClient wellFormed = check legacyMockClient("ok");
+    stream<JsonRpcMessage, StreamError?> events = check wellFormed->listen();
+    var notification = check events.next();
+    test:assertTrue(notification is record {|JsonRpcMessage value;|});
+    // The transformer reports the end of the SSE stream as a completed iteration.
+    test:assertEquals(check events.next(), ());
+    check events.close();
 }
 
 @test:Config {}

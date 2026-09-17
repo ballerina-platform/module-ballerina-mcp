@@ -111,6 +111,11 @@ function testLegacyDispatcherRequiresAcceptAndContentType() returns error? {
             {[ACCEPT_HEADER]: CONTENT_TYPE_JSON});
     test:assertEquals(jsonOnlyAccept.statusCode, 406);
 
+    http:Request noContentType = new;
+    noContentType.setHeader(ACCEPT_HEADER, string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`);
+    http:Response noContentTypeResponse = check legacyDispatcherClient->post("/stateless", noContentType);
+    test:assertEquals(noContentTypeResponse.statusCode, 415);
+
     http:Request textRequest = new;
     textRequest.setTextPayload(legacyRequest(REQUEST_LIST_TOOLS).toJsonString());
     textRequest.setHeader(ACCEPT_HEADER, string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`);
@@ -264,4 +269,19 @@ function testAdvancedHandlersBindTransportParameters() returns error? {
     CallToolResult callResult = check callBody.result.ensureType();
     TextContent textContent = check callResult.content[0].ensureType();
     test:assertEquals(textContent.text, string `${sessionId}:/sessionAware`);
+}
+
+@test:Config {}
+function testSessionDeletionValidatesTheProtocolVersionHeader() returns error? {
+    http:Response unsupportedVersion = check legacyDispatcherClient->delete("/stateful", headers = {
+        [PROTOCOL_VERSION_HEADER]: "1999-01-01"
+    });
+    test:assertEquals(unsupportedVersion.statusCode, 400);
+    WireError versionError = check (check unsupportedVersion.getJsonPayload()).cloneWithType();
+    test:assertTrue(versionError.'error.message.includes("Unsupported MCP-Protocol-Version header"));
+
+    http:Response statelessDelete = check legacyDispatcherClient->delete("/stateless", headers = legacyHeaders());
+    test:assertEquals(statelessDelete.statusCode, 400);
+    WireError statelessError = check (check statelessDelete.getJsonPayload()).cloneWithType();
+    test:assertEquals(statelessError.'error.message, "Session deletion not supported in stateless mode");
 }

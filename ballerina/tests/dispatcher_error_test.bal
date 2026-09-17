@@ -28,6 +28,23 @@ service StreamableHttpAdvancedService /tools on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
+@StreamableHttpConfig {info: {name: "mirrored-headers", version: "1"}}
+service StreamableHttpAdvancedService /mirrored on dispatcherErrorListener {
+    remote isolated function onListTools() returns ListToolsResult => {
+        tools: [
+            {
+                name: "regional",
+                inputSchema: {
+                    'type: "object",
+                    properties: {region: {'type: "string", "x-mcp-header": "Region"}}
+                }
+            }
+        ]
+    };
+
+    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+}
+
 @StreamableHttpConfig {info: {name: "fail-list", version: "1"}}
 service StreamableHttpAdvancedService /failList on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult|ServerError =>
@@ -341,4 +358,22 @@ function testDispatcherEnforcesConfiguredOriginAllowList() returns error? {
 function testDispatcherRejectsUnknownModernMethods() returns error? {
     http:Response unknownMethod = check dispatcherPost("/tools", "resources/list");
     check assertJsonRpcError(unknownMethod, 404, METHOD_NOT_FOUND, "Method not found");
+}
+
+@test:Config {}
+function testMirroredToolHeadersMustMatchTheArguments() returns error? {
+    map<string|string[]> callHeaders = {[NAME_HEADER]: "regional"};
+    RequestParams callParams = {"name": "regional", "arguments": {"region": "north"}};
+
+    http:Response missingHeader = check dispatcherPost("/mirrored", REQUEST_CALL_TOOL, callParams, callHeaders);
+    check assertJsonRpcError(missingHeader, 400, HEADER_MISMATCH, "Missing or duplicate mirrored tool header");
+
+    callHeaders["mcp-param-region"] = encodeProtocolHeader("south");
+    http:Response mismatchedHeader = check dispatcherPost("/mirrored", REQUEST_CALL_TOOL, callParams, callHeaders);
+    check assertJsonRpcError(mismatchedHeader, 400, HEADER_MISMATCH,
+            "Mirrored tool header does not match arguments");
+
+    callHeaders["mcp-param-region"] = encodeProtocolHeader("north");
+    http:Response matchingHeader = check dispatcherPost("/mirrored", REQUEST_CALL_TOOL, callParams, callHeaders);
+    test:assertEquals(matchingHeader.statusCode, 200);
 }
