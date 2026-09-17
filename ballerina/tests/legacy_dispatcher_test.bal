@@ -28,6 +28,22 @@ service StreamableHttpAdvancedService /stateful on legacyDispatcherListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
+// Binds every transport-specific parameter shape an advanced handler may declare.
+@StreamableHttpConfig {info: {name: "session-aware", version: "1"}, sessionMode: STATEFUL}
+service StreamableHttpAdvancedService /sessionAware on legacyDispatcherListener {
+    remote isolated function onListTools(http:Request request, http:Headers headers) returns ListToolsResult => {
+        tools: [{name: "whoami", inputSchema: {'type: "object"}}]
+    };
+
+    remote isolated function onCallTool(CallToolParams callParams, HttpSession session, http:Request request)
+            returns CallToolResult {
+        session.set("lastTool", callParams.name);
+        return {
+            content: [{'type: "text", text: string `${session.getSessionId()}:${request.rawPath}`}]
+        };
+    }
+}
+
 @StreamableHttpConfig {info: {name: "modern-only", version: "1"}, protocolMode: "modern"}
 service StreamableHttpAdvancedService /modernOnly on legacyDispatcherListener {
     remote isolated function onListTools() returns ListToolsResult => {tools: []};
@@ -227,4 +243,25 @@ function testUnconfiguredServiceUsesDefaultConfiguration() returns error? {
     test:assertEquals(initResult.serverInfo.version, "1.0.0");
 
     check unconfiguredListener.immediateStop();
+}
+
+@test:Config {}
+function testAdvancedHandlersBindTransportParameters() returns error? {
+    http:Response initResponse = check legacyPost("/sessionAware", legacyRequest(REQUEST_INITIALIZE, {
+        "protocolVersion": LATEST_LEGACY_PROTOCOL_VERSION,
+        "capabilities": {},
+        "clientInfo": {"name": "legacy-test", "version": "1"}
+    }));
+    string sessionId = check initResponse.getHeader(SESSION_ID_HEADER);
+
+    http:Response listResponse = check legacyPost("/sessionAware", legacyRequest(REQUEST_LIST_TOOLS),
+            {[SESSION_ID_HEADER]: sessionId});
+    test:assertEquals(listResponse.statusCode, 200);
+
+    http:Response callResponse = check legacyPost("/sessionAware",
+            legacyRequest(REQUEST_CALL_TOOL, {"name": "whoami"}), {[SESSION_ID_HEADER]: sessionId});
+    JsonRpcResponse callBody = check (check callResponse.getJsonPayload()).cloneWithType();
+    CallToolResult callResult = check callBody.result.ensureType();
+    TextContent textContent = check callResult.content[0].ensureType();
+    test:assertEquals(textContent.text, string `${sessionId}:/sessionAware`);
 }
