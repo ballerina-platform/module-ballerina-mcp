@@ -96,7 +96,7 @@ type ParameterBindingError distinct ServerError;
 # Error for failures while obtaining authorization for a request.
 public type AuthorizationError distinct StreamableHttpTransportError;
 
-# Error for an invalid or incomplete `OAuthConfig`.
+# Error when OAuth configuration is invalid or cannot be used with the selected authorization server.
 type OAuthConfigError distinct Error;
 
 # Error while discovering protected resource or authorization server metadata.
