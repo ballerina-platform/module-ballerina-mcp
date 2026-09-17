@@ -48,7 +48,14 @@ function testListenerLifecycleOverAnExistingHttpListener() returns error? {
 
     check mcpListener.attach(mcpService, "/lifecycle");
     check mcpListener.'start();
+    // Release the port even when an assertion panics part-way through.
+    error? assertionResult = trap assertListenerServesAndDetaches(mcpListener, mcpService);
+    check mcpListener.gracefulStop();
+    return assertionResult;
+}
 
+isolated function assertListenerServesAndDetaches(StreamableHttpListener mcpListener,
+        StreamableHttpAdvancedService mcpService) returns error? {
     http:Client lifecycleClient = check new ("http://localhost:3212");
     http:Response listResponse = check lifecycleClient->post("/lifecycle", {
         jsonrpc: JSONRPC_VERSION,
@@ -66,8 +73,6 @@ function testListenerLifecycleOverAnExistingHttpListener() returns error? {
     // Detaching an unattached service is a no-op rather than an error.
     check mcpListener.detach(newTestMcpService());
     check mcpListener.detach(mcpService);
-
-    check mcpListener.gracefulStop();
 }
 
 @test:Config {}

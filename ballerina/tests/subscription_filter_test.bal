@@ -83,15 +83,20 @@ isolated function firstSubscriptionError(string scenario) returns error? {
     StreamableHttpClient subscriptionClient = check new (mockUrl(scenario), protocolMode = "modern");
     _ = check subscriptionClient->connect();
     stream<JsonRpcMessage, StreamError?> eventStream = check subscriptionClient->listen();
+    error? streamError = ();
     while true {
         var nextItem = eventStream.next();
         if nextItem is error {
-            return nextItem;
+            streamError = nextItem;
+            break;
         }
         if nextItem is () {
-            return;
+            break;
         }
     }
+    // next() already closed the stream; the client itself still holds the connection.
+    ClientError? closeError = subscriptionClient->close();
+    return streamError ?: closeError;
 }
 
 @test:Config {}
@@ -154,6 +159,7 @@ function testSubscriptionRequiresAnSseResponse() returns error? {
     StreamableHttpClient subscriptionClient = check new (mockUrl("subNotSse"), protocolMode = "modern");
     _ = check subscriptionClient->connect();
     var listenResult = subscriptionClient->listen();
+    check subscriptionClient->close();
     test:assertTrue(listenResult is ClientError);
     if listenResult is ClientError {
         test:assertTrue(listenResult.message().includes("Invalid subscription filter"));

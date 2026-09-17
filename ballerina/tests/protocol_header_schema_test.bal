@@ -41,6 +41,7 @@ function testMirroredHeadersAreEncodedByType() returns error? {
     test:assertEquals(headerValues.length(), 4);
     test:assertEquals(check decodeProtocolHeader(headerValues.get("mcp-param-region")), "north");
     test:assertEquals(check decodeProtocolHeader(headerValues.get("mcp-param-count")), "7");
+    test:assertEquals(check decodeProtocolHeader(headerValues.get("mcp-param-ratio")), "1.5");
     test:assertEquals(check decodeProtocolHeader(headerValues.get("mcp-param-debug")), "true");
 
     // Declared but unsupplied arguments simply do not produce a header.

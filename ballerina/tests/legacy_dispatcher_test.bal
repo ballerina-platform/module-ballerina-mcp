@@ -234,7 +234,13 @@ function testUnconfiguredServiceUsesDefaultConfiguration() returns error? {
     StreamableHttpListener unconfiguredListener = check new (3217);
     check unconfiguredListener.attach(newUnconfiguredService(), "/plain");
     check unconfiguredListener.'start();
+    // Release the port even when an assertion panics part-way through.
+    error? assertionResult = trap assertUnconfiguredServiceDefaults();
+    check unconfiguredListener.immediateStop();
+    return assertionResult;
+}
 
+isolated function assertUnconfiguredServiceDefaults() returns error? {
     http:Client plainClient = check new ("http://localhost:3217");
     http:Response initResponse = check plainClient->post("/plain", legacyRequest(REQUEST_INITIALIZE, {
         "protocolVersion": LATEST_LEGACY_PROTOCOL_VERSION,
@@ -246,8 +252,6 @@ function testUnconfiguredServiceUsesDefaultConfiguration() returns error? {
     InitializeResult initResult = check initBody.result.ensureType();
     test:assertEquals(initResult.serverInfo.name, "MCP Service");
     test:assertEquals(initResult.serverInfo.version, "1.0.0");
-
-    check unconfiguredListener.immediateStop();
 }
 
 @test:Config {}
