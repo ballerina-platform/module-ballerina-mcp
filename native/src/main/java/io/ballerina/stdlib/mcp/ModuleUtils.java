@@ -45,6 +45,10 @@ public final class ModuleUtils {
         return ErrorCreator.createError(fromString(errorMessage));
     }
 
+    public static BError createModuleError(String errorMessage) {
+        return ErrorCreator.createError(module, "Error", fromString(errorMessage), null, null);
+    }
+
     public static BError createServerError(String errorMessage) {
         return ErrorCreator.createError(module, "ServerError", fromString(errorMessage), null, null);
     }
