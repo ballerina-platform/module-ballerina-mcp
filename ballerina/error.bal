@@ -92,3 +92,22 @@ type DispatcherError distinct ServerError;
 # Error for failures while binding tool parameters from the incoming request,
 # such as missing or invalid header values.
 type ParameterBindingError distinct ServerError;
+
+# Error for failures while obtaining authorization for a request.
+public type AuthorizationError distinct StreamableHttpTransportError;
+
+# Error when OAuth configuration is invalid or cannot be used with the selected authorization server.
+type OAuthConfigError distinct Error;
+
+# Error while discovering protected resource or authorization server metadata.
+type OAuthDiscoveryError distinct Error;
+
+# Error while constructing or validating an authorization code exchange.
+type OAuthAuthorizationError distinct Error;
+
+# Error while requesting or refreshing a token at the token endpoint.
+type OAuthTokenError distinct Error;
+
+# Error when the token endpoint rejects the grant, such as an expired authorization code or
+# a revoked refresh token.
+type OAuthInvalidGrantError distinct OAuthTokenError;

@@ -41,3 +41,15 @@ public const HEADER_MISMATCH = -32020;
 public const MISSING_REQUIRED_CLIENT_CAPABILITY = -32021;
 # The requested protocol version is not supported.
 public const UNSUPPORTED_PROTOCOL_VERSION = -32022;
+
+const AUTHORIZATION_HEADER = "Authorization";
+const WWW_AUTHENTICATE_HEADER = "WWW-Authenticate";
+const INSUFFICIENT_SCOPE = "insufficient_scope";
+const OAUTH_CLIENT_CREDENTIALS_EXTENSION = "io.modelcontextprotocol/oauth-client-credentials";
+
+# The HTTP method of an outbound transport request.
+enum OutboundMethod {
+    POST,
+    GET,
+    DELETE
+}
