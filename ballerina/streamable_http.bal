@@ -67,6 +67,8 @@ public type StreamableHttpClientConfig record {|
     int maxInputRounds = 8;
     # Optional application callback for embedded input requests.
     InputHandler inputHandler?;
+    # Optional observer for structured MCP transport and OAuth events.
+    ClientObserver observer?;
 |};
 
 # Derives the HTTP settings for metadata and token endpoint requests. The trust store and
@@ -94,6 +96,7 @@ isolated class StreamableHttpClientTransport {
     private final http:Client httpClient;
     # Acquires and holds access tokens when MCP authorization is configured.
     private final ClientOAuthProvider? oauthProvider;
+    private final ClientObserver? observer;
     private string? sessionId;
     # Protocol version negotiated during initialization, sent on all subsequent requests.
     private string? protocolVersion = ();
@@ -107,11 +110,12 @@ isolated class StreamableHttpClientTransport {
     isolated function init(string serverUrl, *StreamableHttpClientConfig config)
             returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
+        self.observer = config.observer;
 
         // Neither is an `http:Client` setting: `auth` may hold an `OAuthConfig`, which is
         // handled by this module rather than by the HTTP client.
         StreamableHttpClientConfig {sessionId, protocolMode: _, maxInputRounds: _,
-            inputHandler: _, auth: authConfig, ...rest} = config;
+            inputHandler: _, observer: _, auth: authConfig, ...rest} = config;
         http:ClientConfiguration clientConfig = {...rest};
 
         OAuthConfig? oauth =
@@ -138,7 +142,7 @@ isolated class StreamableHttpClientTransport {
             self.oauthProvider = ();
         } else {
             ClientOAuthProvider|Error provider =
-                new (serverUrl, oauth, deriveAuthClientConfig(config));
+                new (serverUrl, oauth, deriveAuthClientConfig(config), self.observer);
             if provider is Error {
                 return error AuthorizationError(
                     string `Invalid authorization configuration for '${serverUrl}': ${provider.message()}`,
@@ -197,17 +201,84 @@ isolated class StreamableHttpClientTransport {
             requestHeaders[AUTHORIZATION_HEADER] = authorization;
         }
 
-        http:Response response = check self.dispatch(method, requestHeaders, message);
+        notifyClientObserver(self.observer, {
+            eventType: HTTP_REQUEST,
+            eventTarget: MCP_SERVER,
+            eventUrl: self.serverUrl,
+            httpMethod: method.toString(),
+            eventHeaders: sanitizedEventHeaders(requestHeaders),
+            eventBody: message is JsonRpcMessage ? message.toJsonString() : ()
+        });
+
+        http:Response|StreamableHttpTransportError responseResult =
+            self.dispatch(method, requestHeaders, message);
+        if responseResult is StreamableHttpTransportError {
+            notifyClientObserver(self.observer, {
+                eventType: CLIENT_ERROR,
+                eventTarget: MCP_SERVER,
+                eventUrl: self.serverUrl,
+                httpMethod: method.toString(),
+                eventMessage: responseResult.message()
+            });
+            return responseResult;
+        }
+        http:Response response = responseResult;
+        notifyClientObserver(self.observer, {
+            eventType: HTTP_RESPONSE,
+            eventTarget: MCP_SERVER,
+            eventUrl: self.serverUrl,
+            httpMethod: method.toString(),
+            statusCode: response.statusCode,
+            eventHeaders: sanitizedResponseHeaders(response)
+        });
         if !acquire {
             return response;
         }
         // Retried once: a second rejection means authorizing again would not help.
         BearerChallenge? challenge = self.retryableChallenge(response);
         if challenge is BearerChallenge {
+            notifyClientObserver(self.observer, {
+                eventType: AUTHORIZATION_CHALLENGE,
+                eventTarget: MCP_SERVER,
+                eventUrl: self.serverUrl,
+                statusCode: response.statusCode,
+                eventBody: challenge.toJsonString()
+            });
             string? retryAuthorization = check self.getAuthorizationValue(challenge);
             if retryAuthorization is string {
                 requestHeaders[AUTHORIZATION_HEADER] = retryAuthorization;
-                return self.dispatch(method, requestHeaders, message);
+                notifyClientObserver(self.observer, {
+                    eventType: HTTP_REQUEST,
+                    eventTarget: MCP_SERVER,
+                    eventUrl: self.serverUrl,
+                    httpMethod: method.toString(),
+                    eventHeaders: sanitizedEventHeaders(requestHeaders),
+                    eventBody: message is JsonRpcMessage ? message.toJsonString() : (),
+                    eventMessage: "Retry after authorization"
+                });
+                http:Response|StreamableHttpTransportError retryResult =
+                    self.dispatch(method, requestHeaders, message);
+                if retryResult is StreamableHttpTransportError {
+                    notifyClientObserver(self.observer, {
+                        eventType: CLIENT_ERROR,
+                        eventTarget: MCP_SERVER,
+                        eventUrl: self.serverUrl,
+                        httpMethod: method.toString(),
+                        eventMessage: retryResult.message()
+                    });
+                    return retryResult;
+                }
+                http:Response retryResponse = retryResult;
+                notifyClientObserver(self.observer, {
+                    eventType: HTTP_RESPONSE,
+                    eventTarget: MCP_SERVER,
+                    eventUrl: self.serverUrl,
+                    httpMethod: method.toString(),
+                    statusCode: retryResponse.statusCode,
+                    eventHeaders: sanitizedResponseHeaders(retryResponse),
+                    eventMessage: "Response after authorization"
+                });
+                return retryResponse;
             }
         }
         return response;
@@ -303,6 +374,17 @@ isolated class StreamableHttpClientTransport {
             }
 
             if response.statusCode < 200 || response.statusCode >= 300 {
+                string|error responseBody = response.getTextPayload();
+                if responseBody is string {
+                    notifyClientObserver(self.observer, {
+                        eventType: HTTP_BODY,
+                        eventTarget: MCP_SERVER,
+                        eventUrl: self.serverUrl,
+                        statusCode: response.statusCode,
+                        eventBody: responseBody,
+                        eventMessage: "MCP error response body"
+                    });
+                }
                 return error HttpClientError(
                     string `Server returned error status ${response.statusCode}: ${response.reasonPhrase}`
                 );
@@ -339,7 +421,8 @@ isolated class StreamableHttpClientTransport {
             map<string> parameterHeaders = {}) returns Result|ClientError {
         map<string|string[]> requestHeaders = check prepareProtocolRequestHeaders(requestMessage, additionalHeaders, parameterHeaders);
         http:Response httpResponse = check self.execute(POST, requestHeaders, requestMessage);
-        return readProtocolResponse(httpResponse, requestMessage.id);
+        return readProtocolResponse(httpResponse, requestMessage.id,
+            observer = self.observer, serverUrl = self.serverUrl);
     }
 
     isolated function openProtocolSubscription(JsonRpcRequest requestMessage, SubscriptionFilter requestedFilter,
@@ -354,14 +437,15 @@ isolated class StreamableHttpClientTransport {
                 string `Failed to open subscription: ${httpResponse.message()}`, httpResponse);
         }
         if httpResponse.statusCode != 200 || !httpResponse.getContentType().includes(CONTENT_TYPE_SSE) {
-            Result|ClientError resultValue = readProtocolResponse(httpResponse, requestMessage.id);
+            Result|ClientError resultValue = readProtocolResponse(httpResponse, requestMessage.id,
+                observer = self.observer, serverUrl = self.serverUrl);
             return resultValue is ClientError ? resultValue : error SseStreamEstablishmentError("Expected a subscription SSE stream");
         }
         var eventStream = httpResponse.getSseEventStream();
         if eventStream is error {
             return error SseStreamEstablishmentError(eventStream.message());
         }
-        ProtocolMessageStream messageStream = new (eventStream);
+        ProtocolMessageStream messageStream = new (eventStream, self.observer, self.serverUrl);
         ClientSubscriptionStream streamIterator = new (messageStream, requestMessage.id, requestedFilter, self);
         lock {
             self.activeSubscriptions[requestMessage.id.toString()] = streamIterator;
@@ -409,7 +493,8 @@ isolated class StreamableHttpClientTransport {
             http:Response response = check self.execute(GET, headers);
             stream<http:SseEvent, error?> sseEventStream = check response.getSseEventStream();
 
-            JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
+            JsonRpcMessageStreamTransformer streamTransformer =
+                new (sseEventStream, self.observer, self.serverUrl);
             return new stream<JsonRpcMessage, StreamError?>(streamTransformer);
         } on fail error e {
             if e is AuthorizationError {
@@ -504,7 +589,8 @@ isolated class StreamableHttpClientTransport {
             returns stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError {
         do {
             stream<http:SseEvent, error?> sseEventStream = check response.getSseEventStream();
-            JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
+            JsonRpcMessageStreamTransformer streamTransformer =
+                new (sseEventStream, self.observer, self.serverUrl);
             return new stream<JsonRpcMessage, StreamError?>(streamTransformer);
         } on fail error e {
             return error ResponseParsingError(
@@ -521,6 +607,13 @@ isolated class StreamableHttpClientTransport {
             returns JsonRpcMessage|StreamableHttpTransportError {
         do {
             json payload = check response.getJsonPayload();
+            notifyClientObserver(self.observer, {
+                eventType: MCP_MESSAGE,
+                eventTarget: MCP_SERVER,
+                eventUrl: self.serverUrl,
+                statusCode: response.statusCode,
+                eventBody: payload.toJsonString()
+            });
             JsonRpcMessage result = check payload.cloneWithType();
             return result;
         } on fail error e {

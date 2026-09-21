@@ -19,11 +19,16 @@ import ballerina/jballerina.java;
 
 # Transforms a stream of SSE events into a stream of JsonRpcMessages.
 isolated class JsonRpcMessageStreamTransformer {
+    private final ClientObserver? observer;
+    private final string serverUrl;
 
     # Initializes the transformer with an SSE event stream.
     #
     # + sseEventStream - The SSE event stream to use as input.
-    public isolated function init(stream<http:SseEvent, error?> sseEventStream) {
+    public isolated function init(stream<http:SseEvent, error?> sseEventStream,
+            ClientObserver? observer = (), string serverUrl = "") {
+        self.observer = observer;
+        self.serverUrl = serverUrl;
         self.attachSseStream(sseEventStream);
     }
 
@@ -44,6 +49,15 @@ isolated class JsonRpcMessageStreamTransformer {
         }
 
         string? eventData = sseEventRecord.value.data;
+        if eventData is string {
+            notifyClientObserver(self.observer, {
+                eventType: MCP_MESSAGE,
+                eventTarget: MCP_SERVER,
+                eventUrl: self.serverUrl,
+                eventBody: eventData,
+                eventMessage: "SSE message"
+            });
+        }
         JsonRpcMessage|JsonRpcMessageTransformationError jsonRpcMessage = self.convertSseDataToJsonRpcMessage(eventData);
 
         if jsonRpcMessage is JsonRpcMessageTransformationError {
