@@ -87,10 +87,12 @@ isolated function buildAuthorizationRequest(AuthorizationCodeGrant grant, string
 # + pending - State retained from the authorization request
 # + params - Parameters returned to the redirect URI
 # + config - HTTP settings for the token request
+# + observer - Optional observer for token endpoint events
 # + return - Token response, or an OAuth error
 isolated function completeAuthorization(ClientAuth? clientAuth,
         AuthorizationServerMetadata metadata, PendingAuthorization pending,
-        AuthorizationCallbackParams params, readonly & AuthHttpConfig config = {})
+        AuthorizationCallbackParams params, readonly & AuthHttpConfig config = {},
+        ClientObserver? observer = ())
         returns TokenResponse|Error {
     check validateAuthorizationResponse(metadata, pending, params);
     string? authorizationCode = params.code;
@@ -105,7 +107,7 @@ isolated function completeAuthorization(ClientAuth? clientAuth,
         "code_verifier": pending.codeVerifier,
         "resource": pending.resourceUri
     };
-    return requestToken(clientAuth, metadata, pending.clientId, form, config);
+    return requestToken(clientAuth, metadata, pending.clientId, form, config, observer);
 }
 
 # Exchanges a refresh token for a new access token.
@@ -117,10 +119,12 @@ isolated function completeAuthorization(ClientAuth? clientAuth,
 # + resourceUri - Canonical MCP resource identifier
 # + scopes - Scopes to preserve on the refreshed token
 # + config - HTTP settings for the token request
+# + observer - Optional observer for token endpoint events
 # + return - Token response, or an OAuth error
 isolated function refreshAccessToken(ClientAuth? clientAuth,
         AuthorizationServerMetadata metadata, string clientId, string refreshToken,
-        string resourceUri, string[] scopes = [], readonly & AuthHttpConfig config = {})
+        string resourceUri, string[] scopes = [], readonly & AuthHttpConfig config = {},
+        ClientObserver? observer = ())
         returns TokenResponse|Error {
     map<string> form = {
         "grant_type": "refresh_token",
@@ -130,7 +134,7 @@ isolated function refreshAccessToken(ClientAuth? clientAuth,
     if scopes.length() > 0 {
         form["scope"] = string:'join(" ", ...scopes);
     }
-    return requestToken(clientAuth, metadata, clientId, form, config);
+    return requestToken(clientAuth, metadata, clientId, form, config, observer);
 }
 
 isolated function validateAuthorizationResponse(AuthorizationServerMetadata metadata,
