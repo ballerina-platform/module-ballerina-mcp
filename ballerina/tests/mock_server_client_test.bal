@@ -640,14 +640,11 @@ function testLegacySessionReconnectSkipsHandshake() returns error? {
 }
 
 @test:Config {}
-function testCloseReportsSessionTerminationFailure() returns error? {
+function testCloseTreatsSessionTerminationNotSupportedAsSuccess() returns error? {
     StreamableHttpClient terminationClient = check new (mockUrl("noTermination"), sessionId = "existing-session");
     _ = check terminationClient->connect();
     ClientError? closeError = terminationClient->close();
-    test:assertTrue(closeError is ClientError);
-    if closeError is ClientError {
-        test:assertTrue(closeError.message().includes("Failed to disconnect from server"));
-    }
+    test:assertTrue(closeError is (), closeError is ClientError ? closeError.message() : "");
 }
 
 @test:Config {}

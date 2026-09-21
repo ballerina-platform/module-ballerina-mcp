@@ -431,11 +431,9 @@ isolated class StreamableHttpClientTransport {
 
             do {
                 // Closing a session must not initiate an interactive authorization flow.
-                http:Response response = check self.execute(DELETE, headers, acquire = false);
-
-                if response.statusCode == 405 {
-                    return error SessionOperationError("Server does not support session termination.");
-                }
+                // A 405 means the server does not support client-initiated termination, which the
+                // Streamable HTTP transport allows; the session is still considered closed locally.
+                _ = check self.execute(DELETE, headers, acquire = false);
 
                 self.sessionId = ();
                 self.protocolVersion = ();
