@@ -118,9 +118,10 @@ isolated function validateIdJagIssuanceSupported(IdentityProviderMetadata metada
 
 isolated function requestIdentityAssertionAccessToken(string idJag, string clientId,
         ClientAuth? clientAuth, AuthorizationServerMetadata metadata, string resourceUri,
-        string[] scopes = [], readonly & AuthHttpConfig clientConfig = {}) returns TokenResponse|Error {
+        string[] scopes = [], readonly & AuthHttpConfig clientConfig = {}, ClientObserver? observer = ())
+        returns TokenResponse|Error {
     map<string> form = buildIdentityAssertionAccessTokenForm(idJag, resourceUri, scopes);
-    return requestToken(clientAuth, metadata, clientId, form, clientConfig);
+    return requestToken(clientAuth, metadata, clientId, form, clientConfig, observer);
 }
 
 // Builds the RFC 7523 jwt-bearer request, including MCP's required `resource`. The requested

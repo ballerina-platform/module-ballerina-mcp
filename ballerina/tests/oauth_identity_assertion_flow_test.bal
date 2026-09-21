@@ -52,7 +52,9 @@ type RecordedTokenRequest record {|
 isolated IdentityAssertionContext[] recordedAssertionContexts = [];
 isolated RecordedTokenRequest[] recordedTokenRequests = [];
 
-isolated function mockFetchJson(string targetUrl, readonly & AuthHttpConfig config) returns json|Error {
+isolated function mockFetchJson(string targetUrl, readonly & AuthHttpConfig config,
+        ClientObserver? observer = (), ClientEventTarget eventTarget = AUTHORIZATION_SERVER)
+        returns json|Error {
     if targetUrl == FLOW_PRM_URL {
         return {"resource": FLOW_SERVER_URL, "authorization_servers": [FLOW_FIRST_ISSUER, ISSUER]};
     }
@@ -81,7 +83,8 @@ isolated function mockFetchJson(string targetUrl, readonly & AuthHttpConfig conf
 }
 
 isolated function mockPostTokenRequest(ClientAuth? clientAuth, string clientId, string tokenEndpoint,
-        map<string> form, readonly & AuthHttpConfig config) returns json|Error {
+        map<string> form, readonly & AuthHttpConfig config, ClientObserver? observer = ())
+        returns json|Error {
     RecordedTokenRequest & readonly request = {
         tokenEndpoint,
         clientId,
