@@ -277,8 +277,8 @@ public final class McpServiceMethodHelper {
         Object meta = params.get(fromString(META_FIELD_NAME));
 
         Object argsOrError =
-                buildArgsForMethod(method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)), session,
-                        meta, headers, request, headerValues, treatNilableAsOptional);
+                buildArgsForMethod(env, method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)),
+                        session, meta, headers, request, headerValues, treatNilableAsOptional);
 
         // Header binding failures are transport-level and stay protocol errors; anything else is an
         // invalid tool argument, which the spec reports as a tool execution error.
@@ -413,9 +413,9 @@ public final class McpServiceMethodHelper {
         return !Boolean.FALSE.equals(enabled) && outputSchema != null;
     }
 
-    private static Object buildArgsForMethod(RemoteMethodType method, BMap<?, ?> arguments, Object session,
-                                             Object meta, Object headers, Object request, BMap<?, ?> headerValues,
-                                             boolean treatNilableAsOptional) {
+    private static Object buildArgsForMethod(Environment env, RemoteMethodType method, BMap<?, ?> arguments,
+                                             Object session, Object meta, Object headers, Object request,
+                                             BMap<?, ?> headerValues, boolean treatNilableAsOptional) {
         List<Parameter> params = List.of(method.getParameters());
         Object[] args = new Object[params.size()];
         for (int i = 0; i < params.size(); i++) {
@@ -441,6 +441,14 @@ public final class McpServiceMethodHelper {
                 String paramName = param.name;
                 BString argumentKey = fromString(paramName);
                 boolean isPresent = arguments != null && arguments.containsKey(argumentKey);
+
+                // An omitted defaultable argument falls back to the parameter's own default value,
+                // computed from the already-bound preceding arguments, mirroring a direct call.
+                if (!isPresent && param.isDefault) {
+                    args[i] = getDefaultParameterValue(env, method, param, Arrays.copyOf(args, i));
+                    continue;
+                }
+
                 Object argValue = isPresent ? arguments.get(argumentKey) : null;
 
                 // A required parameter must be present and carry a value. An explicit null is
@@ -459,6 +467,12 @@ public final class McpServiceMethodHelper {
             }
         }
         return args;
+    }
+
+    private static Object getDefaultParameterValue(Environment env, RemoteMethodType method, Parameter parameter,
+                                                    Object[] precedingArgs) {
+        return env.getRuntime().callFunction(method.getType().getPackage(), parameter.defaultFunctionName, null,
+                precedingArgs);
     }
 
     private static Object convertArgument(Object argValue, Type targetType, String paramName) {

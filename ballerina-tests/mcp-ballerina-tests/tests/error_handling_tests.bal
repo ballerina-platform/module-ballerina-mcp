@@ -55,6 +55,16 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     isolated remote function greet(string name, string? greeting) returns string {
         return string `${greeting ?: "Hello"}, ${name}`;
     }
+
+    @mcp:Tool {description: "Returns the weather for a city"}
+    isolated remote function weather(string city, string unit = "celsius") returns string {
+        return string `city=${city} unit=${unit}`;
+    }
+
+    @mcp:Tool {description: "Returns at most the given number of results"}
+    isolated remote function search(int? maxCount = 6) returns string {
+        return maxCount is () ? "maxCount=()" : string `maxCount=${maxCount}`;
+    }
 }
 
 @mcp:StreamableHttpConfig {
@@ -220,6 +230,27 @@ function testMissingRequiredArgument() returns error? {
 }
 
 @test:Config
+function testOmittedNonNilableDefaultableArgumentUsesDefault() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "weather", {city: "Colombo"});
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "city=Colombo unit=celsius");
+}
+
+@test:Config
+function testOmittedNilableDefaultableArgumentUsesDefault() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "search");
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "maxCount=6");
+}
+
+@test:Config
+function testExplicitNullOnNilableDefaultableArgumentOverridesDefault() returns error? {
+    http:Response response = check callTool(errorHandlingClient, "search", {maxCount: null});
+    test:assertEquals(response.statusCode, http:STATUS_OK);
+    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "maxCount=()");
+}
+
+@test:Config
 function testWrongTypedArgument() returns error? {
     http:Response response = check callTool(errorHandlingClient, "divide", {a: "ten", b: 2});
     test:assertEquals(response.statusCode, http:STATUS_OK);
@@ -369,7 +400,7 @@ function testListToolsSucceeds() returns error? {
     http:Response response = check errorHandlingClient->post("/mcp", request);
     test:assertEquals(response.statusCode, http:STATUS_OK);
     json[] tools = check (check (check response.getJsonPayload()).result.tools).ensureType();
-    test:assertEquals(tools.length(), 5);
+    test:assertEquals(tools.length(), 7);
 }
 
 @test:Config
