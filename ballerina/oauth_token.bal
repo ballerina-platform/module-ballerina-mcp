@@ -33,12 +33,14 @@ const decimal CLIENT_ASSERTION_EXPIRY = 300;
 # + clientId - Resolved client identifier
 # + form - Grant specific form parameters. Client authentication parameters are added here
 # + config - HTTP settings for the request
+# + observer - Optional observer for token endpoint events
 # + return - The token response, or an `OAuthTokenError` describing the failure
 isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetadata metadata,
-        string clientId, map<string> form, readonly & AuthHttpConfig config)
+        string clientId, map<string> form, readonly & AuthHttpConfig config,
+        ClientObserver? observer = ())
         returns TokenResponse|Error {
     string tokenEndpoint = selectTokenEndpoint(clientAuth, metadata);
-    json payload = check postTokenRequest(clientAuth, clientId, tokenEndpoint, form, config);
+    json payload = check postTokenRequest(clientAuth, clientId, tokenEndpoint, form, config, observer);
     TokenResponse|error tokenResponse = payload.cloneWithType();
     if tokenResponse is error {
         return error OAuthTokenError(string `Response from token endpoint '${tokenEndpoint}' does not ` +
@@ -62,7 +64,8 @@ isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetada
 
 // Posts an authenticated token request and returns its successful JSON body.
 isolated function postTokenRequest(ClientAuth? clientAuth, string clientId, string tokenEndpoint,
-        map<string> form, readonly & AuthHttpConfig config) returns json|Error {
+        map<string> form, readonly & AuthHttpConfig config, ClientObserver? observer = ())
+        returns json|Error {
     readonly & AuthHttpConfig tokenConfig = clientAuth is MutualTlsConfig
         ? withClientCertificate(config, clientAuth)
         : config;
@@ -77,11 +80,37 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId, stri
     string body = check encodeForm(params);
     [string, string] [origin, path] = check splitUrl(tokenEndpoint);
     http:Client tokenClient = check createAuthClient(origin, tokenConfig);
+    map<string> sanitizedParameters = sanitizedTokenParameters(params);
+    notifyClientObserver(observer, {
+        eventType: HTTP_REQUEST,
+        eventTarget: AUTHORIZATION_SERVER,
+        eventUrl: tokenEndpoint,
+        httpMethod: "POST",
+        eventHeaders: sanitizedEventHeaders(headers),
+        eventBody: sanitizedParameters.toJsonString(),
+        eventMessage: "OAuth token request"
+    });
     http:Response|error response = tokenClient->post(path, body, headers);
     if response is error {
+        notifyClientObserver(observer, {
+            eventType: CLIENT_ERROR,
+            eventTarget: AUTHORIZATION_SERVER,
+            eventUrl: tokenEndpoint,
+            httpMethod: "POST",
+            eventMessage: response.message()
+        });
         return error OAuthTokenError(string `Request to token endpoint '${tokenEndpoint}' failed: ${response.message()}`,
             response);
     }
+    notifyClientObserver(observer, {
+        eventType: HTTP_RESPONSE,
+        eventTarget: AUTHORIZATION_SERVER,
+        eventUrl: tokenEndpoint,
+        httpMethod: "POST",
+        statusCode: response.statusCode,
+        eventHeaders: sanitizedResponseHeaders(response),
+        eventMessage: "OAuth token response body redacted"
+    });
     json|error payload = response.getJsonPayload();
     if response.statusCode != http:STATUS_OK {
         return buildOAuthTokenError(tokenEndpoint, response.statusCode, payload);

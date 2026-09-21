@@ -19,7 +19,13 @@ import ballerina/jballerina.java;
 
 // A separate decoder leaves the public legacy JsonRpcMessage union unchanged.
 isolated class ProtocolMessageStream {
-    public isolated function init(stream<http:SseEvent, error?> sseEventStream) {
+    private final ClientObserver? observer;
+    private final string serverUrl;
+
+    public isolated function init(stream<http:SseEvent, error?> sseEventStream,
+            ClientObserver? observer = (), string serverUrl = "") {
+        self.observer = observer;
+        self.serverUrl = serverUrl;
         self.attachSseStream(sseEventStream);
     }
 
@@ -36,6 +42,13 @@ isolated class ProtocolMessageStream {
             if eventData is () || eventData == "" {
                 continue;
             }
+            notifyClientObserver(self.observer, {
+                eventType: MCP_MESSAGE,
+                eventTarget: MCP_SERVER,
+                eventUrl: self.serverUrl,
+                eventBody: eventData,
+                eventMessage: "SSE message"
+            });
             WireMessage|error messageValue = eventData.fromJsonStringWithType();
             if messageValue is error {
                 return error TypeConversionError("Malformed JSON-RPC SSE event", messageValue);
@@ -64,7 +77,8 @@ isolated class ProtocolMessageStream {
     } external;
 }
 
-isolated function readProtocolResponse(http:Response httpResponse, RequestId requestId, boolean modernResponse = true)
+isolated function readProtocolResponse(http:Response httpResponse, RequestId requestId,
+        boolean modernResponse = true, ClientObserver? observer = (), string serverUrl = "")
         returns Result|ClientError {
     WireMessage messageValue;
     if httpResponse.getContentType().includes(CONTENT_TYPE_SSE) {
@@ -72,7 +86,7 @@ isolated function readProtocolResponse(http:Response httpResponse, RequestId req
         if eventStream is error {
             return error ResponseParsingError(eventStream.message());
         }
-        ProtocolMessageStream messageStream = new (eventStream);
+        ProtocolMessageStream messageStream = new (eventStream, observer, serverUrl);
         Result|ClientError responseValue = readProtocolStream(messageStream, requestId, modernResponse);
         StreamError? closeError = messageStream.close();
         if closeError is StreamError && responseValue !is ClientError {
@@ -84,6 +98,13 @@ isolated function readProtocolResponse(http:Response httpResponse, RequestId req
     if payloadValue is error {
         return error HttpClientError("Server returned a non-JSON response", statusCode = httpResponse.statusCode);
     }
+    notifyClientObserver(observer, {
+        eventType: MCP_MESSAGE,
+        eventTarget: MCP_SERVER,
+        eventUrl: serverUrl,
+        statusCode: httpResponse.statusCode,
+        eventBody: payloadValue.toJsonString()
+    });
     WireMessage|error parsedValue = payloadValue.cloneWithType();
     if parsedValue is error {
         return error ResponseParsingError("Malformed JSON-RPC response", parsedValue, statusCode = httpResponse.statusCode);

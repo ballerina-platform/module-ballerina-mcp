@@ -22,10 +22,12 @@
 # + resourceUri - Canonical URI of the MCP server, from the protected resource metadata
 # + scopes - Scopes to request
 # + clientConfig - HTTP settings for the token request
+# + observer - Optional observer for token endpoint events
 # + return - The token response, or an `Error`
 isolated function requestClientCredentialsToken(string clientId, ClientAuth clientAuth,
         AuthorizationServerMetadata metadata, string resourceUri,
-        string[] scopes = [], readonly & AuthHttpConfig clientConfig = {})
+        string[] scopes = [], readonly & AuthHttpConfig clientConfig = {},
+        ClientObserver? observer = ())
         returns TokenResponse|Error {
     map<string> form = {
         "grant_type": "client_credentials",
@@ -34,5 +36,5 @@ isolated function requestClientCredentialsToken(string clientId, ClientAuth clie
     if scopes.length() > 0 {
         form["scope"] = string:'join(" ", ...scopes);
     }
-    return requestToken(clientAuth, metadata, clientId, form, clientConfig);
+    return requestToken(clientAuth, metadata, clientId, form, clientConfig, observer);
 }
