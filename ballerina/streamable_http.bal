@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/log;
 
 # Configuration options for the Streamable HTTP client transport. The HTTP fields mirror
 # `http:ClientConfiguration`, and are enumerated because `auth` also accepts `OAuthConfig`.
@@ -431,9 +432,14 @@ isolated class StreamableHttpClientTransport {
 
             do {
                 // Closing a session must not initiate an interactive authorization flow.
+                http:Response response = check self.execute(DELETE, headers, acquire = false);
                 // A 405 means the server does not support client-initiated termination, which the
                 // Streamable HTTP transport allows; the session is still considered closed locally.
-                _ = check self.execute(DELETE, headers, acquire = false);
+                if response.statusCode == 405 {
+                    log:printDebug("Server does not allow session termination");
+                } else if response.statusCode != 200 && response.statusCode != 204 {
+                    log:printWarn(string `Session termination failed: ${response.statusCode}`);
+                }
 
                 self.sessionId = ();
                 self.protocolVersion = ();
