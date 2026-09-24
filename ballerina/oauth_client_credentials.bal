@@ -295,7 +295,10 @@ isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetada
         returns TokenResponse|Error {
     string tokenEndpoint = metadata.token_endpoint;
     map<string> params = form.clone();
-    map<string|string[]> headers = {"Content-Type": "application/x-www-form-urlencoded"};
+    map<string|string[]> headers = {
+        [CONTENT_TYPE_HEADER]: "application/x-www-form-urlencoded",
+        [ACCEPT_HEADER]: CONTENT_TYPE_JSON
+    };
     check applyClientAuthentication(clientAuth, clientId, tokenEndpoint,
             params, headers);
 
