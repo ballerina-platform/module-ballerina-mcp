@@ -441,7 +441,7 @@ service /mock on new http:Listener(3210) {
     resource function delete [string scenario]() returns http:Response {
         http:Response deleteResponse = new;
         // 405 signals a peer that does not support session termination.
-        deleteResponse.statusCode = scenario == "noTermination" ? 405 : 200;
+        deleteResponse.statusCode = scenario == "noTermination" ? 405 : scenario == "sessionGone" ? 404 : 200;
         return deleteResponse;
     }
 }
@@ -640,14 +640,19 @@ function testLegacySessionReconnectSkipsHandshake() returns error? {
 }
 
 @test:Config {}
-function testCloseReportsSessionTerminationFailure() returns error? {
+function testCloseTreatsSessionTerminationNotSupportedAsSuccess() returns error? {
     StreamableHttpClient terminationClient = check new (mockUrl("noTermination"), sessionId = "existing-session");
     _ = check terminationClient->connect();
     ClientError? closeError = terminationClient->close();
-    test:assertTrue(closeError is ClientError);
-    if closeError is ClientError {
-        test:assertTrue(closeError.message().includes("Failed to disconnect from server"));
-    }
+    test:assertTrue(closeError is (), closeError is ClientError ? closeError.message() : "");
+}
+
+@test:Config {}
+function testCloseTreatsFailedSessionTerminationAsClosed() returns error? {
+    StreamableHttpClient terminationClient = check new (mockUrl("sessionGone"), sessionId = "existing-session");
+    _ = check terminationClient->connect();
+    ClientError? closeError = terminationClient->close();
+    test:assertTrue(closeError is (), closeError is ClientError ? closeError.message() : "");
 }
 
 @test:Config {}
