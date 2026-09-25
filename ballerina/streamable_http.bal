@@ -176,8 +176,15 @@ isolated class StreamableHttpClientTransport {
             ? provider.tryGetAuthorizationHeader()
             : provider.getAuthorizationHeader(challenge);
         if value is Error {
-            return error AuthorizationError(
+            AuthorizationError authorizationError = error AuthorizationError(
                 string `Failed to obtain authorization for '${self.serverUrl}': ${value.message()}`, value);
+            notifyClientObserver(self.observer, {
+                eventType: CLIENT_ERROR,
+                eventTarget: AUTHORIZATION_SERVER,
+                eventUrl: self.serverUrl,
+                eventMessage: authorizationError.message()
+            });
+            return authorizationError;
         }
         return value;
     }

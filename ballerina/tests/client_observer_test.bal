@@ -198,3 +198,20 @@ function testSensitiveHeadersAreRedactedCaseInsensitively() {
     test:assertEquals(sanitizedHeaders["X-Auth-Token"], [REDACTED_VALUE]);
     test:assertEquals(sanitizedHeaders["X-Request-Id"], "request-1");
 }
+
+@test:Config {}
+function testAuthorizationFailureEmitsClientError() returns error? {
+    RecordingObserver eventObserver = new;
+    StreamableHttpClient observedClient = check new (CHALLENGING_SERVER_URL,
+        auth = preRegisteredConfig(), observer = eventObserver);
+
+    var connectResult = observedClient->connect();
+    test:assertTrue(connectResult is AuthorizationError);
+
+    (readonly & ClientEvent)[] eventList = eventObserver.getEvents();
+    test:assertTrue(eventList.length() > 0);
+    readonly & ClientEvent lastEvent = eventList[eventList.length() - 1];
+    test:assertEquals(lastEvent.eventType, CLIENT_ERROR);
+    test:assertEquals(lastEvent.eventTarget, AUTHORIZATION_SERVER);
+    test:assertTrue((lastEvent.eventMessage ?: "").includes("does not use HTTPS"));
+}
