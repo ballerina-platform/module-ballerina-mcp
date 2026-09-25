@@ -51,7 +51,8 @@ isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetada
     http:Client tokenClient = check createAuthClient(origin, config);
     http:Response|error response = tokenClient->post(path, body, headers);
     if response is error {
-        return error OAuthTokenError(string `Request to token endpoint '${tokenEndpoint}' failed.`, response);
+        return error OAuthTokenError(string `Request to token endpoint '${tokenEndpoint}' failed: ${response.message()}`,
+            response);
     }
     json|error payload = response.getJsonPayload();
     if response.statusCode != http:STATUS_OK {
@@ -164,7 +165,7 @@ isolated function buildClientAssertion(PrivateKeyJwtConfig clientAuth, string cl
     }
     string|jwt:Error assertion = jwt:issue(issuerConfig);
     if assertion is jwt:Error {
-        return error OAuthConfigError("Failed to issue the client assertion.", assertion);
+        return error OAuthConfigError(string `Failed to issue the client assertion: ${assertion.message()}`, assertion);
     }
     return assertion;
 }
