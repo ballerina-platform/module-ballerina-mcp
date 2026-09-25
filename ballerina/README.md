@@ -251,6 +251,33 @@ mcp:StreamableHttpClientConfig config = {
 final mcp:StreamableHttpClient client = check new ("http://localhost:9090/mcp", config);
 ```
 
+### Client observability
+
+Set `observer` to receive structured events for MCP HTTP requests and responses, JSON-RPC messages,
+SSE messages, OAuth discovery and token traffic, authorization challenges, browser redirects, callbacks,
+and token acquisition. Observer failures do not affect the client operation.
+Observers run synchronously and should enqueue events and return promptly.
+
+```ballerina
+isolated class InspectorObserver {
+    *mcp:ClientObserver;
+
+    public isolated function onEvent(readonly & mcp:ClientEvent clientEvent) {
+        io:println(clientEvent.eventType, " ", clientEvent.eventTarget, " ", clientEvent.eventUrl);
+    }
+}
+
+final mcp:StreamableHttpClient client = check new (
+    "https://example.com/mcp",
+    observer = new InspectorObserver()
+);
+```
+
+Known credential-bearing headers and OAuth form parameters are replaced with `[REDACTED]`, and token
+response bodies are never exposed. MCP request and response bodies may contain application-sensitive tool
+arguments and results; applications should apply their own retention and access-control policies before
+persisting events.
+
 Use `callToolOnce()` when the application needs to handle each continuation itself. It returns
 `CallToolResult|InputRequiredResult` after one logical request. On a legacy connection it delegates to
 `callTool()`, because legacy MCP has no input-required continuation result.

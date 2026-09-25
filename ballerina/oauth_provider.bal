@@ -179,6 +179,7 @@ isolated class ClientOAuthProvider {
     // Held as immutable values so that isolated methods can read them without a lock.
     private final readonly & OAuthConfig config;
     private final readonly & AuthHttpConfig clientConfig;
+    private final ClientObserver? observer;
     private final TokenStore tokens;
     private final MetadataStore metadataStore;
 
@@ -189,11 +190,12 @@ isolated class ClientOAuthProvider {
     # + clientConfig - HTTP settings for metadata and token endpoint requests
     # + return - A `OAuthConfigError` if the configuration is unusable, or `()`
     isolated function init(string serverUrl, OAuthConfig config,
-            AuthHttpConfig clientConfig = {}) returns Error? {
+            AuthHttpConfig clientConfig = {}, ClientObserver? observer = ()) returns Error? {
         check validateConfig(config);
         self.serverUrl = check canonicalResourceUri(serverUrl);
         self.config = config.cloneReadOnly();
         self.clientConfig = clientConfig.cloneReadOnly();
+        self.observer = observer;
         self.tokens = new;
         self.metadataStore = new;
     }
@@ -265,8 +267,14 @@ isolated class ClientOAuthProvider {
         if grant is readonly & ClientCredentialsGrant {
             TokenResponse response = check requestClientCredentialsToken(context.clientId,
                     grant.clientConfig.clientAuth, context.metadata, context.resourceUri, scopes,
-                    self.clientConfig);
+                    self.clientConfig, self.observer);
             self.tokens.update(response, scopes);
+            notifyClientObserver(self.observer, {
+                eventType: TOKEN_ACQUIRED,
+                eventTarget: AUTHORIZATION_SERVER,
+                eventUrl: context.metadata.token_endpoint,
+                eventMessage: "Client credentials token acquired"
+            });
             return;
         }
 
@@ -274,9 +282,15 @@ isolated class ClientOAuthProvider {
         if refreshToken is string && self.scopesAlreadyGranted(scopes) {
             TokenResponse|Error refreshed = refreshAccessToken(grantClientAuth(grant),
                     context.metadata, context.clientId, refreshToken, context.resourceUri, scopes,
-                    self.clientConfig);
+                    self.clientConfig, self.observer);
             if refreshed is TokenResponse {
                 self.tokens.update(refreshed, scopes, preserveRefreshToken = true);
+                notifyClientObserver(self.observer, {
+                    eventType: TOKEN_ACQUIRED,
+                    eventTarget: AUTHORIZATION_SERVER,
+                    eventUrl: context.metadata.token_endpoint,
+                    eventMessage: "Access token refreshed"
+                });
                 return;
             }
             if !(refreshed is OAuthInvalidGrantError) {
@@ -292,6 +306,14 @@ isolated class ClientOAuthProvider {
         [string, PendingAuthorization] [authorizationUrl, pending] = check buildAuthorizationRequest(
                 grant, context.clientId, context.metadata, context.resourceUri, scopes);
 
+        string authorizationEndpoint = context.metadata.authorization_endpoint ?: context.metadata.issuer;
+        notifyClientObserver(self.observer, {
+            eventType: AUTHORIZATION_REDIRECT,
+            eventTarget: USER_AGENT,
+            eventUrl: authorizationEndpoint,
+            eventMessage: "Authorization URL generated"
+        });
+
         AuthorizationRedirectHandler redirectHandler = grant.redirectHandler;
         error? redirectResult = redirectHandler(authorizationUrl);
         if redirectResult is error {
@@ -306,9 +328,21 @@ isolated class ClientOAuthProvider {
             return error OAuthAuthorizationError(
                 "The callback handler failed to return the authorization response.", params);
         }
+        notifyClientObserver(self.observer, {
+            eventType: AUTHORIZATION_CALLBACK,
+            eventTarget: USER_AGENT,
+            eventUrl: grant.redirectUri,
+            eventMessage: "Authorization callback received; parameters redacted"
+        });
         TokenResponse response = check completeAuthorization(grantClientAuth(grant),
-                context.metadata, pending, params, self.clientConfig);
+                context.metadata, pending, params, self.clientConfig, self.observer);
         self.tokens.update(response, scopes);
+        notifyClientObserver(self.observer, {
+            eventType: TOKEN_ACQUIRED,
+            eventTarget: AUTHORIZATION_SERVER,
+            eventUrl: context.metadata.token_endpoint,
+            eventMessage: "Authorization code token acquired"
+        });
     }
 
     # Returns the discovered context for this server, discovering it if needed.
@@ -325,13 +359,13 @@ isolated class ClientOAuthProvider {
 
         string[] candidates = check self.selectResourceMetadataUrls(challenge);
         ProtectedResourceMetadata resourceMetadata =
-            check discoverProtectedResourceMetadata(candidates, self.serverUrl, self.clientConfig);
+            check discoverProtectedResourceMetadata(candidates, self.serverUrl, self.clientConfig, self.observer);
 
         ClientCredentialsGrant|AuthorizationCodeGrant grant = self.config.grant;
         ClientCredentialsClientConfig|AuthorizationCodeClientConfig oauthClient = grant.clientConfig;
         string issuer = check selectAuthorizationServer(oauthClient, resourceMetadata, self.serverUrl);
         AuthorizationServerMetadata metadata =
-            check discoverAuthorizationServerMetadata(issuer, self.clientConfig);
+            check discoverAuthorizationServerMetadata(issuer, self.clientConfig, self.observer);
         string clientId = check resolveClientId(oauthClient, metadata);
         check validateGrantAndClientAuthSupported(grant, metadata);
 

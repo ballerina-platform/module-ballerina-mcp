@@ -184,13 +184,15 @@ isolated function buildProtectedResourceMetadataUrls(string serverUrl) returns s
 # + candidateUrls - URLs to try, in priority order
 # + expectedResource - Canonical URI of the resource being accessed
 # + config - HTTP settings for the request
+# + observer - Optional observer for authorization metadata events
 # + return - The parsed metadata, or a `OAuthDiscoveryError` if no candidate yielded a document
 isolated function discoverProtectedResourceMetadata(string[] candidateUrls, string expectedResource,
-        readonly & AuthHttpConfig config = {}) returns ProtectedResourceMetadata|Error {
+        readonly & AuthHttpConfig config = {}, ClientObserver? observer = ())
+        returns ProtectedResourceMetadata|Error {
     Error? lastError = ();
     int candidateIndex = 0;
     foreach string candidate in candidateUrls {
-        json|Error payload = fetchJson(candidate, config);
+        json|Error payload = fetchJson(candidate, config, observer, MCP_SERVER);
         if payload is Error {
             lastError = payload;
             candidateIndex += 1;
@@ -228,8 +230,8 @@ isolated function discoverProtectedResourceMetadata(string[] candidateUrls, stri
     Error? cause = lastError;
     string attempted = string:'join(", ", ...candidateUrls);
     if cause is Error {
-        return error OAuthDiscoveryError(
-            string `Failed to retrieve protected resource metadata. Tried: ${attempted}.`, cause);
+        return error OAuthDiscoveryError(string `Failed to retrieve protected resource metadata. ` +
+            string `Tried: ${attempted}. Last error: ${cause.message()}`, cause);
     }
     return error OAuthDiscoveryError(
         string `Failed to retrieve protected resource metadata. Tried: ${attempted}.`);
@@ -264,13 +266,15 @@ isolated function buildAuthorizationServerMetadataUrls(string issuer) returns st
 #
 # + issuer - Issuer identifier of the authorization server
 # + config - HTTP settings for the requests
+# + observer - Optional observer for authorization metadata events
 # + return - The parsed metadata, or a `OAuthDiscoveryError` if no candidate yielded a document
 isolated function discoverAuthorizationServerMetadata(string issuer,
-        readonly & AuthHttpConfig config = {}) returns AuthorizationServerMetadata|Error {
+        readonly & AuthHttpConfig config = {}, ClientObserver? observer = ())
+        returns AuthorizationServerMetadata|Error {
     string[] candidates = check buildAuthorizationServerMetadataUrls(issuer);
     Error? lastError = ();
     foreach string candidate in candidates {
-        json|Error payload = fetchJson(candidate, config);
+        json|Error payload = fetchJson(candidate, config, observer);
         if payload is Error {
             lastError = payload;
             continue;
@@ -291,7 +295,7 @@ isolated function discoverAuthorizationServerMetadata(string issuer,
     Error? cause = lastError;
     if cause is Error {
         return error OAuthDiscoveryError(
-            string `Failed to discover authorization server metadata for '${issuer}'.`, cause);
+            string `Failed to discover authorization server metadata for '${issuer}': ${cause.message()}`, cause);
     }
     return error OAuthDiscoveryError(
         string `Failed to discover authorization server metadata for '${issuer}'.`);
@@ -439,15 +443,52 @@ isolated function createAuthClient(string origin, readonly & AuthHttpConfig conf
 #
 # + targetUrl - Absolute URL to request
 # + config - HTTP settings for the request
+# + observer - Optional observer for authorization metadata events
+# + eventTarget - System serving the metadata document
 # + return - The JSON payload, or a `OAuthDiscoveryError`
-isolated function fetchJson(string targetUrl, readonly & AuthHttpConfig config) returns json|Error {
+isolated function fetchJson(string targetUrl, readonly & AuthHttpConfig config,
+        ClientObserver? observer = (), ClientEventTarget eventTarget = AUTHORIZATION_SERVER)
+        returns json|Error {
     [string, string] [origin, path] = check splitUrl(targetUrl);
     http:Client httpClient = check createAuthClient(origin, config);
+    notifyClientObserver(observer, {
+        eventType: HTTP_REQUEST,
+        eventTarget: eventTarget,
+        eventUrl: targetUrl,
+        httpMethod: "GET"
+    });
     http:Response|error response = httpClient->get(path);
     if response is error {
-        return error OAuthDiscoveryError(string `Request to '${targetUrl}' failed.`, response);
+        notifyClientObserver(observer, {
+            eventType: CLIENT_ERROR,
+            eventTarget: eventTarget,
+            eventUrl: targetUrl,
+            httpMethod: "GET",
+            eventMessage: response.message()
+        });
+        return error OAuthDiscoveryError(string `Request to '${targetUrl}' failed: ${response.message()}`, response);
     }
+    notifyClientObserver(observer, {
+        eventType: HTTP_RESPONSE,
+        eventTarget: eventTarget,
+        eventUrl: targetUrl,
+        httpMethod: "GET",
+        statusCode: response.statusCode,
+        eventHeaders: sanitizedResponseHeaders(response)
+    });
     if response.statusCode != http:STATUS_OK {
+        string|error responseBody = response.getTextPayload();
+        if responseBody is string {
+            notifyClientObserver(observer, {
+                eventType: HTTP_BODY,
+                eventTarget: eventTarget,
+                eventUrl: targetUrl,
+                httpMethod: "GET",
+                statusCode: response.statusCode,
+                eventBody: responseBody,
+                eventMessage: "Authorization metadata error response body"
+            });
+        }
         return error OAuthDiscoveryError(
             string `Request to '${targetUrl}' returned status ${response.statusCode}.`);
     }
@@ -456,5 +497,14 @@ isolated function fetchJson(string targetUrl, readonly & AuthHttpConfig config) 
         return error OAuthDiscoveryError(
             string `Response from '${targetUrl}' is not valid JSON.`, payload);
     }
+    notifyClientObserver(observer, {
+        eventType: HTTP_BODY,
+        eventTarget: eventTarget,
+        eventUrl: targetUrl,
+        httpMethod: "GET",
+        statusCode: response.statusCode,
+        eventBody: payload.toJsonString(),
+        eventMessage: "Authorization metadata"
+    });
     return payload;
 }
