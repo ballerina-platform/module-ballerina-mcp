@@ -234,6 +234,80 @@ public function main() returns error? {
 }
 ```
 
+### Enterprise-managed authorization with ID-JAG
+
+Use `IdentityAssertionGrant` when an enterprise OpenID Provider authorizes the signed-in user to access an MCP
+server. The application owns the OpenID Connect login and session. The MCP client calls `assertionProvider` only when
+it needs a Resource Authorization Server access token, after discovery has resolved the exact audience, resource,
+Resource-AS client ID, and scopes.
+
+```ballerina
+import ballerina/mcp;
+
+configurable string resourceAsClientSecret = ?;
+configurable string idpClientSecret = ?;
+
+isolated function currentIdToken() returns string|error {
+    // Read or renew the ID token from the application's OpenID Connect session.
+    return "...";
+}
+
+isolated function provideIdJag(mcp:IdentityAssertionContext context)
+        returns string|error {
+    return mcp:exchangeIdTokenForIdJag(check currentIdToken(), context, {
+        issuer: "https://idp.example.com",
+        clientId: "mcp-host-at-idp",
+        clientAuth: {
+            clientSecret: idpClientSecret,
+            authMethod: mcp:CLIENT_SECRET_POST
+        }
+    });
+}
+
+final mcp:StreamableHttpClient client = check new (
+    "https://tools.example.com/mcp",
+    auth = {
+        grant: {
+            clientConfig: {
+                clientId: "mcp-host-at-resource-as",
+                issuer: "https://resource-auth.example.com",
+                clientAuth: {clientSecret: resourceAsClientSecret}
+            },
+            assertionProvider: provideIdJag
+        },
+        scopes: ["tools:read"]
+    }
+);
+```
+
+`clientConfig` accepts the same client registrations as the authorization code grant: a pre-registered client, whose
+`issuer` must be listed in the MCP server's protected resource metadata, or a Client ID Metadata Document, whose
+Resource AS is taken from that metadata. `clientAuth` is optional in both, so a public client is also supported. The
+OpenID Provider only issues an ID-JAG for a Resource AS its administrator has configured, so the metadata cannot
+direct the assertion to an unknown authorization server. The OpenID Provider client registration is independent and belongs
+to `IdentityProviderConfig` (or to custom code inside `assertionProvider`). The module never caches the ID-JAG and
+ignores a refresh token returned by the Resource Authorization Server; it caches only the final MCP access token.
+
+`assertionProvider` runs while the client holds its authorization lock, so other requests on the same client wait
+until it returns, and it must not call the same client.
+
+A rejected token request is reported as an `mcp:OAuthTokenError` in the cause chain of the returned error. Its
+`detail()` carries the endpoint's OAuth error response. For example, `insufficient_user_authentication` from the
+OpenID Provider, with `maxAge`, means the user must sign in again:
+
+```ballerina
+function needsReauthentication(error err) returns boolean {
+    error? current = err;
+    while current is error {
+        if current is mcp:OAuthTokenError {
+            return current.detail()?.code == "insufficient_user_authentication";
+        }
+        current = current.cause();
+    }
+    return false;
+}
+```
+
 `callTool()` is the main API. When a modern server returns `InputRequiredResult`, it calls the configured
 `inputHandler`, echoes the opaque request state, and continues until the call completes or `maxInputRounds` is
 reached.

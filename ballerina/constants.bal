@@ -46,6 +46,7 @@ const AUTHORIZATION_HEADER = "Authorization";
 const WWW_AUTHENTICATE_HEADER = "WWW-Authenticate";
 const INSUFFICIENT_SCOPE = "insufficient_scope";
 const OAUTH_CLIENT_CREDENTIALS_EXTENSION = "io.modelcontextprotocol/oauth-client-credentials";
+const ENTERPRISE_MANAGED_AUTHORIZATION_EXTENSION = "io.modelcontextprotocol/enterprise-managed-authorization";
 
 # The HTTP method of an outbound transport request.
 enum OutboundMethod {
