@@ -112,6 +112,46 @@ isolated function testPreRegisteredAuthorizationCodeClientWithSecret() {
 }
 
 @test:Config {}
+isolated function testCimdAuthorizationCodeWithMutualTls() {
+    StreamableHttpClientConfig config = {
+        auth: {
+            grant: {
+                clientConfig: {
+                    url: "https://wso2.com/mcp/client.json",
+                    clientAuth: {
+                        key: {certFile: "./client.crt", keyFile: "./client.key"},
+                        authMethod: SELF_SIGNED_TLS_CLIENT_AUTH
+                    }
+                },
+                redirectUri: "http://127.0.0.1:3030/callback",
+                redirectHandler: printAuthorizationUrl,
+                callbackHandler: receiveAuthorizationResponse
+            }
+        }
+    };
+    test:assertTrue(config.auth is OAuthConfig);
+}
+
+@test:Config {}
+isolated function testPreRegisteredClientCredentialsWithMutualTls() {
+    StreamableHttpClientConfig config = {
+        auth: {
+            grant: {
+                clientConfig: {
+                    clientId: "reporting-agent",
+                    issuer: "https://auth.example.com",
+                    clientAuth: {
+                        key: {path: "./client-keystore.p12", password: "changeit"},
+                        authMethod: TLS_CLIENT_AUTH
+                    }
+                }
+            }
+        }
+    };
+    test:assertTrue(config.auth is OAuthConfig);
+}
+
+@test:Config {}
 isolated function testStaticCredentialIsUnaffected() {
     StreamableHttpClientConfig config = {auth: {token: "sk-abc123"}};
     test:assertTrue(config.auth is http:ClientAuthConfig);

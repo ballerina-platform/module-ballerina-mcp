@@ -14,10 +14,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/crypto;
+import ballerina/http;
 import ballerina/jwt;
 
 # Client authentication method names, as they appear in authorization server metadata.
-# `client_secret_basic` and `client_secret_post` are covered by `ClientSecretAuthMethod`.
+# The shared secret and mutual TLS methods are covered by `ClientSecretAuthMethod` and
+# `MutualTlsAuthMethod`.
 const METHOD_PRIVATE_KEY_JWT = "private_key_jwt";
 const METHOD_NONE = "none";
 # The `error` parameter value a resource server uses to report a scope deficiency.
@@ -128,6 +131,9 @@ isolated function validateClientAuthentication(ClientAuth clientAuth) returns Er
         }
         return;
     }
+    if clientAuth is MutualTlsConfig {
+        return validateClientCertificate(clientAuth.key);
+    }
     jwt:SigningAlgorithm algorithm = clientAuth.signatureConfig.algorithm;
     if algorithm != jwt:RS256 && algorithm != jwt:RS384 && algorithm != jwt:RS512 {
         return error OAuthConfigError(string `'private_key_jwt' requires an RSA signing algorithm. ` +
@@ -144,6 +150,23 @@ isolated function validateClientAuthentication(ClientAuth clientAuth) returns Er
     }
 }
 
+# Validates the client certificate used for mutual TLS client authentication.
+#
+# + key - Client certificate and private key configuration
+# + return - An `OAuthConfigError` if a required location is empty, or `()`
+isolated function validateClientCertificate(crypto:KeyStore|http:CertKey key) returns Error? {
+    if key is http:CertKey {
+        if key.certFile.trim() == "" || key.keyFile.trim() == "" {
+            return error OAuthConfigError(
+                "Mutual TLS requires both 'certFile' and 'keyFile' of the client certificate.");
+        }
+        return;
+    }
+    if key.path.trim() == "" {
+        return error OAuthConfigError("Mutual TLS requires the 'path' of the client key store.");
+    }
+}
+
 # Returns the metadata name of a client authentication method.
 #
 # + clientAuth - The configured client authentication, or `()` for a public client
@@ -154,6 +177,9 @@ isolated function clientAuthMethodName(ClientAuth? clientAuth) returns string {
     }
     if clientAuth is PrivateKeyJwtConfig {
         return METHOD_PRIVATE_KEY_JWT;
+    }
+    if clientAuth is MutualTlsConfig {
+        return clientAuth.authMethod;
     }
     return METHOD_NONE;
 }
