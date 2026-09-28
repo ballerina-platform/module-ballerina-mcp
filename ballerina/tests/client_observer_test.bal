@@ -185,6 +185,28 @@ function testTokenRequestEventsRedactCredentials() returns error? {
 }
 
 @test:Config {}
+function testTokenRequestEventDescribesMutualTls() returns error? {
+    RecordingObserver eventObserver = new;
+    _ = check requestToken(mutualTlsAuth(), mutualTlsMetadata(PLAIN_TOKEN_ENDPOINT, MTLS_TOKEN_ENDPOINT),
+        MTLS_CLIENT_ID, {"grant_type": "client_credentials"}, trustTestServer, eventObserver);
+
+    readonly & ClientEvent? requestEvent =
+        findEvent(eventObserver.getEvents(), HTTP_REQUEST, AUTHORIZATION_SERVER);
+    test:assertTrue(requestEvent is readonly & ClientEvent);
+    if requestEvent is readonly & ClientEvent {
+        test:assertEquals(requestEvent.eventUrl, MTLS_TOKEN_ENDPOINT);
+        string message = requestEvent.eventMessage ?: "";
+        test:assertTrue(message.includes("'self_signed_tls_client_auth'"));
+        test:assertTrue(message.includes("'mtls_endpoint_aliases'"));
+        string requestBody = requestEvent.eventBody ?: "";
+        test:assertTrue(requestBody.includes(MTLS_CLIENT_ID));
+        test:assertFalse(requestBody.includes("client_assertion"));
+    }
+    test:assertEquals(tokenRequestEventMessage((), PLAIN_TOKEN_ENDPOINT,
+            mutualTlsMetadata(PLAIN_TOKEN_ENDPOINT, MTLS_TOKEN_ENDPOINT)), "OAuth token request");
+}
+
+@test:Config {}
 function testSensitiveHeadersAreRedactedCaseInsensitively() {
     map<string|string[]> sanitizedHeaders = sanitizedEventHeaders({
         "Authorization": "Bearer secret-token",
