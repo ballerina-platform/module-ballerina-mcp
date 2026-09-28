@@ -228,8 +228,8 @@ isolated function discoverProtectedResourceMetadata(string[] candidateUrls, stri
     Error? cause = lastError;
     string attempted = string:'join(", ", ...candidateUrls);
     if cause is Error {
-        return error OAuthDiscoveryError(
-            string `Failed to retrieve protected resource metadata. Tried: ${attempted}.`, cause);
+        return error OAuthDiscoveryError(string `Failed to retrieve protected resource metadata. ` +
+            string `Tried: ${attempted}. Last error: ${cause.message()}`, cause);
     }
     return error OAuthDiscoveryError(
         string `Failed to retrieve protected resource metadata. Tried: ${attempted}.`);
@@ -304,7 +304,7 @@ isolated function discoverIssuerMetadata(string issuer, typedesc<IssuerMetadata>
     Error? cause = lastError;
     if cause is Error {
         return error OAuthDiscoveryError(
-            string `Failed to discover authorization server metadata for '${issuer}'.`, cause);
+            string `Failed to discover authorization server metadata for '${issuer}': ${cause.message()}`, cause);
     }
     return error OAuthDiscoveryError(
         string `Failed to discover authorization server metadata for '${issuer}'.`);
@@ -458,7 +458,7 @@ isolated function fetchJson(string targetUrl, readonly & AuthHttpConfig config) 
     http:Client httpClient = check createAuthClient(origin, config);
     http:Response|error response = httpClient->get(path);
     if response is error {
-        return error OAuthDiscoveryError(string `Request to '${targetUrl}' failed.`, response);
+        return error OAuthDiscoveryError(string `Request to '${targetUrl}' failed: ${response.message()}`, response);
     }
     if response.statusCode != http:STATUS_OK {
         return error OAuthDiscoveryError(
