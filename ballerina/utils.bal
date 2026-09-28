@@ -17,9 +17,10 @@
 # Processes a server response and extracts the result.
 #
 # + serverResponse - The response from the server, which may be a single JsonRpcMessage, a stream, or a transport error.
-# + return - Extracted ServerResult, ServerResponseError, or StreamError.
+# + return - Extracted ServerResult, ServerResponseError, StreamError, or the AuthorizationError that
+# prevented the request from being sent.
 isolated function processServerResponse(JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? serverResponse)
-        returns ServerResult|ServerResponseError|StreamError {
+        returns ServerResult|ServerResponseError|StreamError|AuthorizationError {
 
     if serverResponse is stream<JsonRpcMessage, StreamError?> {
         return extractResultFromMessageStream(serverResponse);
@@ -31,6 +32,10 @@ isolated function processServerResponse(JsonRpcMessage|stream<JsonRpcMessage, St
 
     if serverResponse is () {
         return error MalformedResponseError("Received null response from server.");
+    }
+
+    if serverResponse is AuthorizationError {
+        return serverResponse;
     }
 
     return error ServerResponseError(
