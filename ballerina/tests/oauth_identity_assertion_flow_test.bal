@@ -82,9 +82,10 @@ isolated function mockFetchJson(string targetUrl, readonly & AuthHttpConfig conf
     return error OAuthDiscoveryError(string `Unexpected metadata request to '${targetUrl}'.`);
 }
 
-isolated function mockPostTokenRequest(ClientAuth? clientAuth, string clientId, string tokenEndpoint,
-        map<string> form, readonly & AuthHttpConfig config, ClientObserver? observer = ())
-        returns json|Error {
+isolated function mockPostTokenRequest(ClientAuth? clientAuth, string clientId,
+        AuthorizationServerMetadata|IdentityProviderMetadata metadata, map<string> form,
+        readonly & AuthHttpConfig config, ClientObserver? observer = ()) returns json|Error {
+    string tokenEndpoint = selectTokenEndpoint(clientAuth, metadata);
     RecordedTokenRequest & readonly request = {
         tokenEndpoint,
         clientId,

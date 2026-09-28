@@ -188,7 +188,7 @@ type TokenExchangeRequest record {|
 isolated function requestTokenExchange(IdentityProvider idp, TokenExchangeRequest request)
         returns TokenExchangeResponse|Error {
     string tokenEndpoint = selectTokenEndpoint(idp.clientAuth, idp.metadata);
-    json payload = check postTokenRequest(idp.clientAuth, idp.clientId, tokenEndpoint,
+    json payload = check postTokenRequest(idp.clientAuth, idp.clientId, idp.metadata,
             buildTokenExchangeForm(request), idp.httpConfig);
     return parseTokenExchangeResponse(payload, request.requestedTokenType, tokenEndpoint);
 }
