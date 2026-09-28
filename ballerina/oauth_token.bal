@@ -40,7 +40,7 @@ isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetada
         ClientObserver? observer = ())
         returns TokenResponse|Error {
     string tokenEndpoint = selectTokenEndpoint(clientAuth, metadata);
-    json payload = check postTokenRequest(clientAuth, clientId, tokenEndpoint, form, config, observer);
+    json payload = check postTokenRequest(clientAuth, clientId, metadata, form, config, observer);
     TokenResponse|error tokenResponse = payload.cloneWithType();
     if tokenResponse is error {
         return error OAuthTokenError(string `Response from token endpoint '${tokenEndpoint}' does not ` +
@@ -63,9 +63,10 @@ isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetada
 }
 
 // Posts an authenticated token request and returns its successful JSON body.
-isolated function postTokenRequest(ClientAuth? clientAuth, string clientId, string tokenEndpoint,
-        map<string> form, readonly & AuthHttpConfig config, ClientObserver? observer = ())
-        returns json|Error {
+isolated function postTokenRequest(ClientAuth? clientAuth, string clientId,
+        AuthorizationServerMetadata|IdentityProviderMetadata metadata, map<string> form,
+        readonly & AuthHttpConfig config, ClientObserver? observer = ()) returns json|Error {
+    string tokenEndpoint = selectTokenEndpoint(clientAuth, metadata);
     readonly & AuthHttpConfig tokenConfig = clientAuth is MutualTlsConfig
         ? withClientCertificate(config, clientAuth)
         : config;
@@ -88,7 +89,7 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId, stri
         httpMethod: "POST",
         eventHeaders: sanitizedEventHeaders(headers),
         eventBody: sanitizedParameters.toJsonString(),
-        eventMessage: "OAuth token request"
+        eventMessage: tokenRequestEventMessage(clientAuth, tokenEndpoint, metadata)
     });
     http:Response|error response = tokenClient->post(path, body, headers);
     if response is error {
@@ -121,6 +122,25 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId, stri
             statusCode = response.statusCode);
     }
     return payload;
+}
+
+# Describes a token request for observers. Mutual TLS is named explicitly, since its client
+# credential is presented in the TLS handshake and does not appear in the request.
+#
+# + clientAuth - How the client authenticates
+# + tokenEndpoint - Token endpoint being called
+# + metadata - Validated authorization server or Identity Provider metadata
+# + return - The event message
+isolated function tokenRequestEventMessage(ClientAuth? clientAuth, string tokenEndpoint,
+        AuthorizationServerMetadata|IdentityProviderMetadata metadata) returns string {
+    if clientAuth !is MutualTlsConfig {
+        return "OAuth token request";
+    }
+    string endpoint = tokenEndpoint == metadata.token_endpoint
+        ? ""
+        : " to the 'mtls_endpoint_aliases' token endpoint";
+    return string `OAuth token request${endpoint} using '${clientAuth.authMethod}' client ` +
+        string `authentication. The client certificate is presented in the TLS handshake.`;
 }
 
 # Selects the token endpoint to call. A client using mutual TLS must use the
