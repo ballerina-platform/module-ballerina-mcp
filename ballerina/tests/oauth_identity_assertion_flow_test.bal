@@ -34,6 +34,13 @@ test:MockFunction fetchJsonMock = new;
 @test:Mock {functionName: "postTokenRequest"}
 test:MockFunction postTokenRequestMock = new;
 
+// An unstubbed mock fails every call, so other tests use the real network functions unless a
+// test stubs them.
+@test:BeforeSuite
+function useRealIdentityAssertionNetwork() {
+    restoreIdentityAssertionNetwork();
+}
+
 // A token request observed by the mocked endpoint.
 type RecordedTokenRequest record {|
     string tokenEndpoint;
