@@ -347,8 +347,10 @@ final mcp:StreamableHttpClient client = check new (
 );
 ```
 
-Known credential-bearing headers and OAuth form parameters are replaced with `[REDACTED]`, and token
-response bodies are never exposed. MCP request and response bodies may contain application-sensitive tool
+Known credential-bearing headers and OAuth form parameters are replaced with `[REDACTED]`. Token requests
+are reported as their form-encoded body, and token responses with their `access_token`, `refresh_token`,
+and `id_token` values redacted, so fields such as `token_type`, `issued_token_type`, `scope`, and error
+details stay visible. MCP request and response bodies may contain application-sensitive tool
 arguments and results; applications should apply their own retention and access-control policies before
 persisting events.
 
