@@ -62,10 +62,13 @@ isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetada
     return tokenResponse;
 }
 
-// Posts an authenticated token request and returns its successful JSON body.
+// Posts an authenticated token request and returns its successful JSON body. Events are
+// reported against `eventTarget`: the authorization server, or the Identity Provider for the
+// ID-JAG token exchange.
 isolated function postTokenRequest(ClientAuth? clientAuth, string clientId,
         AuthorizationServerMetadata|IdentityProviderMetadata metadata, map<string> form,
-        readonly & AuthHttpConfig config, ClientObserver? observer = ()) returns json|Error {
+        readonly & AuthHttpConfig config, ClientObserver? observer = (),
+        ClientEventTarget eventTarget = AUTHORIZATION_SERVER) returns json|Error {
     string tokenEndpoint = selectTokenEndpoint(clientAuth, metadata);
     readonly & AuthHttpConfig tokenConfig = clientAuth is MutualTlsConfig
         ? withClientCertificate(config, clientAuth)
@@ -84,7 +87,7 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId,
     map<string> sanitizedParameters = sanitizedTokenParameters(params);
     notifyClientObserver(observer, {
         eventType: HTTP_REQUEST,
-        eventTarget: AUTHORIZATION_SERVER,
+        eventTarget,
         eventUrl: tokenEndpoint,
         httpMethod: "POST",
         eventHeaders: sanitizedEventHeaders(headers),
@@ -95,7 +98,7 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId,
     if response is error {
         notifyClientObserver(observer, {
             eventType: CLIENT_ERROR,
-            eventTarget: AUTHORIZATION_SERVER,
+            eventTarget,
             eventUrl: tokenEndpoint,
             httpMethod: "POST",
             eventMessage: response.message()
@@ -105,7 +108,7 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId,
     }
     notifyClientObserver(observer, {
         eventType: HTTP_RESPONSE,
-        eventTarget: AUTHORIZATION_SERVER,
+        eventTarget,
         eventUrl: tokenEndpoint,
         httpMethod: "POST",
         statusCode: response.statusCode,

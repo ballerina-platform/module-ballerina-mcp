@@ -352,6 +352,19 @@ response bodies are never exposed. MCP request and response bodies may contain a
 arguments and results; applications should apply their own retention and access-control policies before
 persisting events.
 
+With enterprise-managed authorization, the ID token to ID-JAG exchange runs inside the application's
+`assertionProvider`, outside the client. To observe it, pass the same observer to
+`mcp:exchangeIdTokenForIdJag`. Its metadata and token exchange events use the `identity_provider` target, and
+the ID token and ID-JAG are redacted:
+
+```ballerina
+final InspectorObserver observer = new;
+
+isolated function provideIdJag(mcp:IdentityAssertionContext context) returns string|error {
+    return mcp:exchangeIdTokenForIdJag(check currentIdToken(), context, identityProviderConfig, observer);
+}
+```
+
 Use `callToolOnce()` when the application needs to handle each continuation itself. It returns
 `CallToolResult|InputRequiredResult` after one logical request. On a legacy connection it delegates to
 `callTool()`, because legacy MCP has no input-required continuation result.

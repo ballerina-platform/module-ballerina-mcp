@@ -84,7 +84,8 @@ isolated function mockFetchJson(string targetUrl, readonly & AuthHttpConfig conf
 
 isolated function mockPostTokenRequest(ClientAuth? clientAuth, string clientId,
         AuthorizationServerMetadata|IdentityProviderMetadata metadata, map<string> form,
-        readonly & AuthHttpConfig config, ClientObserver? observer = ()) returns json|Error {
+        readonly & AuthHttpConfig config, ClientObserver? observer = (),
+        ClientEventTarget eventTarget = AUTHORIZATION_SERVER) returns json|Error {
     string tokenEndpoint = selectTokenEndpoint(clientAuth, metadata);
     RecordedTokenRequest & readonly request = {
         tokenEndpoint,
