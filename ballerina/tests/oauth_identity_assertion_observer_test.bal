@@ -87,7 +87,8 @@ function testIdJagExchangeEmitsIdentityProviderEvents() returns error? {
     // and serves its metadata from OpenID Connect discovery.
     readonly & ClientEvent? metadataBody = ();
     foreach readonly & ClientEvent clientEvent in eventList {
-        if clientEvent.eventType == HTTP_BODY && clientEvent.statusCode == 200 {
+        if clientEvent.eventType == HTTP_BODY && clientEvent.httpMethod == "GET" &&
+                clientEvent.statusCode == 200 {
             metadataBody = clientEvent;
         }
     }
@@ -105,9 +106,24 @@ function testIdJagExchangeEmitsIdentityProviderEvents() returns error? {
     test:assertTrue(tokenRequest is readonly & ClientEvent);
     if tokenRequest is readonly & ClientEvent {
         test:assertEquals(tokenRequest.eventUrl, OBSERVED_IDP_ISSUER + "/token");
-        string requestBody = tokenRequest.eventBody ?: "";
-        test:assertTrue(requestBody.includes(TOKEN_TYPE_ID_JAG));
-        test:assertTrue(requestBody.includes(REDACTED_VALUE));
+        map<string> requestParameters = check formParameters(tokenRequest.eventBody ?: "");
+        test:assertEquals(requestParameters["requested_token_type"], TOKEN_TYPE_ID_JAG);
+        test:assertEquals(requestParameters["subject_token"], REDACTED_VALUE);
+    }
+
+    // The token response is reported with the ID-JAG redacted and its token type kept.
+    readonly & ClientEvent? tokenResponseBody = ();
+    foreach readonly & ClientEvent clientEvent in eventList {
+        if clientEvent.eventType == HTTP_BODY && clientEvent.httpMethod == "POST" {
+            tokenResponseBody = clientEvent;
+        }
+    }
+    test:assertTrue(tokenResponseBody is readonly & ClientEvent);
+    if tokenResponseBody is readonly & ClientEvent {
+        map<json> responseFields = check (check (tokenResponseBody.eventBody ?: "").fromJsonString()).ensureType();
+        test:assertEquals(responseFields["access_token"], REDACTED_VALUE);
+        test:assertEquals(responseFields["issued_token_type"], TOKEN_TYPE_ID_JAG);
+        test:assertEquals(responseFields["token_type"], "N_A");
     }
 
     readonly & ClientEvent? acquired = findEvent(eventList, TOKEN_ACQUIRED, IDENTITY_PROVIDER);
@@ -147,6 +163,7 @@ function testIdJagExchangeFailureIsObserved() {
         }
     }
     test:assertTrue(rejectedResponse);
+    test:assertTrue(bodyContains(eventList, "invalid_grant"));
     test:assertTrue(findEvent(eventList, TOKEN_ACQUIRED, IDENTITY_PROVIDER) is ());
 }
 
