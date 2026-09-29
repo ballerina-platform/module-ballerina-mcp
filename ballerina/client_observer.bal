@@ -21,7 +21,9 @@ public enum ClientEventTarget {
     # The discovered OAuth authorization server.
     AUTHORIZATION_SERVER = "authorization_server",
     # The user agent participating in an authorization-code flow.
-    USER_AGENT = "user_agent"
+    USER_AGENT = "user_agent",
+    # The enterprise Identity Provider that exchanges an ID token for an ID-JAG.
+    IDENTITY_PROVIDER = "identity_provider"
 }
 
 # Identifies the kind of activity reported by an MCP client.
@@ -46,9 +48,11 @@ public enum ClientEventType {
     CLIENT_ERROR = "client.error"
 }
 
-# A structured event emitted while an MCP client communicates with an MCP or authorization server.
-# Authorization headers, cookies, client credentials, authorization codes, refresh tokens, access
-# tokens, client assertions, and PKCE verifiers are redacted before an event is emitted.
+# A structured event emitted while an MCP client communicates with an MCP server, an
+# authorization server, or an Identity Provider. Authorization headers, cookies, client
+# credentials, authorization codes, refresh tokens, access tokens, client assertions, PKCE
+# verifiers, token exchange subject and actor tokens, and ID-JAG assertions are redacted before
+# an event is emitted.
 #
 # + eventType - Kind of client activity
 # + eventTarget - System involved in the activity
@@ -124,9 +128,13 @@ isolated function sanitizedTokenParameters(map<string> tokenParameters) returns 
     map<string> sanitizedParameters = {};
     foreach var [parameterName, parameterValue] in tokenParameters.entries() {
         string normalizedName = parameterName.toLowerAscii();
+        // `subject_token` and `actor_token` carry the token exchanged at the Identity Provider,
+        // such as the user's ID token, and `assertion` carries the ID-JAG.
         if normalizedName == "client_secret" || normalizedName == "client_assertion" ||
                 normalizedName == "code" || normalizedName == "code_verifier" ||
-                normalizedName == "refresh_token" || normalizedName == "access_token" {
+                normalizedName == "refresh_token" || normalizedName == "access_token" ||
+                normalizedName == "subject_token" || normalizedName == "actor_token" ||
+                normalizedName == "assertion" {
             sanitizedParameters[parameterName] = REDACTED_VALUE;
         } else {
             sanitizedParameters[parameterName] = parameterValue;

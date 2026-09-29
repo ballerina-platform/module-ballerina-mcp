@@ -30,14 +30,16 @@ import ballerina/lang.regexp;
 # + context - Resource Authorization Server, MCP resource, client, and scope values
 # supplied to an `IdentityAssertionProvider`
 # + config - OpenID Provider registration and HTTP configuration
+# + observer - Optional observer for the metadata and token exchange events of this exchange,
+# typically the observer given to the MCP client. The ID token and the ID-JAG are redacted
 # + return - A fresh ID-JAG, or an `Error`
 public isolated function exchangeIdTokenForIdJag(string idToken,
-        IdentityAssertionContext context, IdentityProviderConfig config)
-        returns string|Error {
+        IdentityAssertionContext context, IdentityProviderConfig config,
+        ClientObserver? observer = ()) returns string|Error {
     if idToken.trim() == "" {
         return error OAuthConfigError("'idToken' must not be empty.");
     }
-    IdentityProvider idp = check prepareIdentityProvider(config);
+    IdentityProvider idp = check prepareIdentityProvider(config, observer);
     check validateIdJagIssuanceSupported(idp.metadata);
     TokenExchangeResponse response = check requestTokenExchange(idp, {
         subjectToken: idToken,
@@ -46,6 +48,12 @@ public isolated function exchangeIdTokenForIdJag(string idToken,
         audience: context.audience,
         'resource: context.'resource,
         scopes: context.scopes
+    }, observer);
+    notifyClientObserver(observer, {
+        eventType: TOKEN_ACQUIRED,
+        eventTarget: IDENTITY_PROVIDER,
+        eventUrl: selectTokenEndpoint(idp.clientAuth, idp.metadata),
+        eventMessage: "ID-JAG issued by the Identity Provider"
     });
     // RFC 8693 permits a refresh token in the response, but the ID-JAG profile recommends
     // against it. It is ignored along with the ID-JAG lifetime: callers receive only the
@@ -63,7 +71,8 @@ type IdentityProvider record {|
 
 // Prepares an Identity Provider and checks capabilities shared by every token exchange.
 // Exchange-specific capabilities are checked by the caller.
-isolated function prepareIdentityProvider(IdentityProviderConfig config) returns IdentityProvider|Error {
+isolated function prepareIdentityProvider(IdentityProviderConfig config, ClientObserver? observer = ())
+        returns IdentityProvider|Error {
     if config.clientId.trim() == "" {
         return error OAuthConfigError("'clientId' must not be empty.");
     }
@@ -88,7 +97,7 @@ isolated function prepareIdentityProvider(IdentityProviderConfig config) returns
     readonly & AuthHttpConfig pinnedHttpConfig = httpConfig.cloneReadOnly();
 
     IdentityProviderMetadata metadata =
-        check discoverIdentityProviderMetadata(config.issuer, pinnedHttpConfig);
+        check discoverIdentityProviderMetadata(config.issuer, pinnedHttpConfig, observer);
     check validateTokenExchangeSupported(clientAuth, metadata);
     return {clientId: config.clientId, clientAuth, metadata, httpConfig: pinnedHttpConfig};
 }
@@ -187,12 +196,13 @@ type TokenExchangeRequest record {|
     string[] scopes = [];
 |};
 
-// Performs an RFC 8693 exchange and validates the returned token type.
-isolated function requestTokenExchange(IdentityProvider idp, TokenExchangeRequest request)
-        returns TokenExchangeResponse|Error {
+// Performs an RFC 8693 exchange and validates the returned token type. Its token endpoint
+// events are reported against the Identity Provider.
+isolated function requestTokenExchange(IdentityProvider idp, TokenExchangeRequest request,
+        ClientObserver? observer = ()) returns TokenExchangeResponse|Error {
     string tokenEndpoint = selectTokenEndpoint(idp.clientAuth, idp.metadata);
     json payload = check postTokenRequest(idp.clientAuth, idp.clientId, idp.metadata,
-            buildTokenExchangeForm(request), idp.httpConfig);
+            buildTokenExchangeForm(request), idp.httpConfig, observer, IDENTITY_PROVIDER);
     return parseTokenExchangeResponse(payload, request.requestedTokenType, tokenEndpoint);
 }
 
