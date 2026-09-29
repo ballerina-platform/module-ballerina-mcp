@@ -34,6 +34,17 @@ type DiscoveredContext record {|
     string clientId;
 |};
 
+# How `TokenStore.update` records the refresh token of a token response.
+enum RefreshTokenHandling {
+    # Store the response's refresh token, or clear the held one if the response has none.
+    REPLACE_REFRESH_TOKEN,
+    # Store the response's refresh token, or keep the held one if the response has none, as
+    # for a refresh response that does not rotate the refresh token.
+    PRESERVE_REFRESH_TOKEN,
+    # Clear the held refresh token and ignore any in the response.
+    DISCARD_REFRESH_TOKEN
+}
+
 # Stores the tokens held for one MCP server. Reads are internally locked, so a caller can
 # obtain a usable token without holding a lock.
 isolated class TokenStore {
@@ -101,17 +112,18 @@ isolated class TokenStore {
     # Records a token response.
     #
     # + response - The token response to record
-    # + requestedScopes - Scopes sent in the token request, used when the response omits
-    # `scope`
-    # + preserveRefreshToken - Retain the previous refresh token when a refresh response omits one
+    # + requestedScopes - Scopes recorded as granted when the response omits `scope`
+    # + refreshTokenHandling - How the refresh token in the response is recorded
     isolated function update(TokenResponse response, string[] requestedScopes,
-            boolean preserveRefreshToken = false) {
+            RefreshTokenHandling refreshTokenHandling = REPLACE_REFRESH_TOKEN) {
         lock {
             self.accessToken = response.access_token;
             string? responseRefreshToken = response?.refresh_token;
-            if responseRefreshToken is string {
+            if refreshTokenHandling == DISCARD_REFRESH_TOKEN {
+                self.refreshToken = "";
+            } else if responseRefreshToken is string {
                 self.refreshToken = responseRefreshToken;
-            } else if !preserveRefreshToken {
+            } else if refreshTokenHandling == REPLACE_REFRESH_TOKEN {
                 self.refreshToken = "";
             }
             string? responseScope = response?.scope;
@@ -198,16 +210,26 @@ isolated class ClientOAuthProvider {
         self.metadataStore = new;
     }
 
-    # Reports whether this provider uses the client credentials grant.
-    #
-    # + return - `true` when configured with the client credentials grant
-    isolated function usesClientCredentialsGrant() returns boolean {
-        return self.config.grant is ClientCredentialsGrant;
+    // Returns the MCP authorization extension implemented by the configured grant.
+    isolated function oauthExtension() returns string? {
+        ClientCredentialsGrant|AuthorizationCodeGrant|IdentityAssertionGrant grant = self.config.grant;
+        if grant is ClientCredentialsGrant {
+            return OAUTH_CLIENT_CREDENTIALS_EXTENSION;
+        }
+        if grant is IdentityAssertionGrant {
+            return ENTERPRISE_MANAGED_AUTHORIZATION_EXTENSION;
+        }
+        return ();
     }
 
     # Returns an `Authorization` header value, acquiring or refreshing a token if needed.
     # Acquisition is performed under a lock and re-checked on entry, so concurrent callers
     # produce one token request rather than one each.
+    #
+    # The lock is held for the whole acquisition, including network requests and application
+    # callbacks (the authorization code handlers and the identity assertion provider). Other
+    # requests on the same client wait until it completes, and a callback must not call the
+    # same client, since that request would wait for the lock the callback is running under.
     #
     # + challenge - Challenge from the rejected request, whose scopes are authoritative
     # + return - The header value, or an `Error`
@@ -261,12 +283,40 @@ isolated class ClientOAuthProvider {
     isolated function acquire(readonly & BearerChallenge? challenge) returns Error? {
         readonly & DiscoveredContext context = check self.resolveContext(challenge);
         string[] scopes = self.selectScopes(challenge, context);
-        readonly & (ClientCredentialsGrant|AuthorizationCodeGrant) grant = self.config.grant;
+        readonly & (ClientCredentialsGrant|AuthorizationCodeGrant|IdentityAssertionGrant) grant =
+            self.config.grant;
         if grant is readonly & ClientCredentialsGrant {
             TokenResponse response = check requestClientCredentialsToken(context.clientId,
                     grant.clientConfig.clientAuth, context.metadata, context.resourceUri, scopes,
                     self.clientConfig);
             self.tokens.update(response, scopes);
+            return;
+        }
+
+        if grant is readonly & IdentityAssertionGrant {
+            readonly & IdentityAssertionContext assertionContext = {
+                audience: context.metadata.issuer,
+                'resource: context.resourceUri,
+                clientId: context.clientId,
+                scopes: scopes.cloneReadOnly()
+            };
+            IdentityAssertionProvider assertionProvider = grant.assertionProvider;
+            string|error idJag = assertionProvider(assertionContext);
+            if idJag is error {
+                return error OAuthAuthorizationError(
+                    "The identity assertion provider failed to obtain an ID-JAG.", idJag);
+            }
+            if idJag.trim() == "" {
+                return error OAuthAuthorizationError(
+                    "The identity assertion provider returned an empty ID-JAG.");
+            }
+            TokenResponse response = check requestIdentityAssertionAccessToken(idJag,
+                    context.clientId, grantClientAuth(grant), context.metadata,
+                    context.resourceUri, scopes, self.clientConfig);
+            // A readable ID-JAG narrows the fallback used when the response omits `scope`;
+            // opaque assertions remain untouched. Ignore any Resource AS refresh token so
+            // renewal always obtains a fresh ID-JAG.
+            self.tokens.update(response, limitToAssertionScopes(scopes, idJag), DISCARD_REFRESH_TOKEN);
             return;
         }
 
@@ -276,7 +326,7 @@ isolated class ClientOAuthProvider {
                     context.metadata, context.clientId, refreshToken, context.resourceUri, scopes,
                     self.clientConfig);
             if refreshed is TokenResponse {
-                self.tokens.update(refreshed, scopes, preserveRefreshToken = true);
+                self.tokens.update(refreshed, scopes, PRESERVE_REFRESH_TOKEN);
                 return;
             }
             if !(refreshed is OAuthInvalidGrantError) {
@@ -327,8 +377,8 @@ isolated class ClientOAuthProvider {
         ProtectedResourceMetadata resourceMetadata =
             check discoverProtectedResourceMetadata(candidates, self.serverUrl, self.clientConfig);
 
-        ClientCredentialsGrant|AuthorizationCodeGrant grant = self.config.grant;
-        ClientCredentialsClientConfig|AuthorizationCodeClientConfig oauthClient = grant.clientConfig;
+        ClientCredentialsGrant|AuthorizationCodeGrant|IdentityAssertionGrant grant = self.config.grant;
+        OAuthClientConfig oauthClient = grant.clientConfig;
         string issuer = check selectAuthorizationServer(oauthClient, resourceMetadata, self.serverUrl);
         AuthorizationServerMetadata metadata =
             check discoverAuthorizationServerMetadata(issuer, self.clientConfig);
@@ -434,16 +484,14 @@ isolated function signalsMetadataChange(readonly & BearerChallenge? challenge) r
 # + serverUrl - Canonical URI of the MCP server, for the error message
 # + return - Issuer identifier of the selected authorization server, or a `OAuthDiscoveryError`
 # if none is listed
-isolated function selectAuthorizationServer(
-        ClientCredentialsClientConfig|AuthorizationCodeClientConfig oauthClient,
+isolated function selectAuthorizationServer(OAuthClientConfig oauthClient,
         ProtectedResourceMetadata resourceMetadata, string serverUrl) returns string|Error {
     string[] servers = resourceMetadata.authorization_servers;
     if servers.length() == 0 {
         return error OAuthDiscoveryError(string `Protected resource metadata for '${serverUrl}' ` +
             string `lists no authorization servers.`);
     }
-    if oauthClient is PreRegisteredClientCredentialsConfig ||
-            oauthClient is PreRegisteredAuthorizationCodeConfig {
+    if oauthClient is PreRegisteredClientConfig {
         if servers.indexOf(oauthClient.issuer) is () {
             return error OAuthDiscoveryError(string `Protected resource metadata for '${serverUrl}' does ` +
                 string `not list the configured authorization server issuer '${oauthClient.issuer}'.`);

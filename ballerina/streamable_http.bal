@@ -149,12 +149,10 @@ isolated class StreamableHttpClientTransport {
         self.sessionId = sessionId;
     }
 
-    # Reports whether the configured OAuth provider uses client credentials.
-    #
-    # + return - `true` when the provider uses the client credentials grant
-    isolated function usesClientCredentialsGrant() returns boolean {
+    // Returns the configured MCP authorization extension, if any.
+    isolated function oauthExtension() returns string? {
         ClientOAuthProvider? provider = self.oauthProvider;
-        return provider is ClientOAuthProvider && provider.usesClientCredentialsGrant();
+        return provider is ClientOAuthProvider ? provider.oauthExtension() : ();
     }
 
     # Returns the `Authorization` header value to send with a request, if one is available.

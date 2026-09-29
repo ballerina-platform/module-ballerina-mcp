@@ -105,8 +105,28 @@ type OAuthDiscoveryError distinct Error;
 # Error while constructing or validating an authorization code exchange.
 type OAuthAuthorizationError distinct Error;
 
-# Error while requesting or refreshing a token at the token endpoint.
-type OAuthTokenError distinct Error;
+# Details of a failed token endpoint request. The OAuth fields are present when the endpoint
+# returned an error response (RFC 6749 section 5.2).
+#
+# + code - OAuth `error` code, such as `invalid_grant`, `invalid_scope`, or
+# `insufficient_user_authentication`
+# + description - Human-readable `error_description`
+# + errorUri - `error_uri` identifying a page with information about the error
+# + statusCode - HTTP status code of the token endpoint response
+# + maxAge - `max_age` returned with `insufficient_user_authentication`: the maximum time, in
+# seconds, since the user last authenticated that the Identity Provider accepts
+public type OAuthTokenErrorDetail record {|
+    string? code?;
+    string? description?;
+    string? errorUri?;
+    int? statusCode?;
+    int? maxAge?;
+|};
+
+# Error while requesting or refreshing a token at the token endpoint, including the ID-JAG
+# token exchange. It is reported as the cause of an `AuthorizationError`, and its `detail()`
+# carries the endpoint's error response.
+public type OAuthTokenError distinct Error & error<OAuthTokenErrorDetail>;
 
 # Error when the token endpoint rejects the grant, such as an expired authorization code or
 # a revoked refresh token.

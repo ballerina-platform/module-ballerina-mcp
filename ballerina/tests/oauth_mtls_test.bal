@@ -196,3 +196,16 @@ function testValidateAdvertisedMutualTls() {
     test:assertTrue(validateGrantAndClientAuthSupported(clientCredentialsGrant(privateKeyJwt),
                     selfSigned) is Error);
 }
+
+@test:Config {}
+function testSelectIdentityProviderTokenEndpoint() {
+    IdentityProviderMetadata idp = {
+        issuer: "https://idp.example.com",
+        token_endpoint: "https://idp.example.com/token",
+        mtls_endpoint_aliases: {token_endpoint: "https://mtls.idp.example.com/token"}
+    };
+    // The ID-JAG token exchange follows the same RFC 8705 endpoint selection.
+    test:assertEquals(selectTokenEndpoint(mutualTlsAuth(), idp), "https://mtls.idp.example.com/token");
+    test:assertEquals(selectTokenEndpoint({clientSecret: "secret"}, idp), "https://idp.example.com/token");
+    test:assertEquals(selectTokenEndpoint((), idp), "https://idp.example.com/token");
+}

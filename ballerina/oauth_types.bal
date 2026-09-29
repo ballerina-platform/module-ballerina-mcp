@@ -73,26 +73,53 @@ public type ClientAuth ClientSecretConfig|PrivateKeyJwtConfig|MutualTlsConfig;
 # secret cannot be established through a metadata document.
 public type CimdClientAuth PrivateKeyJwtConfig|MutualTlsConfig;
 
-# Represents a client that was registered directly with one authorization server.
+# Represents a client that was registered directly with one authorization server. Its
+# credentials are bound to that server, which must be listed in the protected resource
+# metadata.
 #
 # + clientId - Client identifier issued by the authorization server
-# + issuer - Issuer identifier of the authorization server that issued the client credentials
-# + clientAuth - How the client authenticates at the token endpoint
-public type PreRegisteredClientCredentialsConfig record {|
+# + issuer - Issuer identifier of the authorization server that registered the client
+# + clientAuth - How the client authenticates at the token endpoint. Omit for a public client
+public type PreRegisteredClientConfig record {|
     string clientId;
     string issuer;
-    ClientAuth clientAuth;
+    ClientAuth clientAuth?;
 |};
 
-# Represents a client identified by a Client ID Metadata Document.
+# Represents a client identified by a Client ID Metadata Document. The document URL is the
+# client identifier, and the authorization server is taken from the protected resource
+# metadata.
 #
 # A CIMD client uses `private_key_jwt` or mutual TLS; the authorization server obtains the
 # corresponding public key or certificate from the metadata document.
 #
 # + url - HTTPS URL of the Client ID Metadata Document
+# + clientAuth - Key or certificate used to authenticate at the token endpoint. Omit for a
+# public client
+public type CimdClientConfig record {|
+    string url;
+    CimdClientAuth clientAuth?;
+|};
+
+# Represents the client configurations supported by the authorization code and identity
+# assertion grants.
+public type OAuthClientConfig PreRegisteredClientConfig|CimdClientConfig;
+
+# Represents a pre-registered client using the client credentials grant, which requires
+# client authentication.
+#
+# + clientAuth - How the client authenticates at the token endpoint
+public type PreRegisteredClientCredentialsConfig record {|
+    *PreRegisteredClientConfig;
+    ClientAuth clientAuth;
+|};
+
+# Represents a client identified by a Client ID Metadata Document and using the client
+# credentials grant, which requires client authentication.
+#
 # + clientAuth - Key or certificate used to authenticate the client at the token endpoint
 public type CimdClientCredentialsConfig record {|
-    string url;
+    *CimdClientConfig;
     CimdClientAuth clientAuth;
 |};
 
@@ -107,31 +134,43 @@ public type ClientCredentialsGrant record {|
     ClientCredentialsClientConfig clientConfig;
 |};
 
-# Represents a pre-registered client using the authorization code grant.
+# Supplies the values an Identity Assertion Provider needs to obtain an ID-JAG for one
+# Resource Authorization Server token request.
 #
-# + clientId - Client identifier issued by the authorization server
-# + issuer - Issuer identifier of the authorization server that registered the client
-# + clientAuth - Token endpoint authentication. Omit for a public client
-public type PreRegisteredAuthorizationCodeConfig record {|
+# + audience - Issuer identifier of the Resource Authorization Server; this must be the
+# `aud` claim of the ID-JAG
+# + resource - Canonical MCP Resource Identifier; when present in the ID-JAG, this must be
+# its `resource` claim
+# + clientId - Client identifier used with the Resource Authorization Server; this must be
+# the ID-JAG's `client_id` claim
+# + scopes - Scopes requested for the MCP access token
+public type IdentityAssertionContext readonly & record {|
+    string audience;
+    string 'resource;
     string clientId;
-    string issuer;
-    ClientAuth clientAuth?;
+    string[] scopes;
 |};
 
-# Represents a client identified by a Client ID Metadata Document and using the
-# authorization code grant.
+# Obtains a fresh Identity Assertion JWT Authorization Grant (ID-JAG). The application can
+# use its existing OpenID Connect session and call `exchangeIdTokenForIdJag`, or integrate a
+# provider-specific exchange directly.
 #
-# + url - HTTPS URL of the Client ID Metadata Document, used as the client identifier
-# + clientAuth - Key or certificate used to authenticate at the token endpoint. Omit for a
-# public client
-public type CimdAuthorizationCodeConfig record {|
-    string url;
-    CimdClientAuth clientAuth?;
-|};
+# The provider is called while the client holds its authorization lock: other requests on
+# the same client wait until it returns, and it must not call the same client.
+public type IdentityAssertionProvider isolated function (IdentityAssertionContext context)
+    returns string|error;
 
-# Represents the client configurations supported by the authorization code grant.
-public type AuthorizationCodeClientConfig
-    PreRegisteredAuthorizationCodeConfig|CimdAuthorizationCodeConfig;
+# Represents the Identity Assertion JWT Authorization Grant used by Enterprise-Managed
+# Authorization. The resulting ID-JAG is exchanged at the Resource Authorization Server for
+# an MCP access token.
+#
+# + clientConfig - Client identity, registration mode, and token endpoint authentication at
+# the Resource Authorization Server
+# + assertionProvider - Callback that obtains a fresh ID-JAG for each access-token exchange
+public type IdentityAssertionGrant record {|
+    OAuthClientConfig clientConfig;
+    IdentityAssertionProvider assertionProvider;
+|};
 
 # Represents the parameters returned to the client's redirect URI.
 #
@@ -161,7 +200,7 @@ public type AuthorizationCallbackHandler isolated function () returns Authorizat
 # + redirectHandler - Directs the user to the generated authorization URL
 # + callbackHandler - Waits for and returns the authorization response parameters
 public type AuthorizationCodeGrant record {|
-    AuthorizationCodeClientConfig clientConfig;
+    OAuthClientConfig clientConfig;
     string redirectUri;
     AuthorizationRedirectHandler redirectHandler;
     AuthorizationCallbackHandler callbackHandler;
@@ -173,8 +212,29 @@ public type AuthorizationCodeGrant record {|
 # + scopes - Scopes to request. Used only when the `WWW-Authenticate` challenge carries none
 # and the protected resource metadata advertises no `scopes_supported`
 public type OAuthConfig record {|
-    ClientCredentialsGrant|AuthorizationCodeGrant grant;
+    ClientCredentialsGrant|AuthorizationCodeGrant|IdentityAssertionGrant grant;
     string[] scopes?;
+|};
+
+# Configures the enterprise Identity Provider (OpenID Provider) used by the token exchange
+# helpers, such as `exchangeIdTokenForIdJag`. This registration is independent of the client
+# registration represented by `IdentityAssertionGrant.clientConfig`.
+#
+# + issuer - Issuer identifier of the Identity Provider
+# + clientId - Client identifier registered with the Identity Provider
+# + clientAuth - Token endpoint authentication, when required by the Identity Provider
+# + secureSocket - SSL/TLS related options
+# + proxy - Proxy server settings
+# + timeout - Maximum time (in seconds) to wait for metadata and token endpoint responses
+# + httpVersion - HTTP protocol version used for metadata and token endpoint requests
+public type IdentityProviderConfig record {|
+    string issuer;
+    string clientId;
+    ClientAuth clientAuth?;
+    http:ClientSecureSocket secureSocket?;
+    http:ProxyConfig proxy?;
+    decimal timeout = 30;
+    http:HttpVersion httpVersion = http:HTTP_1_1;
 |};
 
 # Represents the HTTP settings for metadata and token endpoint requests. This configures how
@@ -239,6 +299,8 @@ type ProtectedResourceMetadata record {
 # + code_challenge_methods_supported - PKCE challenge methods accepted by the server
 # + authorization_response_iss_parameter_supported - Whether authorization responses include
 # the RFC 9207 `iss` parameter
+# + authorization_grant_profiles_supported - Authorization grant profiles implemented by a
+# Resource Authorization Server
 # + mtls_endpoint_aliases - Endpoints a client using mutual TLS uses in preference to the
 # conventional ones (RFC 8705 section 5)
 type AuthorizationServerMetadata record {
@@ -253,6 +315,7 @@ type AuthorizationServerMetadata record {
     boolean client_id_metadata_document_supported?;
     string[] code_challenge_methods_supported?;
     boolean authorization_response_iss_parameter_supported?;
+    string[] authorization_grant_profiles_supported?;
     MtlsEndpointAliases mtls_endpoint_aliases?;
 };
 
@@ -261,6 +324,23 @@ type AuthorizationServerMetadata record {
 # + token_endpoint - Token endpoint to use when authenticating with mutual TLS
 type MtlsEndpointAliases record {
     string token_endpoint?;
+};
+
+// Minimal issuer metadata required by discovery.
+type IssuerMetadata record {
+    string issuer;
+    string token_endpoint;
+};
+
+// Identity Provider metadata used for token exchange. Optional capabilities are checked when advertised.
+type IdentityProviderMetadata record {
+    string issuer;
+    string token_endpoint;
+    string[] grant_types_supported?;
+    string[] token_endpoint_auth_methods_supported?;
+    string[] token_endpoint_auth_signing_alg_values_supported?;
+    string[] identity_chaining_requested_token_types_supported?;
+    MtlsEndpointAliases mtls_endpoint_aliases?;
 };
 
 # Represents a successful response from the token endpoint.
@@ -275,5 +355,14 @@ type TokenResponse record {
     string token_type;
     int expires_in?;
     string refresh_token?;
+    string scope?;
+};
+
+// RFC 8693 token exchange response (section 2.2.1).
+type TokenExchangeResponse record {
+    string access_token;
+    string issued_token_type;
+    string token_type;
+    int expires_in?;
     string scope?;
 };

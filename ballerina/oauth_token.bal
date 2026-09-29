@@ -26,7 +26,7 @@ const CLIENT_ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-b
 # Lifetime of a client assertion, in seconds.
 const decimal CLIENT_ASSERTION_EXPIRY = 300;
 
-# Posts a form to the token endpoint and parses the response.
+# Posts a form to the token endpoint and parses the response as an access token response.
 #
 # + clientAuth - How the client authenticates
 # + metadata - Validated authorization server metadata
@@ -38,6 +38,31 @@ isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetada
         string clientId, map<string> form, readonly & AuthHttpConfig config)
         returns TokenResponse|Error {
     string tokenEndpoint = selectTokenEndpoint(clientAuth, metadata);
+    json payload = check postTokenRequest(clientAuth, clientId, tokenEndpoint, form, config);
+    TokenResponse|error tokenResponse = payload.cloneWithType();
+    if tokenResponse is error {
+        return error OAuthTokenError(string `Response from token endpoint '${tokenEndpoint}' does not ` +
+            string `contain a valid access token.`, tokenResponse);
+    }
+    if tokenResponse.access_token.trim() == "" {
+        return error OAuthTokenError(
+            string `Response from token endpoint '${tokenEndpoint}' contains an empty access token.`);
+    }
+    if tokenResponse.token_type.toLowerAscii() != "bearer" {
+        return error OAuthTokenError(string `Response from token endpoint '${tokenEndpoint}' contains ` +
+            string `unsupported token type '${tokenResponse.token_type}'.`);
+    }
+    int? lifetime = tokenResponse?.expires_in;
+    if lifetime is int && lifetime <= 0 {
+        return error OAuthTokenError(string `Response from token endpoint '${tokenEndpoint}' contains ` +
+            string `a non-positive 'expires_in' value.`);
+    }
+    return tokenResponse;
+}
+
+// Posts an authenticated token request and returns its successful JSON body.
+isolated function postTokenRequest(ClientAuth? clientAuth, string clientId, string tokenEndpoint,
+        map<string> form, readonly & AuthHttpConfig config) returns json|Error {
     readonly & AuthHttpConfig tokenConfig = clientAuth is MutualTlsConfig
         ? withClientCertificate(config, clientAuth)
         : config;
@@ -63,37 +88,20 @@ isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetada
     }
     if payload is error {
         return error OAuthTokenError(
-            string `Response from token endpoint '${tokenEndpoint}' is not valid JSON.`, payload);
+            string `Response from token endpoint '${tokenEndpoint}' is not valid JSON.`, payload,
+            statusCode = response.statusCode);
     }
-    TokenResponse|error tokenResponse = payload.cloneWithType();
-    if tokenResponse is error {
-        return error OAuthTokenError(string `Response from token endpoint '${tokenEndpoint}' does not ` +
-            string `contain a valid access token.`, tokenResponse);
-    }
-    if tokenResponse.access_token.trim() == "" {
-        return error OAuthTokenError(
-            string `Response from token endpoint '${tokenEndpoint}' contains an empty access token.`);
-    }
-    if tokenResponse.token_type.toLowerAscii() != "bearer" {
-        return error OAuthTokenError(string `Response from token endpoint '${tokenEndpoint}' contains ` +
-            string `unsupported token type '${tokenResponse.token_type}'.`);
-    }
-    int? lifetime = tokenResponse?.expires_in;
-    if lifetime is int && lifetime <= 0 {
-        return error OAuthTokenError(string `Response from token endpoint '${tokenEndpoint}' contains ` +
-            string `a non-positive 'expires_in' value.`);
-    }
-    return tokenResponse;
+    return payload;
 }
 
 # Selects the token endpoint to call. A client using mutual TLS must use the
 # `mtls_endpoint_aliases` entry when one is published (RFC 8705 section 5).
 #
 # + clientAuth - How the client authenticates
-# + metadata - Validated authorization server metadata
+# + metadata - Validated authorization server or Identity Provider metadata
 # + return - The token endpoint URL
-isolated function selectTokenEndpoint(ClientAuth? clientAuth, AuthorizationServerMetadata metadata)
-        returns string {
+isolated function selectTokenEndpoint(ClientAuth? clientAuth,
+        AuthorizationServerMetadata|IdentityProviderMetadata metadata) returns string {
     if clientAuth is MutualTlsConfig {
         string? alias = metadata?.mtls_endpoint_aliases?.token_endpoint;
         if alias is string {
@@ -119,33 +127,34 @@ isolated function withClientCertificate(readonly & AuthHttpConfig config, Mutual
     return tokenConfig.cloneReadOnly();
 }
 
-# Maps a token endpoint error response to a typed error.
-#
-# + tokenEndpoint - Token endpoint that was called, for the message
-# + statusCode - HTTP status code of the response
-# + payload - Parsed response body, if it could be parsed
-# + return - An `OAuthInvalidGrantError` for `invalid_grant`, otherwise an `OAuthTokenError`
+// Maps a token endpoint error response (RFC 6749 section 5.2) to a typed error. The response
+// fields are retained so applications can act on values such as
+// `insufficient_user_authentication` with `max_age`.
 isolated function buildOAuthTokenError(string tokenEndpoint, int statusCode, json|error payload)
         returns Error {
-    string errorCode = "";
-    string description = "";
+    string? errorCode = ();
+    string? description = ();
+    string? errorUri = ();
+    int? maxAge = ();
     if payload is map<json> {
         json codeValue = payload["error"] ?: ();
-        if codeValue is string {
-            errorCode = codeValue;
-        }
+        errorCode = codeValue is string ? codeValue : ();
         json descriptionValue = payload["error_description"] ?: ();
-        if descriptionValue is string {
-            description = descriptionValue;
-        }
+        description = descriptionValue is string ? descriptionValue : ();
+        json errorUriValue = payload["error_uri"] ?: ();
+        errorUri = errorUriValue is string ? errorUriValue : ();
+        json maxAgeValue = payload["max_age"] ?: ();
+        maxAge = maxAgeValue is int ? maxAgeValue : ();
     }
-    string detail = errorCode == "" ? string `status ${statusCode}`
-        : (description == "" ? string `'${errorCode}'` : string `'${errorCode}': ${description}`);
+    string detail = errorCode is () ? string `status ${statusCode}`
+        : (description is () ? string `'${errorCode}'` : string `'${errorCode}': ${description}`);
     string message = string `Token endpoint '${tokenEndpoint}' rejected the request with ${detail}.`;
     if errorCode == "invalid_grant" {
-        return error OAuthInvalidGrantError(message);
+        return error OAuthInvalidGrantError(message, code = errorCode, description = description,
+            errorUri = errorUri, statusCode = statusCode, maxAge = maxAge);
     }
-    return error OAuthTokenError(message);
+    return error OAuthTokenError(message, code = errorCode, description = description,
+        errorUri = errorUri, statusCode = statusCode, maxAge = maxAge);
 }
 
 # Applies client authentication to a token request.

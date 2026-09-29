@@ -258,15 +258,28 @@ isolated function buildAuthorizationServerMetadataUrls(string issuer) returns st
 
 # Discovers authorization server metadata for an issuer.
 #
-# The `issuer` in the retrieved document is compared against the requested issuer by exact
-# string comparison, as required by RFC 8414 section 3.3. A mismatch fails immediately
-# rather than falling through to the next candidate.
-#
 # + issuer - Issuer identifier of the authorization server
 # + config - HTTP settings for the requests
 # + return - The parsed metadata, or a `OAuthDiscoveryError` if no candidate yielded a document
 isolated function discoverAuthorizationServerMetadata(string issuer,
         readonly & AuthHttpConfig config = {}) returns AuthorizationServerMetadata|Error {
+    IssuerMetadata metadata = check discoverIssuerMetadata(issuer, AuthorizationServerMetadata, config);
+    // The value was converted to `AuthorizationServerMetadata`, so the cast cannot fail.
+    return <AuthorizationServerMetadata>metadata;
+}
+
+// Discovers Identity Provider metadata. Only the issuer and token endpoint are required.
+isolated function discoverIdentityProviderMetadata(string issuer,
+        readonly & AuthHttpConfig config = {}) returns IdentityProviderMetadata|Error {
+    IssuerMetadata metadata = check discoverIssuerMetadata(issuer, IdentityProviderMetadata, config);
+    // The value was converted to `IdentityProviderMetadata`, so the cast cannot fail.
+    return <IdentityProviderMetadata>metadata;
+}
+
+// Retrieves and converts issuer metadata from the RFC 8414 and OpenID Connect locations.
+// RFC 8414 requires exact issuer matching; a mismatch fails without trying another candidate.
+isolated function discoverIssuerMetadata(string issuer, typedesc<IssuerMetadata> metadataType,
+        readonly & AuthHttpConfig config) returns IssuerMetadata|Error {
     string[] candidates = check buildAuthorizationServerMetadataUrls(issuer);
     Error? lastError = ();
     foreach string candidate in candidates {
@@ -275,7 +288,7 @@ isolated function discoverAuthorizationServerMetadata(string issuer,
             lastError = payload;
             continue;
         }
-        AuthorizationServerMetadata|error metadata = payload.cloneWithType();
+        IssuerMetadata|error metadata = payload.cloneWithType(metadataType);
         if metadata is error {
             lastError = error OAuthDiscoveryError(
                 string `Authorization server metadata at '${candidate}' is not well formed.`, metadata);

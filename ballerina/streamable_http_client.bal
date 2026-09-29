@@ -14,19 +14,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-# Adds the OAuth Client Credentials extension to the capabilities advertised by a client.
-#
-# + capabilities - Application supplied capabilities
-# + return - Capabilities including OAuth Client Credentials support
-isolated function withOAuthClientCredentialsCapability(ClientCapabilities capabilities)
+// Adds the configured MCP authorization extension to the advertised capabilities.
+isolated function withOAuthExtensionCapability(ClientCapabilities capabilities, string? extension)
         returns ClientCapabilities {
     ClientCapabilities advertised = capabilities.clone();
+    if extension is () {
+        return advertised;
+    }
     map<record {}> extensions = {};
     map<record {}>? configuredExtensions = advertised.extensions;
     if configuredExtensions is map<record {}> {
         extensions = configuredExtensions.clone();
     }
-    extensions[OAUTH_CLIENT_CREDENTIALS_EXTENSION] = {};
+    extensions[extension] = {};
     advertised.extensions = extensions;
     return advertised;
 }
@@ -74,10 +74,8 @@ public distinct isolated client class StreamableHttpClient {
         self.inputHandler = config.inputHandler;
         self.transport = check new (serverUrl, config);
         // discover() can run before connect(), so its first modern request must already
-        // advertise the configured client credentials extension.
-        if self.transport.usesClientCredentialsGrant() {
-            self.clientCapabilities = withOAuthClientCredentialsCapability({});
-        }
+        // advertise the configured authorization extension.
+        self.clientCapabilities = withOAuthExtensionCapability({}, self.transport.oauthExtension());
     }
 
     # Connects to the MCP server and negotiates the protocol version.
@@ -89,9 +87,8 @@ public distinct isolated client class StreamableHttpClient {
     isolated remote function connect(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
             returns ConnectionInfo|ClientError {
-        ClientCapabilities advertisedCapabilities = self.transport.usesClientCredentialsGrant()
-            ? withOAuthClientCredentialsCapability(capabilities)
-            : capabilities.clone();
+        ClientCapabilities advertisedCapabilities =
+            withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
         lock {
             if self.connected {
                 return self.getConnectionInfo();
@@ -146,9 +143,8 @@ public distinct isolated client class StreamableHttpClient {
             Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
             returns ConnectionInfo|ClientError {
-        ClientCapabilities advertisedCapabilities = self.transport.usesClientCredentialsGrant()
-            ? withOAuthClientCredentialsCapability(capabilities)
-            : capabilities.clone();
+        ClientCapabilities advertisedCapabilities =
+            withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
         lock {
             if self.connected {
                 return error ClientInitializationError("Client is already connected");
@@ -386,9 +382,8 @@ public distinct isolated client class StreamableHttpClient {
             return error ProtocolVersionError("Discovery result does not advertise the modern protocol version");
         }
         Implementation? discoveredServerInfo = discovered._meta?.serverInfo;
-        ClientCapabilities advertisedCapabilities = self.transport.usesClientCredentialsGrant()
-            ? withOAuthClientCredentialsCapability(capabilities)
-            : capabilities.clone();
+        ClientCapabilities advertisedCapabilities =
+            withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
         lock {
             if self.connected {
                 return error ClientInitializationError("Client is already connected");

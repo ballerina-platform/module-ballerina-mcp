@@ -26,41 +26,32 @@ const METHOD_NONE = "none";
 # The `error` parameter value a resource server uses to report a scope deficiency.
 const ERROR_INSUFFICIENT_SCOPE = "insufficient_scope";
 
-# Grant type used by this module.
+// OAuth grant, token type, and profile identifiers.
 const GRANT_CLIENT_CREDENTIALS = "client_credentials";
 const GRANT_AUTHORIZATION_CODE = "authorization_code";
+const GRANT_TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange";
+const GRANT_JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer";
+const TOKEN_TYPE_ID_TOKEN = "urn:ietf:params:oauth:token-type:id_token";
+const TOKEN_TYPE_ID_JAG = "urn:ietf:params:oauth:token-type:id-jag";
+const TOKEN_TYPE_REFRESH_TOKEN = "urn:ietf:params:oauth:token-type:refresh_token";
+const TOKEN_TYPE_SAML2 = "urn:ietf:params:oauth:token-type:saml2";
+const PROFILE_ID_JAG = "urn:ietf:params:oauth:grant-profile:id-jag";
 
 # Validates an `OAuthConfig`.
 #
 # + config - The configuration to validate
 # + return - An `OAuthConfigError` describing the first problem found, or `()` if usable
 isolated function validateConfig(OAuthConfig config) returns Error? {
-    ClientCredentialsGrant|AuthorizationCodeGrant grant = config.grant;
-    if grant is ClientCredentialsGrant {
-        return validateClientCredentialsConfig(grant.clientConfig);
+    ClientCredentialsGrant|AuthorizationCodeGrant|IdentityAssertionGrant grant = config.grant;
+    check validateClientConfig(grant.clientConfig);
+    if grant is AuthorizationCodeGrant {
+        check validateRedirectUri(grant.redirectUri);
     }
-    check validateAuthorizationCodeConfig(grant);
 }
 
-isolated function validateClientCredentialsConfig(ClientCredentialsClientConfig oauthClient)
-        returns Error? {
-    if oauthClient is PreRegisteredClientCredentialsConfig {
-        if oauthClient.clientId.trim() == "" {
-            return error OAuthConfigError("'clientId' must not be empty.");
-        }
-        check validateHttpsUrl(oauthClient.issuer, "issuer", false, false);
-        check validateClientAuthentication(oauthClient.clientAuth);
-        return;
-    }
-
-    check validateHttpsUrl(oauthClient.url, "url", true, true);
-    check validateClientAuthentication(oauthClient.clientAuth);
-    return;
-}
-
-isolated function validateAuthorizationCodeConfig(AuthorizationCodeGrant grant) returns Error? {
-    AuthorizationCodeClientConfig oauthClient = grant.clientConfig;
-    if oauthClient is PreRegisteredAuthorizationCodeConfig {
+// Validates a client registration and any configured authentication.
+isolated function validateClientConfig(OAuthClientConfig oauthClient) returns Error? {
+    if oauthClient is PreRegisteredClientConfig {
         if oauthClient.clientId.trim() == "" {
             return error OAuthConfigError("'clientId' must not be empty.");
         }
@@ -72,7 +63,6 @@ isolated function validateAuthorizationCodeConfig(AuthorizationCodeGrant grant) 
     if clientAuth is ClientAuth {
         check validateClientAuthentication(clientAuth);
     }
-    check validateRedirectUri(grant.redirectUri);
 }
 
 isolated function validateRedirectUri(string redirectUri) returns Error? {
@@ -189,11 +179,12 @@ isolated function clientAuthMethodName(ClientAuth? clientAuth) returns string {
 # + grant - Configured grant and token endpoint authentication
 # + metadata - Validated authorization server metadata
 # + return - An `OAuthConfigError` if the method is not supported, or `()`
-isolated function validateGrantAndClientAuthSupported(ClientCredentialsGrant|AuthorizationCodeGrant grant,
+isolated function validateGrantAndClientAuthSupported(
+        ClientCredentialsGrant|AuthorizationCodeGrant|IdentityAssertionGrant grant,
         AuthorizationServerMetadata metadata) returns Error? {
     string expectedGrant = grant is ClientCredentialsGrant
         ? GRANT_CLIENT_CREDENTIALS
-        : GRANT_AUTHORIZATION_CODE;
+        : grant is IdentityAssertionGrant ? GRANT_JWT_BEARER : GRANT_AUTHORIZATION_CODE;
     // RFC 8414 section 2 defaults omitted grant types to authorization_code and implicit.
     string[] advertisedGrantTypes = metadata.grant_types_supported ?:
         [GRANT_AUTHORIZATION_CODE, "implicit"];
@@ -213,7 +204,21 @@ isolated function validateGrantAndClientAuthSupported(ClientCredentialsGrant|Aut
                 string `advertise support for the PKCE 'S256' challenge method.`);
         }
     }
+
+    if grant is IdentityAssertionGrant {
+        string[]? advertisedProfiles = metadata.authorization_grant_profiles_supported;
+        if advertisedProfiles is string[] && advertisedProfiles.indexOf(PROFILE_ID_JAG) is () {
+            return error OAuthConfigError(string `Authorization server '${metadata.issuer}' advertises ` +
+                string `'authorization_grant_profiles_supported' but does not include the ID-JAG profile.`);
+        }
+    }
     ClientAuth? clientAuth = grantClientAuth(grant);
+    return validateClientAuthSupported(clientAuth, metadata);
+}
+
+// Checks that an authorization server accepts the configured client authentication method.
+isolated function validateClientAuthSupported(ClientAuth? clientAuth,
+        AuthorizationServerMetadata|IdentityProviderMetadata metadata) returns Error? {
     string[]? advertisedMethods = metadata.token_endpoint_auth_methods_supported;
     // RFC 8414 section 2 defaults an omitted token_endpoint_auth_methods_supported value
     // to client_secret_basic.
@@ -245,12 +250,11 @@ isolated function validateGrantAndClientAuthSupported(ClientCredentialsGrant|Aut
     return;
 }
 
-isolated function grantClientAuth(ClientCredentialsGrant|AuthorizationCodeGrant grant)
+isolated function grantClientAuth(
+        ClientCredentialsGrant|AuthorizationCodeGrant|IdentityAssertionGrant grant)
         returns ClientAuth? {
-    if grant is ClientCredentialsGrant {
-        return grant.clientConfig.clientAuth;
-    }
-    return grant.clientConfig?.clientAuth;
+    OAuthClientConfig oauthClient = grant.clientConfig;
+    return oauthClient?.clientAuth;
 }
 
 # Resolves the client identifier to use with an authorization server. A Client ID Metadata
@@ -259,11 +263,9 @@ isolated function grantClientAuth(ClientCredentialsGrant|AuthorizationCodeGrant 
 # + oauthClient - Client registration and authentication configuration
 # + metadata - Validated authorization server metadata
 # + return - The client identifier, or an `OAuthConfigError` if it cannot be used with this server
-isolated function resolveClientId(ClientCredentialsClientConfig|AuthorizationCodeClientConfig oauthClient,
-        AuthorizationServerMetadata metadata)
+isolated function resolveClientId(OAuthClientConfig oauthClient, AuthorizationServerMetadata metadata)
         returns string|Error {
-    if oauthClient is PreRegisteredClientCredentialsConfig ||
-            oauthClient is PreRegisteredAuthorizationCodeConfig {
+    if oauthClient is PreRegisteredClientConfig {
         return oauthClient.clientId;
     }
     boolean cimdSupported = metadata.client_id_metadata_document_supported ?: false;
