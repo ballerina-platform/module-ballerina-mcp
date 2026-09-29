@@ -124,6 +124,10 @@ isolated function failingAssertionProvider(IdentityAssertionContext context) ret
 
 isolated function emptyAssertionProvider(IdentityAssertionContext context) returns string|error => " ";
 
+// Returns an ID-JAG that carries no `scope` claim.
+isolated function unscopedAssertionProvider(IdentityAssertionContext context) returns string|error =>
+    unsignedJwt({"sub": "user"});
+
 function stubIdentityAssertionNetwork() {
     lock {
         recordedAssertionContexts = [];
@@ -179,6 +183,8 @@ function testIdentityAssertionAcquisitionAndStepUp() returns error? {
     });
 
     // The jwt-bearer request carries resource and scope, with confidential client authentication.
+    // The ID-JAG grants `files:read files:admin`, so `files:write`, which the Identity Provider
+    // removed, is not requested from the Resource AS.
     RecordedTokenRequest[] requests = tokenRequests();
     test:assertEquals(requests.length(), 1);
     test:assertEquals(requests[0].tokenEndpoint, ISSUER + "/token");
@@ -188,7 +194,7 @@ function testIdentityAssertionAcquisitionAndStepUp() returns error? {
         "grant_type": GRANT_JWT_BEARER,
         "assertion": unsignedJwt({"scope": "files:read files:admin"}),
         "resource": FLOW_SERVER_URL,
-        "scope": "files:read files:write"
+        "scope": "files:read"
     });
 
     // The cached token is reused without another exchange.
@@ -305,4 +311,28 @@ function testExchangeIdTokenForIdJag() returns error? {
 
     test:assertTrue(exchangeIdTokenForIdJag(" ", context, idp) is Error);
     test:assertEquals(tokenRequests().length(), 1);
+}
+
+@test:Config {
+    before: stubIdentityAssertionNetwork,
+    after: restoreIdentityAssertionNetwork
+}
+function testIdentityAssertionWithoutScopeClaim() returns error? {
+    ClientOAuthProvider provider = check new (FLOW_SERVER_URL, {
+        grant: {
+            clientConfig: {clientId: "reporting-agent", issuer: ISSUER, clientAuth: {clientSecret: "secret"}},
+            assertionProvider: unscopedAssertionProvider
+        },
+        scopes: ["files:read", "files:write"]
+    });
+    test:assertEquals(check provider.getAuthorizationHeader({resourceMetadata: FLOW_PRM_URL}),
+        "Bearer mcp-token-1");
+
+    // An ID-JAG without a `scope` claim does not say what it grants, so `scope` is omitted and
+    // the Resource AS applies the ID-JAG.
+    test:assertEquals(tokenRequests()[0].form, {
+        "grant_type": GRANT_JWT_BEARER,
+        "assertion": unsignedJwt({"sub": "user"}),
+        "resource": FLOW_SERVER_URL
+    });
 }

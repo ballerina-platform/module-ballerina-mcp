@@ -638,9 +638,11 @@ function testTokenErrorKeepsErrorResponseFields() {
 function testLimitToAssertionScopes() {
     string idJag = unsignedJwt({"scope": "files:read files:admin"});
     test:assertEquals(limitToAssertionScopes(["files:read", "files:write"], idJag), ["files:read"]);
-    // Without a readable scope claim, the requested scopes are kept.
-    test:assertEquals(limitToAssertionScopes(["files:read"], unsignedJwt({"sub": "user"})), ["files:read"]);
-    test:assertEquals(limitToAssertionScopes(["files:read"], "not-a-jwt"), ["files:read"]);
+    // A claim that grants none of the requested scopes leaves nothing to request.
+    test:assertEquals(limitToAssertionScopes(["files:write"], idJag), []);
+    // Without a readable scope claim, the ID-JAG does not say what it grants.
+    test:assertEquals(limitToAssertionScopes(["files:read"], unsignedJwt({"sub": "user"})), ());
+    test:assertEquals(limitToAssertionScopes(["files:read"], "not-a-jwt"), ());
 }
 
 // Builds an unsigned JWT for tests that only inspect claims.

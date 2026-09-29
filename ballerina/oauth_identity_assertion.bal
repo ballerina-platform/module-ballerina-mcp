@@ -124,7 +124,8 @@ isolated function requestIdentityAssertionAccessToken(string idJag, string clien
 }
 
 // Builds the RFC 7523 jwt-bearer request, including MCP's required `resource`. The requested
-// `scope` confers no authority; the Resource AS must cap the grant to the ID-JAG.
+// `scope` confers no authority, and must not exceed what the ID-JAG grants (RFC 7521
+// section 4.1).
 isolated function buildIdentityAssertionAccessTokenForm(string idJag, string resourceUri,
         string[] scopes = []) returns map<string> {
     map<string> form = {
@@ -138,12 +139,14 @@ isolated function buildIdentityAssertionAccessTokenForm(string idJag, string res
     return form;
 }
 
-// Limits fallback bookkeeping to the ID-JAG's scope when its JWT payload is readable.
-// The unverified claim is never used to authorize anything.
-isolated function limitToAssertionScopes(string[] scopes, string idJag) returns string[] {
+// Returns the requested scopes that the ID-JAG's `scope` claim grants, or `()` when the ID-JAG
+// carries no readable `scope` claim. The IdP reflects any narrowing in that claim, so it caps
+// what the Resource AS request may ask for. The unverified claim is never used to authorize
+// anything.
+isolated function limitToAssertionScopes(string[] scopes, string idJag) returns string[]? {
     string[] parts = re `\.`.split(idJag);
     if parts.length() != 3 {
-        return scopes;
+        return ();
     }
     string payloadSegment = regexp:replaceAll(re `_`, regexp:replaceAll(re `-`, parts[1], "+"), "/");
     while payloadSegment.length() % 4 != 0 {
@@ -151,16 +154,16 @@ isolated function limitToAssertionScopes(string[] scopes, string idJag) returns 
     }
     byte[]|error payloadBytes = array:fromBase64(payloadSegment);
     if payloadBytes is error {
-        return scopes;
+        return ();
     }
     string|error payloadText = string:fromBytes(payloadBytes);
     json|error claims = payloadText is string ? payloadText.fromJsonString() : payloadText;
     if claims !is map<json> {
-        return scopes;
+        return ();
     }
     json assertionScope = claims["scope"];
     if assertionScope !is string {
-        return scopes;
+        return ();
     }
     string[] authorized = splitScopes(assertionScope);
     string[] limited = [];
