@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/crypto;
 import ballerina/http;
 import ballerina/jwt;
 
@@ -45,8 +46,32 @@ public type PrivateKeyJwtConfig record {|
     string keyId?;
 |};
 
+# Client authentication method names for mutual TLS, as registered by RFC 8705 section 2.
+public enum MutualTlsAuthMethod {
+    # The certificate is issued by a certificate authority the authorization server trusts,
+    # and is bound to the client by a subject or subject alternative name (RFC 8705 section 2.1).
+    TLS_CLIENT_AUTH = "tls_client_auth",
+    # The certificate is self-signed and registered with the authorization server, for
+    # example in the `jwks` or `jwks_uri` of a Client ID Metadata Document (RFC 8705 section 2.2).
+    SELF_SIGNED_TLS_CLIENT_AUTH = "self_signed_tls_client_auth"
+}
+
+# Represents client authentication using a mutual TLS client certificate (RFC 8705 section 2).
+# The certificate is presented only on connections to the token endpoint.
+#
+# + key - Client certificate and its private key
+# + authMethod - How the authorization server binds the certificate to the client
+public type MutualTlsConfig record {|
+    crypto:KeyStore|http:CertKey key;
+    MutualTlsAuthMethod authMethod;
+|};
+
 # Represents how the client authenticates itself at the token endpoint.
-public type ClientAuth ClientSecretConfig|PrivateKeyJwtConfig;
+public type ClientAuth ClientSecretConfig|PrivateKeyJwtConfig|MutualTlsConfig;
+
+# Represents how a client identified by a Client ID Metadata Document authenticates. A shared
+# secret cannot be established through a metadata document.
+public type CimdClientAuth PrivateKeyJwtConfig|MutualTlsConfig;
 
 # Represents a client that was registered directly with one authorization server. Its
 # credentials are bound to that server, which must be listed in the protected resource
@@ -65,12 +90,15 @@ public type PreRegisteredClientConfig record {|
 # client identifier, and the authorization server is taken from the protected resource
 # metadata.
 #
+# A CIMD client uses `private_key_jwt` or mutual TLS; the authorization server obtains the
+# corresponding public key or certificate from the metadata document.
+#
 # + url - HTTPS URL of the Client ID Metadata Document
-# + clientAuth - Private key used for `private_key_jwt`; the authorization server obtains the
-# corresponding public key from the metadata document. Omit for a public client
+# + clientAuth - Key or certificate used to authenticate at the token endpoint. Omit for a
+# public client
 public type CimdClientConfig record {|
     string url;
-    PrivateKeyJwtConfig clientAuth?;
+    CimdClientAuth clientAuth?;
 |};
 
 # Represents the client configurations supported by the authorization code and identity
@@ -89,10 +117,10 @@ public type PreRegisteredClientCredentialsConfig record {|
 # Represents a client identified by a Client ID Metadata Document and using the client
 # credentials grant, which requires client authentication.
 #
-# + clientAuth - Private key used to authenticate the client at the token endpoint
+# + clientAuth - Key or certificate used to authenticate the client at the token endpoint
 public type CimdClientCredentialsConfig record {|
     *CimdClientConfig;
-    PrivateKeyJwtConfig clientAuth;
+    CimdClientAuth clientAuth;
 |};
 
 # Represents the client configurations supported by the client credentials grant.
@@ -273,6 +301,8 @@ type ProtectedResourceMetadata record {
 # the RFC 9207 `iss` parameter
 # + authorization_grant_profiles_supported - Authorization grant profiles implemented by a
 # Resource Authorization Server
+# + mtls_endpoint_aliases - Endpoints a client using mutual TLS uses in preference to the
+# conventional ones (RFC 8705 section 5)
 type AuthorizationServerMetadata record {
     string issuer;
     string authorization_endpoint?;
@@ -286,6 +316,14 @@ type AuthorizationServerMetadata record {
     string[] code_challenge_methods_supported?;
     boolean authorization_response_iss_parameter_supported?;
     string[] authorization_grant_profiles_supported?;
+    MtlsEndpointAliases mtls_endpoint_aliases?;
+};
+
+# Represents the `mtls_endpoint_aliases` authorization server metadata (RFC 8705 section 5).
+#
+# + token_endpoint - Token endpoint to use when authenticating with mutual TLS
+type MtlsEndpointAliases record {
+    string token_endpoint?;
 };
 
 // Minimal issuer metadata required by discovery.
@@ -302,6 +340,7 @@ type IdentityProviderMetadata record {
     string[] token_endpoint_auth_methods_supported?;
     string[] token_endpoint_auth_signing_alg_values_supported?;
     string[] identity_chaining_requested_token_types_supported?;
+    MtlsEndpointAliases mtls_endpoint_aliases?;
 };
 
 # Represents a successful response from the token endpoint.

@@ -37,7 +37,7 @@ const decimal CLIENT_ASSERTION_EXPIRY = 300;
 isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetadata metadata,
         string clientId, map<string> form, readonly & AuthHttpConfig config)
         returns TokenResponse|Error {
-    string tokenEndpoint = metadata.token_endpoint;
+    string tokenEndpoint = selectTokenEndpoint(clientAuth, metadata);
     json payload = check postTokenRequest(clientAuth, clientId, tokenEndpoint, form, config);
     TokenResponse|error tokenResponse = payload.cloneWithType();
     if tokenResponse is error {
@@ -63,6 +63,9 @@ isolated function requestToken(ClientAuth? clientAuth, AuthorizationServerMetada
 // Posts an authenticated token request and returns its successful JSON body.
 isolated function postTokenRequest(ClientAuth? clientAuth, string clientId, string tokenEndpoint,
         map<string> form, readonly & AuthHttpConfig config) returns json|Error {
+    readonly & AuthHttpConfig tokenConfig = clientAuth is MutualTlsConfig
+        ? withClientCertificate(config, clientAuth)
+        : config;
     map<string> params = form.clone();
     map<string|string[]> headers = {
         [CONTENT_TYPE_HEADER]: "application/x-www-form-urlencoded",
@@ -73,7 +76,7 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId, stri
 
     string body = check encodeForm(params);
     [string, string] [origin, path] = check splitUrl(tokenEndpoint);
-    http:Client tokenClient = check createAuthClient(origin, config);
+    http:Client tokenClient = check createAuthClient(origin, tokenConfig);
     http:Response|error response = tokenClient->post(path, body, headers);
     if response is error {
         return error OAuthTokenError(string `Request to token endpoint '${tokenEndpoint}' failed: ${response.message()}`,
@@ -89,6 +92,39 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId, stri
             statusCode = response.statusCode);
     }
     return payload;
+}
+
+# Selects the token endpoint to call. A client using mutual TLS must use the
+# `mtls_endpoint_aliases` entry when one is published (RFC 8705 section 5).
+#
+# + clientAuth - How the client authenticates
+# + metadata - Validated authorization server or Identity Provider metadata
+# + return - The token endpoint URL
+isolated function selectTokenEndpoint(ClientAuth? clientAuth,
+        AuthorizationServerMetadata|IdentityProviderMetadata metadata) returns string {
+    if clientAuth is MutualTlsConfig {
+        string? alias = metadata?.mtls_endpoint_aliases?.token_endpoint;
+        if alias is string {
+            return alias;
+        }
+    }
+    return metadata.token_endpoint;
+}
+
+# Adds the client certificate to the HTTP settings of a token request. Other TLS settings,
+# such as the trust store, are kept.
+#
+# + config - HTTP settings for authorization requests
+# + clientAuth - Mutual TLS client authentication
+# + return - HTTP settings that present the client certificate
+isolated function withClientCertificate(readonly & AuthHttpConfig config, MutualTlsConfig clientAuth)
+        returns readonly & AuthHttpConfig {
+    http:ClientSecureSocket? configured = config?.secureSocket;
+    http:ClientSecureSocket secureSocket = configured is () ? {} : {...configured};
+    secureSocket.key = clientAuth.key;
+    AuthHttpConfig tokenConfig = {...config};
+    tokenConfig.secureSocket = secureSocket;
+    return tokenConfig.cloneReadOnly();
 }
 
 // Maps a token endpoint error response (RFC 6749 section 5.2) to a typed error. The response
@@ -148,6 +184,8 @@ isolated function applyClientAuthentication(ClientAuth? clientAuth, string clien
         form["client_assertion"] = check buildClientAssertion(clientAuth, clientId, tokenEndpoint);
         return;
     }
+    // A public client, or a mutual TLS client whose certificate is presented in the TLS
+    // handshake; RFC 8705 section 2 requires `client_id` on every such request.
     form["client_id"] = clientId;
 }
 

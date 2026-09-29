@@ -186,7 +186,7 @@ type TokenExchangeRequest record {|
 // Performs an RFC 8693 exchange and validates the returned token type.
 isolated function requestTokenExchange(IdentityProvider idp, TokenExchangeRequest request)
         returns TokenExchangeResponse|Error {
-    string tokenEndpoint = idp.metadata.token_endpoint;
+    string tokenEndpoint = selectTokenEndpoint(idp.clientAuth, idp.metadata);
     json payload = check postTokenRequest(idp.clientAuth, idp.clientId, tokenEndpoint,
             buildTokenExchangeForm(request), idp.httpConfig);
     return parseTokenExchangeResponse(payload, request.requestedTokenType, tokenEndpoint);
