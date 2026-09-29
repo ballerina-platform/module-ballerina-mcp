@@ -84,14 +84,13 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId,
     string body = check encodeForm(params);
     [string, string] [origin, path] = check splitUrl(tokenEndpoint);
     http:Client tokenClient = check createAuthClient(origin, tokenConfig);
-    map<string> sanitizedParameters = sanitizedTokenParameters(params);
     notifyClientObserver(observer, {
         eventType: HTTP_REQUEST,
         eventTarget,
         eventUrl: tokenEndpoint,
         httpMethod: "POST",
         eventHeaders: sanitizedEventHeaders(headers),
-        eventBody: sanitizedParameters.toJsonString(),
+        eventBody: check sanitizedTokenRequestBody(params),
         eventMessage: tokenRequestEventMessage(clientAuth, tokenEndpoint, metadata)
     });
     http:Response|error response = tokenClient->post(path, body, headers);
@@ -112,10 +111,22 @@ isolated function postTokenRequest(ClientAuth? clientAuth, string clientId,
         eventUrl: tokenEndpoint,
         httpMethod: "POST",
         statusCode: response.statusCode,
-        eventHeaders: sanitizedResponseHeaders(response),
-        eventMessage: "OAuth token response body redacted"
+        eventHeaders: sanitizedResponseHeaders(response)
     });
-    json|error payload = response.getJsonPayload();
+    string|error responseText = response.getTextPayload();
+    json|error payload = responseText is string ? responseText.fromJsonString() : responseText;
+    string? responseBody = tokenResponseEventBody(payload, responseText, response.statusCode);
+    if responseBody is string {
+        notifyClientObserver(observer, {
+            eventType: HTTP_BODY,
+            eventTarget,
+            eventUrl: tokenEndpoint,
+            httpMethod: "POST",
+            statusCode: response.statusCode,
+            eventBody: responseBody,
+            eventMessage: "OAuth token response, tokens redacted"
+        });
+    }
     if response.statusCode != http:STATUS_OK {
         return buildOAuthTokenError(tokenEndpoint, response.statusCode, payload);
     }
