@@ -12,7 +12,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/lang.regexp;
 import ballerina/test;
+import ballerina/url;
 
 isolated class RecordingObserver {
     *ClientObserver;
@@ -58,6 +60,19 @@ function countEvents((readonly & ClientEvent)[] eventList, ClientEventType event
         }
     }
     return eventCount;
+}
+
+// Decodes a recorded `application/x-www-form-urlencoded` body.
+function formParameters(string body) returns map<string>|error {
+    map<string> parameters = {};
+    foreach string pair in re `&`.split(body) {
+        int? separator = pair.indexOf("=");
+        if separator is int {
+            string value = regexp:replaceAll(re `\+`, pair.substring(separator + 1), " ");
+            parameters[pair.substring(0, separator)] = check url:decode(value, "UTF-8");
+        }
+    }
+    return parameters;
 }
 
 function bodyContains((readonly & ClientEvent)[] eventList, string expectedText) returns boolean {
@@ -198,9 +213,9 @@ function testTokenRequestEventDescribesMutualTls() returns error? {
         string message = requestEvent.eventMessage ?: "";
         test:assertTrue(message.includes("'self_signed_tls_client_auth'"));
         test:assertTrue(message.includes("'mtls_endpoint_aliases'"));
-        string requestBody = requestEvent.eventBody ?: "";
-        test:assertTrue(requestBody.includes(MTLS_CLIENT_ID));
-        test:assertFalse(requestBody.includes("client_assertion"));
+        map<string> requestParameters = check formParameters(requestEvent.eventBody ?: "");
+        test:assertEquals(requestParameters["client_id"], MTLS_CLIENT_ID);
+        test:assertFalse(requestParameters.hasKey("client_assertion"));
     }
     test:assertEquals(tokenRequestEventMessage((), PLAIN_TOKEN_ENDPOINT,
             mutualTlsMetadata(PLAIN_TOKEN_ENDPOINT, MTLS_TOKEN_ENDPOINT)), "OAuth token request");
@@ -236,4 +251,43 @@ function testAuthorizationFailureEmitsClientError() returns error? {
     test:assertEquals(lastEvent.eventType, CLIENT_ERROR);
     test:assertEquals(lastEvent.eventTarget, AUTHORIZATION_SERVER);
     test:assertTrue((lastEvent.eventMessage ?: "").includes("does not use HTTPS"));
+}
+
+@test:Config {}
+function testTokenRequestBodyIsFormEncodedWithRedactedCredentials() returns error? {
+    string body = check sanitizedTokenRequestBody({
+        "grant_type": "authorization_code",
+        "code": "secret-code",
+        "redirect_uri": "https://client.example.com/callback"
+    });
+    test:assertEquals(body, "grant_type=authorization_code&code=[REDACTED]&" +
+        "redirect_uri=https%3A%2F%2Fclient.example.com%2Fcallback");
+}
+
+@test:Config {}
+function testTokenResponseTokensAreRedacted() {
+    test:assertEquals(sanitizedTokenResponse({
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "ID_Token": "id",
+        "token_type": "Bearer",
+        "expires_in": 300,
+        "scope": "files:read"
+    }), {
+        "access_token": REDACTED_VALUE,
+        "refresh_token": REDACTED_VALUE,
+        "ID_Token": REDACTED_VALUE,
+        "token_type": "Bearer",
+        "expires_in": 300,
+        "scope": "files:read"
+    });
+}
+
+@test:Config {}
+function testNonJsonTokenResponseBodiesAreReportedOnlyForErrors() {
+    string text = "<html>token endpoint unavailable</html>";
+    json|error payload = text.fromJsonString();
+    test:assertEquals(tokenResponseEventBody(payload, text, 503), text);
+    test:assertTrue(tokenResponseEventBody(payload, text, 200) is ());
+    test:assertEquals(tokenResponseEventBody({"error": "invalid_grant"}, "", 400), "{\"error\":\"invalid_grant\"}");
 }

@@ -50,9 +50,9 @@ public enum ClientEventType {
 
 # A structured event emitted while an MCP client communicates with an MCP server, an
 # authorization server, or an Identity Provider. Authorization headers, cookies, client
-# credentials, authorization codes, refresh tokens, access tokens, client assertions, PKCE
-# verifiers, token exchange subject and actor tokens, and ID-JAG assertions are redacted before
-# an event is emitted.
+# credentials, authorization codes, refresh tokens, access tokens, ID tokens, client assertions,
+# PKCE verifiers, token exchange subject and actor tokens, and ID-JAG assertions are redacted
+# before an event is emitted.
 #
 # + eventType - Kind of client activity
 # + eventTarget - System involved in the activity
@@ -141,4 +141,57 @@ isolated function sanitizedTokenParameters(map<string> tokenParameters) returns 
         }
     }
     return sanitizedParameters;
+}
+
+# Encodes token request parameters as the `application/x-www-form-urlencoded` body that is sent,
+# with credentials redacted. The redaction marker is left unencoded so it stays readable.
+#
+# + tokenParameters - Token request parameters, including client authentication parameters
+# + return - The sanitized form body, or an `OAuthTokenError` if a value could not be encoded
+isolated function sanitizedTokenRequestBody(map<string> tokenParameters) returns string|Error {
+    string[] pairs = [];
+    foreach var [parameterName, parameterValue] in sanitizedTokenParameters(tokenParameters).entries() {
+        string encodedValue = parameterValue == REDACTED_VALUE ? parameterValue : check encodeValue(parameterValue);
+        pairs.push(parameterName + "=" + encodedValue);
+    }
+    return string:'join("&", ...pairs);
+}
+
+# Redacts the tokens in a token endpoint response and keeps the rest, such as `token_type`,
+# `issued_token_type`, `expires_in`, `scope`, and error details. For a token exchange,
+# `access_token` carries the issued token, such as an ID-JAG.
+#
+# + tokenResponse - Token endpoint response object
+# + return - The response with token values redacted
+isolated function sanitizedTokenResponse(map<json> tokenResponse) returns map<json> {
+    map<json> sanitizedResponse = {};
+    foreach var [fieldName, fieldValue] in tokenResponse.entries() {
+        string normalizedName = fieldName.toLowerAscii();
+        if normalizedName == "access_token" || normalizedName == "refresh_token" ||
+                normalizedName == "id_token" {
+            sanitizedResponse[fieldName] = REDACTED_VALUE;
+        } else {
+            sanitizedResponse[fieldName] = fieldValue.clone();
+        }
+    }
+    return sanitizedResponse;
+}
+
+# Returns the token endpoint response body to report to observers. JSON objects are reported
+# with their tokens redacted. Other bodies are reported only for error responses, which carry
+# no tokens.
+#
+# + payload - Response body parsed as JSON
+# + responseText - Response body as text
+# + statusCode - Response status
+# + return - The body to report, or `()` when it is not reported
+isolated function tokenResponseEventBody(json|error payload, string|error responseText, int statusCode)
+        returns string? {
+    if payload is map<json> {
+        return sanitizedTokenResponse(payload).toJsonString();
+    }
+    if statusCode != http:STATUS_OK && responseText is string && responseText != "" {
+        return responseText;
+    }
+    return ();
 }
