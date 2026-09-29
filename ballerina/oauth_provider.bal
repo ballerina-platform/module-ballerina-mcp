@@ -310,13 +310,17 @@ isolated class ClientOAuthProvider {
                 return error OAuthAuthorizationError(
                     "The identity assertion provider returned an empty ID-JAG.");
             }
+            // Only scopes the ID-JAG grants are requested (RFC 7521 section 4.1). Without a
+            // readable `scope` claim, `scope` is omitted and the Resource AS applies the ID-JAG.
+            string[]? grantedByAssertion = limitToAssertionScopes(scopes, idJag);
             TokenResponse response = check requestIdentityAssertionAccessToken(idJag,
                     context.clientId, grantClientAuth(grant), context.metadata,
-                    context.resourceUri, scopes, self.clientConfig);
-            // A readable ID-JAG narrows the fallback used when the response omits `scope`;
-            // opaque assertions remain untouched. Ignore any Resource AS refresh token so
-            // renewal always obtains a fresh ID-JAG.
-            self.tokens.update(response, limitToAssertionScopes(scopes, idJag), DISCARD_REFRESH_TOKEN);
+                    context.resourceUri, grantedByAssertion ?: [], self.clientConfig);
+            // The same scopes are recorded when the response omits `scope`. Without a readable
+            // claim, the requested scopes are kept, so renewal and step-up ask the IdP for them
+            // again. Ignore any Resource AS refresh token so renewal always obtains a fresh
+            // ID-JAG.
+            self.tokens.update(response, grantedByAssertion ?: scopes, DISCARD_REFRESH_TOKEN);
             return;
         }
 
