@@ -276,19 +276,22 @@ isolated function discoverAuthorizationServerMetadata(string issuer,
 isolated function discoverIdentityProviderMetadata(string issuer,
         readonly & AuthHttpConfig config = {}, ClientObserver? observer = ())
         returns IdentityProviderMetadata|Error {
-    IssuerMetadata metadata = check discoverIssuerMetadata(issuer, IdentityProviderMetadata, config, observer);
+    IssuerMetadata metadata = check discoverIssuerMetadata(issuer, IdentityProviderMetadata, config, observer,
+            IDENTITY_PROVIDER);
     // The value was converted to `IdentityProviderMetadata`, so the cast cannot fail.
     return <IdentityProviderMetadata>metadata;
 }
 
 // Retrieves and converts issuer metadata from the RFC 8414 and OpenID Connect locations.
 // RFC 8414 requires exact issuer matching; a mismatch fails without trying another candidate.
+// Events are reported against `eventTarget`.
 isolated function discoverIssuerMetadata(string issuer, typedesc<IssuerMetadata> metadataType,
-        readonly & AuthHttpConfig config, ClientObserver? observer) returns IssuerMetadata|Error {
+        readonly & AuthHttpConfig config, ClientObserver? observer,
+        ClientEventTarget eventTarget = AUTHORIZATION_SERVER) returns IssuerMetadata|Error {
     string[] candidates = check buildAuthorizationServerMetadataUrls(issuer);
     Error? lastError = ();
     foreach string candidate in candidates {
-        json|Error payload = fetchJson(candidate, config, observer);
+        json|Error payload = fetchJson(candidate, config, observer, eventTarget);
         if payload is Error {
             lastError = payload;
             continue;
