@@ -266,8 +266,9 @@ function testValidateAdvertisedClientAuthentication() {
     };
     test:assertTrue(validateGrantAndClientAuthSupported(clientCredentialsGrant(privateKeyJwt),
                     serverMetadata(["private_key_jwt"], ["RS256"])) is ());
+    // Without advertised signing algorithms, the configured algorithm is used.
     test:assertTrue(validateGrantAndClientAuthSupported(clientCredentialsGrant(privateKeyJwt),
-                    serverMetadata(["private_key_jwt"], ())) is Error);
+                    serverMetadata(["private_key_jwt"], ())) is ());
     test:assertTrue(validateGrantAndClientAuthSupported(clientCredentialsGrant(privateKeyJwt),
                     serverMetadata(["private_key_jwt"], ["RS512"])) is Error);
 
@@ -279,9 +280,9 @@ function testValidateAdvertisedClientAuthentication() {
     defaultGrants.grant_types_supported = ();
     test:assertTrue(validateGrantAndClientAuthSupported(clientCredentialsGrant(), defaultGrants) is Error);
 
-    AuthorizationServerMetadata malformedJwtMetadata = serverMetadata(
+    AuthorizationServerMetadata noJwtAlgorithms = serverMetadata(
         [CLIENT_SECRET_BASIC, "private_key_jwt"], ());
-    test:assertTrue(validateGrantAndClientAuthSupported(clientCredentialsGrant(), malformedJwtMetadata) is Error);
+    test:assertTrue(validateGrantAndClientAuthSupported(clientCredentialsGrant(), noJwtAlgorithms) is ());
 }
 
 @test:Config {}
