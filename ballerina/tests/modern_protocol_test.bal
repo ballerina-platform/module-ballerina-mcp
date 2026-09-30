@@ -289,10 +289,8 @@ function testRegularServicesProduceRawStructuredOutputOnlyForModernRequests() re
 @test:Config {}
 function testModernResultDiscriminationAndCorrelation() {
     WireResponse missingTag = {jsonrpc: JSONRPC_VERSION, id: 10, result: {"content": []}};
-    Result|ClientError defaultedTag = protocolMessageResult(missingTag, 10, true, 200);
-    test:assertTrue(defaultedTag is Result && defaultedTag["resultType"] == "complete");
-    Result|ClientError legacyResult = protocolMessageResult(missingTag, 10, false, 200);
-    test:assertTrue(legacyResult is Result && !legacyResult.hasKey("resultType"));
+    test:assertTrue(protocolMessageResult(missingTag, 10, true, 200) is ResponseParsingError);
+    test:assertTrue(protocolMessageResult(missingTag, 10, false, 200) is Result);
     WireResponse completeResponse = {jsonrpc: JSONRPC_VERSION, id: 11, result: {"resultType": "complete", "content": []}};
     test:assertTrue(protocolMessageResult(completeResponse, 10, true, 200) is ResponseParsingError);
     WireResponse unknownTag = {jsonrpc: JSONRPC_VERSION, id: 10, result: {"resultType": "unknown", "content": []}};
