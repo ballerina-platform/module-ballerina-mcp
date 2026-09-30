@@ -127,8 +127,11 @@ isolated function protocolMessageResult(WireMessage messageValue, RequestId requ
     }
     Result resultValue = messageValue.result;
     anydata resultType = resultValue["resultType"];
-    if modernResponse && resultType !is string {
-        return error ResponseParsingError("Modern result is missing required resultType");
+    if modernResponse && resultType is () {
+        // Servers must send resultType, but clients treat an absent one as complete.
+        resultValue = {...resultValue};
+        resultValue.resultType = "complete";
+        resultType = "complete";
     }
     if resultType != () && resultType != "complete" && resultType != "input_required" {
         return error ResponseParsingError("Unsupported resultType");

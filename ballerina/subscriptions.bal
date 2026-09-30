@@ -158,7 +158,7 @@ isolated class ClientSubscriptionStream {
                     return error SseEventStreamError("Subscription ended before acknowledgment");
                 }
             }
-            if messageValue.id != self.subscriptionId || messageValue.result["resultType"] != "complete" {
+            if messageValue.id != self.subscriptionId || (messageValue.result["resultType"] ?: "complete") != "complete" {
                 return error SseEventStreamError("Invalid subscription completion response");
             }
             lock {

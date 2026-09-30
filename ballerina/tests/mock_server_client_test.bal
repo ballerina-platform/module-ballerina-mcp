@@ -43,14 +43,14 @@ isolated function nextMockCall(string scenario) returns int {
 }
 
 isolated function mockDiscoverResult(RequestId requestId, string[] supportedVersions = [MODERN_PROTOCOL_VERSION],
-        boolean includeCacheHints = true, string? instructions = ()) returns http:Response {
+        boolean includeWireDefaults = true, string? instructions = ()) returns http:Response {
     map<json> resultValue = {
-        "resultType": "complete",
         "supportedVersions": supportedVersions,
         "capabilities": {"tools": {"listChanged": false}},
         "_meta": {[SERVER_INFO_META_KEY]: {"name": "mock", "version": "1"}}
     };
-    if includeCacheHints {
+    if includeWireDefaults {
+        resultValue["resultType"] = "complete";
         resultValue["ttlMs"] = 0;
         resultValue["cacheScope"] = "private";
     }
@@ -61,9 +61,10 @@ isolated function mockDiscoverResult(RequestId requestId, string[] supportedVers
 }
 
 isolated function mockToolListResult(RequestId requestId, json tools, json? nextCursor = (),
-        boolean includeCacheHints = true) returns http:Response {
-    map<json> resultValue = {"resultType": "complete", "tools": tools};
-    if includeCacheHints {
+        boolean includeWireDefaults = true) returns http:Response {
+    map<json> resultValue = {"tools": tools};
+    if includeWireDefaults {
+        resultValue["resultType"] = "complete";
         resultValue["ttlMs"] = 0;
         resultValue["cacheScope"] = "private";
     }
@@ -143,8 +144,8 @@ service /mock on new http:Listener(3210) {
 
         if method == "server/discover" {
             match scenario {
-                "noCacheHints" => {
-                    return mockDiscoverResult(requestId, includeCacheHints = false);
+                "noWireDefaults" => {
+                    return mockDiscoverResult(requestId, includeWireDefaults = false);
                 }
                 "legacyOnly" => {
                     return mockDiscoverResult(requestId, [LATEST_LEGACY_PROTOCOL_VERSION]);
@@ -301,8 +302,8 @@ service /mock on new http:Listener(3210) {
                         string `{"jsonrpc":"2.0","id":${requestId.toString()},"result":{"tools":[]}}`
                     ]);
                 }
-                "noToolListCacheHints" => {
-                    return mockToolListResult(requestId, [], includeCacheHints = false);
+                "noWireDefaults" => {
+                    return mockToolListResult(requestId, [], includeWireDefaults = false);
                 }
                 "malformedToolList" => {
                     return mockToolListResult(requestId, "not-an-array");
@@ -465,16 +466,29 @@ function testClientInitRejectsInvalidConfiguration() {
 
 @test:Config {}
 function testModernClientRejectsInvalidDiscovery() returns error? {
-    StreamableHttpClient missingHints = check new (mockUrl("noCacheHints"), protocolMode = "modern");
-    var missingHintsResult = missingHints->connect();
-    test:assertTrue(missingHintsResult is ResponseParsingError);
-
     StreamableHttpClient legacyOnly = check new (mockUrl("legacyOnly"), protocolMode = "modern");
     var legacyOnlyResult = legacyOnly->connect();
     test:assertTrue(legacyOnlyResult is ProtocolVersionError);
     if legacyOnlyResult is ProtocolVersionError {
         test:assertTrue(legacyOnlyResult.message().includes("does not support the modern protocol version"));
     }
+}
+
+// resultType, ttlMs and cacheScope are required on the wire, but a server that omits them still speaks
+// the modern protocol, so auto mode must not fall back to initialize.
+@test:Config {}
+function testAutoClientStaysModernWithoutWireDefaults() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("noWireDefaults"), protocolMode = "auto");
+    ConnectionInfo connection = check mockClient->connect();
+    test:assertEquals(connection.protocolVersion, MODERN_PROTOCOL_VERSION);
+
+    DiscoverResult discovered = check mockClient->discover();
+    test:assertEquals(discovered.ttlMs, 0);
+    test:assertEquals(discovered.cacheScope, "private");
+
+    ListToolsResult toolList = check mockClient->listTools();
+    test:assertEquals(toolList.tools, []);
+    check mockClient->close();
 }
 
 @test:Config {}
@@ -528,14 +542,6 @@ function testModernClientSkipsNotificationsInSseResponses() returns error? {
 
 @test:Config {}
 function testModernClientRejectsInvalidToolListResults() returns error? {
-    StreamableHttpClient missingHints = check new (mockUrl("noToolListCacheHints"), protocolMode = "modern");
-    _ = check missingHints->connect();
-    var missingHintsResult = missingHints->listTools();
-    test:assertTrue(missingHintsResult is ListToolsError);
-    if missingHintsResult is ListToolsError {
-        test:assertEquals(missingHintsResult.message(), "Invalid modern tools/list result");
-    }
-
     StreamableHttpClient malformed = check new (mockUrl("malformedToolList"), protocolMode = "modern");
     _ = check malformed->connect();
     var malformedResult = malformed->listTools();

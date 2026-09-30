@@ -223,8 +223,7 @@ public distinct isolated client class StreamableHttpClient {
             );
         }
         Result wireResult = check self.sendModernRequest(REQUEST_LIST_TOOLS, listParams, headers);
-        if wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
-                !wireResult.hasKey("cacheScope") {
+        if wireResult["resultType"] != "complete" {
             return error ListToolsError("Invalid modern tools/list result");
         }
         ListToolsResult|error listResult = applicationResult(wireResult, preserveCacheHints = true).cloneWithType();
@@ -524,8 +523,8 @@ public distinct isolated client class StreamableHttpClient {
     private isolated function discoverModern(map<string|string[]> headers) returns DiscoverResult|ClientError {
         Result wireResult = check self.sendModernRequest("server/discover", {}, headers);
         DiscoverResult|error discovery = applicationResult(wireResult, preserveCacheHints = true).cloneWithType();
-        if discovery is error || wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
-                !wireResult.hasKey("cacheScope") {
+        // Missing cache hints take the record defaults: ttlMs 0 and cacheScope private.
+        if discovery is error || wireResult["resultType"] != "complete" {
             return error ResponseParsingError("Invalid discovery result");
         }
         return discovery;
