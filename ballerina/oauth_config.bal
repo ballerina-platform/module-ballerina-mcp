@@ -230,16 +230,10 @@ isolated function validateClientAuthSupported(ClientAuth? clientAuth,
             string `${string:'join(", ", ...supported)}.`);
     }
     string[]? algorithms = metadata.token_endpoint_auth_signing_alg_values_supported;
-    // RFC 8414 section 2 requires this metadata whenever either JWT client
-    // authentication method is advertised, even when the current client uses a
-    // different authentication method.
-    if (supported.indexOf(METHOD_PRIVATE_KEY_JWT) is int ||
-            supported.indexOf("client_secret_jwt") is int) &&
-            (algorithms is () || algorithms.length() == 0) {
-        return error OAuthConfigError(string `Authorization server '${metadata.issuer}' advertises ` +
-            string `JWT client authentication without any client assertion signing algorithms.`);
-    }
-    if clientAuth is PrivateKeyJwtConfig && algorithms is string[] {
+    // RFC 8414 section 2 requires this metadata when JWT client authentication is advertised,
+    // but some servers omit it. Without it, the configured algorithm is used and the token
+    // endpoint decides.
+    if clientAuth is PrivateKeyJwtConfig && algorithms is string[] && algorithms.length() > 0 {
         string configuredAlgorithm = clientAuth.signatureConfig.algorithm;
         if algorithms.indexOf(configuredAlgorithm) is () {
             return error OAuthConfigError(string `Authorization server '${metadata.issuer}' does not ` +

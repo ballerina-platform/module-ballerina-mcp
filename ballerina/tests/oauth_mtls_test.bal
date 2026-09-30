@@ -187,7 +187,7 @@ function testValidateAdvertisedMutualTls() {
                     selfSigned) is ());
     test:assertTrue(validateGrantAndClientAuthSupported(
                     clientCredentialsGrant(mutualTlsAuth(authMethod = TLS_CLIENT_AUTH)), selfSigned) is Error);
-    // Only JWT client authentication requires advertised signing algorithms.
+    // Advertised JWT client authentication does not affect a mutual TLS client.
     test:assertTrue(validateGrantAndClientAuthSupported(clientCredentialsGrant(mutualTlsAuth()),
                     serverMetadata(["self_signed_tls_client_auth", "private_key_jwt"], ["RS256"])) is ());
     PrivateKeyJwtConfig privateKeyJwt = {
