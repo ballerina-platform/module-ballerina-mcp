@@ -334,10 +334,10 @@ isolated class StreamableHttpClientTransport {
     }
 
     isolated function sendProtocolRequest(JsonRpcRequest requestMessage, map<string|string[]> additionalHeaders,
-            map<string> parameterHeaders = {}) returns Result|ClientError {
+            map<string> parameterHeaders = {}, boolean requireResultType = true) returns Result|ClientError {
         map<string|string[]> requestHeaders = check prepareProtocolRequestHeaders(requestMessage, additionalHeaders, parameterHeaders);
         http:Response httpResponse = check self.execute(POST, requestHeaders, requestMessage);
-        return readProtocolResponse(httpResponse, requestMessage.id);
+        return readProtocolResponse(httpResponse, requestMessage.id, requireResultType);
     }
 
     isolated function openProtocolSubscription(JsonRpcRequest requestMessage, SubscriptionFilter requestedFilter,

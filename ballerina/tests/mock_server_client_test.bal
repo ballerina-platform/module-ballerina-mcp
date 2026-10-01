@@ -43,14 +43,14 @@ isolated function nextMockCall(string scenario) returns int {
 }
 
 isolated function mockDiscoverResult(RequestId requestId, string[] supportedVersions = [MODERN_PROTOCOL_VERSION],
-        boolean includeCacheHints = true, string? instructions = ()) returns http:Response {
+        boolean includeWireDefaults = true, string? instructions = ()) returns http:Response {
     map<json> resultValue = {
-        "resultType": "complete",
         "supportedVersions": supportedVersions,
         "capabilities": {"tools": {"listChanged": false}},
         "_meta": {[SERVER_INFO_META_KEY]: {"name": "mock", "version": "1"}}
     };
-    if includeCacheHints {
+    if includeWireDefaults {
+        resultValue["resultType"] = "complete";
         resultValue["ttlMs"] = 0;
         resultValue["cacheScope"] = "private";
     }
@@ -143,8 +143,8 @@ service /mock on new http:Listener(3210) {
 
         if method == "server/discover" {
             match scenario {
-                "noCacheHints" => {
-                    return mockDiscoverResult(requestId, includeCacheHints = false);
+                "noWireDefaults" => {
+                    return mockDiscoverResult(requestId, includeWireDefaults = false);
                 }
                 "legacyOnly" => {
                     return mockDiscoverResult(requestId, [LATEST_LEGACY_PROTOCOL_VERSION]);
@@ -465,16 +465,26 @@ function testClientInitRejectsInvalidConfiguration() {
 
 @test:Config {}
 function testModernClientRejectsInvalidDiscovery() returns error? {
-    StreamableHttpClient missingHints = check new (mockUrl("noCacheHints"), protocolMode = "modern");
-    var missingHintsResult = missingHints->connect();
-    test:assertTrue(missingHintsResult is ResponseParsingError);
-
     StreamableHttpClient legacyOnly = check new (mockUrl("legacyOnly"), protocolMode = "modern");
     var legacyOnlyResult = legacyOnly->connect();
     test:assertTrue(legacyOnlyResult is ProtocolVersionError);
     if legacyOnlyResult is ProtocolVersionError {
         test:assertTrue(legacyOnlyResult.message().includes("does not support the modern protocol version"));
     }
+}
+
+// resultType, ttlMs and cacheScope are required on the wire, but a discovery result that lists a modern
+// version still identifies a modern server, so auto mode must not fall back to initialize.
+@test:Config {}
+function testAutoClientStaysModernWithoutDiscoveryWireDefaults() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("noWireDefaults"), protocolMode = "auto");
+    ConnectionInfo connection = check mockClient->connect();
+    test:assertEquals(connection.protocolVersion, MODERN_PROTOCOL_VERSION);
+
+    DiscoverResult discovered = check mockClient->discover();
+    test:assertEquals(discovered.ttlMs, 0);
+    test:assertEquals(discovered.cacheScope, "private");
+    check mockClient->close();
 }
 
 @test:Config {}

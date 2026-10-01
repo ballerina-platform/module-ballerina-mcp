@@ -522,17 +522,19 @@ public distinct isolated client class StreamableHttpClient {
     }
 
     private isolated function discoverModern(map<string|string[]> headers) returns DiscoverResult|ClientError {
-        Result wireResult = check self.sendModernRequest("server/discover", {}, headers);
+        // A discovery result that omits resultType, ttlMs or cacheScope still comes from a modern server, so
+        // they default to complete, 0 and private rather than failing the probe into a legacy fallback.
+        Result wireResult = check self.sendModernRequest("server/discover", {}, headers, requireResultType = false);
         DiscoverResult|error discovery = applicationResult(wireResult, preserveCacheHints = true).cloneWithType();
-        if discovery is error || wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
-                !wireResult.hasKey("cacheScope") {
+        if discovery is error || (wireResult["resultType"] ?: "complete") != "complete" {
             return error ResponseParsingError("Invalid discovery result");
         }
         return discovery;
     }
 
     private isolated function sendModernRequest(string methodName, RequestParams requestParams,
-            map<string|string[]> headers, map<string> parameterHeaders = {}) returns Result|ClientError {
+            map<string|string[]> headers, map<string> parameterHeaders = {}, boolean requireResultType = true)
+            returns Result|ClientError {
         JsonRpcRequest requestMessage;
         lock {
             self.requestId += 1;
@@ -544,7 +546,7 @@ public distinct isolated client class StreamableHttpClient {
             wireParams._meta = requestMeta;
             requestMessage = {jsonrpc: JSONRPC_VERSION, id: self.requestId, method: methodName, params: wireParams.cloneReadOnly()};
         }
-        return self.transport.sendProtocolRequest(requestMessage, headers, parameterHeaders);
+        return self.transport.sendProtocolRequest(requestMessage, headers, parameterHeaders, requireResultType);
     }
 
     # Sends a request message to the server and returns the server's response.
