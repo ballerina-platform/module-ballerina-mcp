@@ -305,12 +305,30 @@ public type BaseMetadata record {|
 |};
 
 # Represents a sized icon that can be displayed in a user interface.
+# Icons were introduced in MCP protocol version `2025-11-25`.
+# See https://modelcontextprotocol.io/specification/2025-11-25/basic#icons
 public type Icon record {
+    # A standard URI pointing to an icon resource. May be an HTTP/HTTPS URL or a
+    # `data:` URI with base64-encoded image data. Required by the MCP specification, but kept
+    # optional for backward compatibility with the deprecated `data` field.
+    string src?;
     # The MIME type of the icon (e.g. image/png, image/jpeg, image/svg+xml, image/webp)
-    string mimeType;
+    string mimeType?;
+    # Optional array of sizes the icon supports, in WxH format (e.g. "48x48", "96x96") or "any"
+    # for scalable formats such as SVG
+    string[] sizes?;
+    # Optional theme this icon is designed for. `light` indicates the icon is designed to be used
+    # with a light background, and `dark` indicates it is designed to be used with a dark background.
+    "light"|"dark" theme?;
     # The URL or base64-encoded data of the icon
-    string data;
+    # # Deprecated
+    # This field is not part of the MCP specification. Use `src` instead.
+    @deprecated
+    string data?;
     # The size of the icon (e.g. 16, 32, 64, 128, 256)
+    # # Deprecated
+    # This field is not part of the MCP specification. Use `sizes` instead.
+    @deprecated
     int size?;
 };
 
