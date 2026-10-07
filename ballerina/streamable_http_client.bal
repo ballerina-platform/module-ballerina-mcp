@@ -259,8 +259,8 @@ public distinct isolated client class StreamableHttpClient {
         listResult.tools = listResult.tools.filter(toolInfo => toolParameterHeaders(toolInfo.inputSchema, {}) !is Error);
         if cacheMode != "bypass" {
             resultCache.put(REQUEST_LIST_TOOLS, cursor, listResult, fetchGeneration);
+            resultCache.recordToolSchemas(listResult.tools, cursor);
         }
-        resultCache.recordToolSchemas(listResult.tools, cursor);
         return listResult;
     }
 
