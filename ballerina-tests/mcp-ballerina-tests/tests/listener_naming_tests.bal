@@ -42,7 +42,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     info: {name: "transport-config-precedence-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8770) {
+isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8791) {
 
     @mcp:Tool {description: "Returns a fixed value"}
     isolated remote function echo() returns string {
@@ -51,7 +51,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
 }
 
 final http:Client rawTransportClient = check new ("http://localhost:8769");
-final http:Client rawPrecedenceClient = check new ("http://localhost:8770");
+final http:Client rawPrecedenceClient = check new ("http://localhost:8791");
 
 @test:Config
 function testHeaderBindingOnStreamableHttpListener() returns error? {
