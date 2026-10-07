@@ -43,3 +43,27 @@ service mcp:StreamableHttpAdvancedService /modern on interopListener {
         structuredContent: 42
     };
 }
+
+isolated int cachedListingCount = 0;
+
+@mcp:StreamableHttpConfig {
+    info: {name: "ballerina-cached-interop", version: "2.0.0"},
+    protocolMode: "modern",
+    cacheHints: {
+        discover: {ttlMs: 300000, cacheScope: "public"},
+        listTools: {ttlMs: 60000, cacheScope: "public"}
+    }
+}
+service mcp:StreamableHttpAdvancedService /cached on interopListener {
+    // The description changes on every listing, so a client can tell a cached list from a fresh one.
+    remote isolated function onListTools() returns mcp:ListToolsResult {
+        int listingNumber;
+        lock {
+            cachedListingCount += 1;
+            listingNumber = cachedListingCount;
+        }
+        return {tools: [{name: "listing", description: listingNumber.toString(), inputSchema: {'type: "object"}}]};
+    }
+
+    remote isolated function onCallTool(mcp:CallToolParams callParams) returns mcp:CallToolResult => {content: []};
+}
