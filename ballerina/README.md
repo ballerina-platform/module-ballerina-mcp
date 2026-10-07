@@ -336,6 +336,36 @@ The lower-level lifecycle methods are available for applications that manage dis
 - `initializeLegacy()` explicitly performs the older initialize handshake.
 - `listen()` opens modern subscriptions or the legacy GET event stream according to the negotiated connection.
 
+## Caching
+
+Modern `server/discover` and `tools/list` results carry caching hints: `ttlMs`, how long a client may treat the
+result as fresh, and `cacheScope`, whether the result may be shared between callers (`public`) or only reused for
+the same authorization context (`private`). Services default to `ttlMs: 0` and `cacheScope: "private"`, which
+disables reuse. Set hints per method in `@mcp:StreamableHttpConfig`:
+
+```ballerina
+@mcp:StreamableHttpConfig {
+    info: {name: "weather", version: "1.0.0"},
+    cacheHints: {
+        discover: {ttlMs: 300000, cacheScope: "public"},
+        listTools: {ttlMs: 60000, cacheScope: "public"}
+    }
+}
+service mcp:StreamableHttpService /mcp on mcpListener {
+    // ...
+}
+```
+
+An advanced service may also set `ttlMs` or `cacheScope` on the `ListToolsResult` returned by `onListTools`; each
+field set there takes precedence over the configured hint. Hints are only sent to modern clients.
+
+The client reuses a `tools/list` result while it is fresh, caching each page by its cursor. Each client keeps its own
+cache and represents a single authorization context: configure credentials through `auth`, and use a separate client
+for each user rather than passing different credentials as per-call headers. A `notifications/tools/list_changed`
+notification read from `listen()` drops the cached list. Pass `cacheMode = "refresh"` to `listTools()` to fetch and
+re-cache the list, or `cacheMode = "bypass"` to fetch without touching the cache. Set `resultCache = ()` in the client
+configuration to disable reuse, or adjust `maxTtlMs` and `maxEntries` in `resultCache` to bound it.
+
 ## Migrating from 1.x
 
 Version 2.0 removes deprecated transport-neutral aliases and gives Streamable HTTP concepts explicit names.

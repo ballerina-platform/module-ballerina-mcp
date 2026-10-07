@@ -49,8 +49,6 @@ public distinct isolated client class StreamableHttpClient {
     private string? negotiatedProtocolVersion = ();
     private Implementation clientInfo = {name: "MCP Client", version: "1.0.0"};
     private ClientCapabilities clientCapabilities = {};
-    private map<ToolDefinition> toolSchemas = {};
-    private map<string|string[]> schemaHeaders = {};
     private DiscoverResult? discovery = ();
 
     # Creates a new MCP client with the specified transport configuration.
@@ -65,6 +63,9 @@ public distinct isolated client class StreamableHttpClient {
     public isolated function init(string serverUrl, *StreamableHttpClientConfig config) returns ClientError? {
         if config.maxInputRounds < 0 {
             return error ClientInitializationError("maxInputRounds must be non-negative");
+        }
+        if (config.resultCache?.maxTtlMs ?: 0) < 0 || (config.resultCache?.maxEntries ?: 0) < 0 {
+            return error ClientInitializationError("resultCache limits must be non-negative");
         }
         if config.protocolMode == "modern" && config.sessionId is string {
             return error ClientInitializationError("A legacy session ID cannot be used in modern protocol mode");
@@ -200,13 +201,15 @@ public distinct isolated client class StreamableHttpClient {
         return self.getConnectionInfo();
     }
 
-    # Retrieves the list of available tools from the server.
+    # Retrieves the list of available tools from the server. A modern result is reused while its
+    # caching hints keep it fresh, unless `cacheMode` says otherwise.
     #
     # + headers - Optional headers to include with the request
     # + cursor - Optional cursor returned by a previous tools/list response
+    # + cacheMode - How this call uses the result cache
     # + return - List of available tools or a ClientError.
-    isolated remote function listTools(map<string|string[]> headers = {}, Cursor? cursor = ())
-            returns ListToolsResult|ClientError {
+    isolated remote function listTools(map<string|string[]> headers = {}, Cursor? cursor = (),
+            CacheMode cacheMode = "use") returns ListToolsResult|ClientError {
         check self.ensureConnected();
         RequestParams listParams = {};
         if cursor is Cursor {
@@ -222,7 +225,26 @@ public distinct isolated client class StreamableHttpClient {
                 string `Tool listing failed: unexpected result type '${(typeof legacyResult).toString()}' received.`
             );
         }
-        Result wireResult = check self.sendModernRequest(REQUEST_LIST_TOOLS, listParams, headers);
+        ResultCache resultCache = self.transport.cache();
+        if cacheMode == "use" {
+            Result? cachedResult = resultCache.get(REQUEST_LIST_TOOLS, cursor);
+            ListToolsResult|error cachedList = cachedResult is Result ? cachedResult.cloneWithType() : error("Cache miss");
+            if cachedList is ListToolsResult {
+                resultCache.recordToolSchemas(cachedList.tools, cursor);
+                return cachedList;
+            }
+        }
+        int fetchGeneration = resultCache.generation();
+        Result|ClientError wireResponse = self.sendModernRequest(REQUEST_LIST_TOOLS, listParams, headers);
+        if wireResponse is ClientError {
+            var rpcValue = wireResponse.detail()["rpcError"];
+            // A rejected cursor means the cached pages no longer describe one listing.
+            if cursor is Cursor && rpcValue is JsonRpcError && rpcValue.'error.code == INVALID_PARAMS {
+                resultCache.invalidate(REQUEST_LIST_TOOLS);
+            }
+            return wireResponse;
+        }
+        Result wireResult = wireResponse;
         if wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
                 !wireResult.hasKey("cacheScope") {
             return error ListToolsError("Invalid modern tools/list result");
@@ -231,21 +253,14 @@ public distinct isolated client class StreamableHttpClient {
         if listResult is error {
             return error ListToolsError("Invalid modern tools/list result: " + listResult.message(), listResult);
         }
-        ToolDefinition[] acceptedTools = [];
-        map<ToolDefinition> toolSchemas = {};
-        foreach ToolDefinition toolInfo in listResult.tools {
-            var validationResult = toolParameterHeaders(toolInfo.inputSchema, {});
-            if validationResult is Error {
-                continue;
-            }
-            acceptedTools.push(toolInfo);
-            toolSchemas[toolInfo.name] = toolInfo;
+        if (listResult.ttlMs ?: 0) < 0 {
+            listResult.ttlMs = 0;
         }
-        listResult.tools = acceptedTools;
-        lock {
-            self.toolSchemas = toolSchemas.cloneReadOnly();
-            self.schemaHeaders = headers.cloneReadOnly();
+        listResult.tools = listResult.tools.filter(toolInfo => toolParameterHeaders(toolInfo.inputSchema, {}) !is Error);
+        if cacheMode != "bypass" {
+            resultCache.put(REQUEST_LIST_TOOLS, cursor, listResult, fetchGeneration);
         }
+        resultCache.recordToolSchemas(listResult.tools, cursor);
         return listResult;
     }
 
@@ -323,8 +338,7 @@ public distinct isolated client class StreamableHttpClient {
                 self.negotiatedProtocolVersion = ();
                 self.modernSelected = false;
                 self.discovery = ();
-                self.toolSchemas = {};
-                self.schemaHeaders = {};
+                self.transport.cache().clear();
                 return subscriptionError;
             } on fail error e {
                 return error ClientError(string `Failed to disconnect from server: ${e.message()}`, e);
@@ -420,12 +434,7 @@ public distinct isolated client class StreamableHttpClient {
         if params.task !is () {
             return error ToolCallError("Legacy task parameters cannot be sent to modern servers");
         }
-        ToolDefinition? toolInfo = ();
-        lock {
-            if self.schemaHeaders == headers.cloneReadOnly() {
-                toolInfo = self.toolSchemas[params.name].cloneReadOnly();
-            }
-        }
+        ToolDefinition? toolInfo = self.transport.cache().toolSchema(params.name);
         Cursor? nextCursor = ();
         map<boolean> visitedCursors = {};
         while toolInfo is () {
@@ -456,9 +465,7 @@ public distinct isolated client class StreamableHttpClient {
         if responseValue is ClientError {
             var rpcValue = responseValue.detail()["rpcError"];
             if refreshAllowed && rpcValue is JsonRpcError && rpcValue.'error.code == HEADER_MISMATCH {
-                lock {
-                    self.toolSchemas = {};
-                }
+                self.transport.cache().invalidate(REQUEST_LIST_TOOLS);
                 return self.callModernTool(params, headers, false);
             }
             return responseValue;
