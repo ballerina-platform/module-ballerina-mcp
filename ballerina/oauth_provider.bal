@@ -296,7 +296,7 @@ isolated class ClientOAuthProvider {
                 eventType: TOKEN_ACQUIRED,
                 eventTarget: AUTHORIZATION_SERVER,
                 eventUrl: selectTokenEndpoint(grant.clientConfig.clientAuth, context.metadata),
-                eventMessage: "Client credentials token acquired"
+                eventMessage: tokenAcquiredEventMessage("Client credentials token acquired", response.access_token)
             });
             return;
         }
@@ -333,7 +333,7 @@ isolated class ClientOAuthProvider {
                 eventType: TOKEN_ACQUIRED,
                 eventTarget: AUTHORIZATION_SERVER,
                 eventUrl: selectTokenEndpoint(grantClientAuth(grant), context.metadata),
-                eventMessage: "Identity assertion token acquired"
+                eventMessage: tokenAcquiredEventMessage("Identity assertion token acquired", response.access_token)
             });
             return;
         }
@@ -349,7 +349,7 @@ isolated class ClientOAuthProvider {
                     eventType: TOKEN_ACQUIRED,
                     eventTarget: AUTHORIZATION_SERVER,
                     eventUrl: selectTokenEndpoint(grantClientAuth(grant), context.metadata),
-                    eventMessage: "Access token refreshed"
+                    eventMessage: tokenAcquiredEventMessage("Access token refreshed", refreshed.access_token)
                 });
                 return;
             }
@@ -401,7 +401,7 @@ isolated class ClientOAuthProvider {
             eventType: TOKEN_ACQUIRED,
             eventTarget: AUTHORIZATION_SERVER,
             eventUrl: selectTokenEndpoint(grantClientAuth(grant), context.metadata),
-            eventMessage: "Authorization code token acquired"
+            eventMessage: tokenAcquiredEventMessage("Authorization code token acquired", response.access_token)
         });
     }
 

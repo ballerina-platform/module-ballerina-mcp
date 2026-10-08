@@ -350,7 +350,9 @@ final mcp:StreamableHttpClient client = check new (
 Known credential-bearing headers and OAuth form parameters are replaced with `[REDACTED]`. Token requests
 are reported as their form-encoded body, and token responses with their `access_token`, `refresh_token`,
 and `id_token` values redacted, so fields such as `token_type`, `issued_token_type`, `scope`, and error
-details stay visible. MCP request and response bodies may contain application-sensitive tool
+details stay visible. When an issued access token is a JWT, the `oauth.token_acquired` event message carries
+its identifying claims (`iss`, `aud`, `client_id`, `azp`, `scope`, `jti`, `iat`, `exp`, `cnf`), read
+without verification, so the token can be matched against the authorization server's records. MCP request and response bodies may contain application-sensitive tool
 arguments and results; applications should apply their own retention and access-control policies before
 persisting events.
 

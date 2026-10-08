@@ -42,7 +42,8 @@ public enum ClientEventType {
     AUTHORIZATION_REDIRECT = "oauth.authorization_redirect",
     # The authorization callback handler returned a response.
     AUTHORIZATION_CALLBACK = "oauth.authorization_callback",
-    # A usable token was acquired or refreshed. Token values are never included.
+    # A usable token was acquired or refreshed. Token values are never included; an access
+    # token's identifying claims are, when it is a JWT.
     TOKEN_ACQUIRED = "oauth.token_acquired",
     # A client operation failed.
     CLIENT_ERROR = "client.error"
@@ -83,6 +84,31 @@ public type ClientObserver isolated object {
 };
 
 const string REDACTED_VALUE = "[REDACTED]";
+
+// Access token claims reported in token events. They identify the token in the authorization
+// server's records (`jti`) and show whom it was issued to and for, without revealing the token.
+final readonly & string[] REPORTED_ACCESS_TOKEN_CLAIMS =
+    ["iss", "aud", "client_id", "azp", "scope", "jti", "iat", "exp", "cnf"];
+
+# Appends an access token's identifying claims to a token event message. The claims are read
+# without verification and only reported. A token that is not a JWT is noted as opaque.
+#
+# + message - Event message describing how the token was acquired
+# + accessToken - Issued access token
+# + return - The event message with the token's claims
+isolated function tokenAcquiredEventMessage(string message, string accessToken) returns string {
+    map<json>? claims = unverifiedJwtClaims(accessToken);
+    if claims is () {
+        return message + "; access token is opaque";
+    }
+    map<json> reportedClaims = {};
+    foreach string claimName in REPORTED_ACCESS_TOKEN_CLAIMS {
+        if claims.hasKey(claimName) {
+            reportedClaims[claimName] = claims[claimName].clone();
+        }
+    }
+    return string `${message}; access token claims (unverified): ${reportedClaims.toJsonString()}`;
+}
 
 isolated function notifyClientObserver(ClientObserver? clientObserver, ClientEvent clientEvent) {
     if clientObserver is ClientObserver {

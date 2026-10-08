@@ -149,12 +149,10 @@ isolated function buildIdentityAssertionAccessTokenForm(string idJag, string res
     return form;
 }
 
-// Returns the requested scopes that the ID-JAG's `scope` claim grants, or `()` when the ID-JAG
-// carries no readable `scope` claim. The IdP reflects any narrowing in that claim, so it caps
-// what the Resource AS request may ask for. The unverified claim is never used to authorize
-// anything.
-isolated function limitToAssertionScopes(string[] scopes, string idJag) returns string[]? {
-    string[] parts = re `\.`.split(idJag);
+// Returns a JWT's claims without verifying it, or `()` when the value is not a JWT with a JSON
+// object payload. Callers only read or report the claims; they never authorize anything.
+isolated function unverifiedJwtClaims(string jwt) returns map<json>? {
+    string[] parts = re `\.`.split(jwt);
     if parts.length() != 3 {
         return ();
     }
@@ -168,7 +166,16 @@ isolated function limitToAssertionScopes(string[] scopes, string idJag) returns 
     }
     string|error payloadText = string:fromBytes(payloadBytes);
     json|error claims = payloadText is string ? payloadText.fromJsonString() : payloadText;
-    if claims !is map<json> {
+    return claims is map<json> ? claims : ();
+}
+
+// Returns the requested scopes that the ID-JAG's `scope` claim grants, or `()` when the ID-JAG
+// carries no readable `scope` claim. The IdP reflects any narrowing in that claim, so it caps
+// what the Resource AS request may ask for. The unverified claim is never used to authorize
+// anything.
+isolated function limitToAssertionScopes(string[] scopes, string idJag) returns string[]? {
+    map<json>? claims = unverifiedJwtClaims(idJag);
+    if claims is () {
         return ();
     }
     json assertionScope = claims["scope"];

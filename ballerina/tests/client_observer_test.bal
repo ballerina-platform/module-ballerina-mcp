@@ -284,6 +284,26 @@ function testTokenResponseTokensAreRedacted() {
 }
 
 @test:Config {}
+function testTokenAcquiredMessagesReportAccessTokenClaims() {
+    string accessToken = unsignedJwt({
+        "iss": "https://as.example",
+        "sub": "user",
+        "aud": "https://mcp.example/mcp",
+        "client_id": "https://client.example/oauth/client.json",
+        "scope": "files:read",
+        "jti": "token-1",
+        "exp": 1791500000
+    });
+    test:assertEquals(tokenAcquiredEventMessage("Authorization code token acquired", accessToken),
+        "Authorization code token acquired; access token claims (unverified): " +
+        "{\"iss\":\"https://as.example\", \"aud\":\"https://mcp.example/mcp\", " +
+        "\"client_id\":\"https://client.example/oauth/client.json\", \"scope\":\"files:read\", " +
+        "\"jti\":\"token-1\", \"exp\":1791500000}");
+    test:assertEquals(tokenAcquiredEventMessage("Access token refreshed", "opaque-token"),
+        "Access token refreshed; access token is opaque");
+}
+
+@test:Config {}
 function testNonJsonTokenResponseBodiesAreReportedOnlyForErrors() {
     string text = "<html>token endpoint unavailable</html>";
     json|error payload = text.fromJsonString();
