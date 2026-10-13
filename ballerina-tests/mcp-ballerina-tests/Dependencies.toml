@@ -306,12 +306,11 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "task"
-version = "2.11.3"
+version = "2.7.0"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
-	{org = "ballerina", name = "time"},
-	{org = "ballerina", name = "uuid"}
+	{org = "ballerina", name = "time"}
 ]
 
 [[package]]
