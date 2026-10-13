@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### Changed
+- Migrated to Ballerina Swan Lake Update 14 (`2201.14.0`), Java 25, and `ballerina/http` `2.18.0`. This fixes the `KeyNotFound` panic (`field 'http2MaxActiveStreams' not found in record type 'mcp:ListenerConfiguration'`) raised when initializing an `mcp:StreamableHttpListener` or `mcp:Listener` on Ballerina `2201.14.0`.
 - [[#9132] Updated Keywords and Reformat README for Connector Store Discoverability](https://github.com/ballerina-platform/ballerina-library/issues/9132)
 
 ### Fixed
