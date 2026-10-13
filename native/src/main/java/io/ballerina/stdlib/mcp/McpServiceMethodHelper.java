@@ -36,6 +36,7 @@ import io.ballerina.runtime.api.utils.ValueUtils;
 import io.ballerina.runtime.api.values.BArray;
 import io.ballerina.runtime.api.values.BError;
 import io.ballerina.runtime.api.values.BMap;
+import io.ballerina.runtime.api.values.BNever;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BString;
 import io.ballerina.runtime.api.values.BTypedesc;
@@ -386,6 +387,14 @@ public final class McpServiceMethodHelper {
                 BString argumentKey = fromString(paramName);
                 boolean isPresent = arguments != null && arguments.containsKey(argumentKey);
                 Object argValue = isPresent ? arguments.get(argumentKey) : null;
+
+                // 'never' is the runtime's signal to evaluate the parameter's default expression,
+                // which may call a function or reference a preceding argument. An explicitly
+                // supplied null is not an omission and falls through.
+                if (!isPresent && param.isDefault) {
+                    args[i] = BNever.getValue();
+                    continue;
+                }
 
                 // A required parameter must be present and carry a value. An explicit null is
                 // reported apart from an absent argument, so a caller can tell which to correct.
