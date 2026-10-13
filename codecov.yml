@@ -1,6 +1,13 @@
 fixes:
   - "io/ballerina/stdlib/mcp/plugin/::./compiler-plugin/src/main/java/io/ballerina/stdlib/mcp/plugin/"
   - "ballerina/mcp/**/::../ballerina/"
+  # Since Ballerina 2201.14, the module coverage report places object methods, lambdas and module-level
+  # variable initializers under synthetic packages (e.g. `ballerina/values`). Map them back to the sources.
+  - "ballerina/values/::ballerina/"
+  - "ballerina/lambdas/::ballerina/"
+  - "ballerina/global_vars/::ballerina/"
+  - "ballerina/constants/::ballerina/"
+  - "ballerina/typedescs/::ballerina/"
 
 ignore:
   - "ballerina-tests"
