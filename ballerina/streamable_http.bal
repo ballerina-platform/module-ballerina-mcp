@@ -477,6 +477,9 @@ isolated class StreamableHttpClientTransport {
                 self.protocolVersion = ();
                 return;
             } on fail error e {
+                // The session is abandoned locally either way; the server expires it on its own.
+                self.sessionId = ();
+                self.protocolVersion = ();
                 return error SessionOperationError(
                     string `Failed to terminate session: ${e.message()}`
                 );

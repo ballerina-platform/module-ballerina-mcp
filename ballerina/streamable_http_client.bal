@@ -331,20 +331,21 @@ public distinct isolated client class StreamableHttpClient {
     # + return - A `ClientError` if closure fails, or `()` on success.
     isolated remote function close() returns ClientError? {
         lock {
-            do {
-                StreamError? subscriptionError = self.transport.closeSubscriptions();
-                check self.transport.terminateSession();
-                self.serverCapabilities = ();
-                self.serverInfo = ();
-                self.connected = false;
-                self.negotiatedProtocolVersion = ();
-                self.modernSelected = false;
-                self.discovery = ();
-                self.transport.cache().clear();
-                return subscriptionError;
-            } on fail error e {
-                return error ClientError(string `Failed to disconnect from server: ${e.message()}`, e);
+            StreamError? subscriptionError = self.transport.closeSubscriptions();
+            StreamableHttpTransportError? terminationError = self.transport.terminateSession();
+            // Local state is reset even when the server could not be told, so the client can connect again.
+            self.serverCapabilities = ();
+            self.serverInfo = ();
+            self.connected = false;
+            self.negotiatedProtocolVersion = ();
+            self.modernSelected = false;
+            self.discovery = ();
+            self.transport.cache().clear();
+            if terminationError is StreamableHttpTransportError {
+                return error ClientError(string `Failed to disconnect from server: ${terminationError.message()}`,
+                        terminationError);
             }
+            return subscriptionError;
         }
     }
 
