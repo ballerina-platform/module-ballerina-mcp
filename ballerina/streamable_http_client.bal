@@ -202,7 +202,8 @@ public distinct isolated client class StreamableHttpClient {
     }
 
     # Retrieves the list of available tools from the server. A modern result is reused while its
-    # caching hints keep it fresh, unless `cacheMode` says otherwise.
+    # caching hints keep it fresh, unless `cacheMode` says otherwise. A call whose `headers` carry
+    # its own `Authorization` header always bypasses the cache.
     #
     # + headers - Optional headers to include with the request
     # + cursor - Optional cursor returned by a previous tools/list response
@@ -226,11 +227,12 @@ public distinct isolated client class StreamableHttpClient {
             );
         }
         ResultCache resultCache = self.transport.cache();
-        if cacheMode == "use" {
+        // A credential passed on one call is not the client's authorization context, so it never shares the cache.
+        CacheMode effectiveMode = hasAuthorizationHeader(headers) ? "bypass" : cacheMode;
+        if effectiveMode == "use" {
             Result? cachedResult = resultCache.get(REQUEST_LIST_TOOLS, cursor);
             ListToolsResult|error cachedList = cachedResult is Result ? cachedResult.cloneWithType() : error("Cache miss");
             if cachedList is ListToolsResult {
-                resultCache.recordToolSchemas(cachedList.tools, cursor);
                 return cachedList;
             }
         }
@@ -257,9 +259,9 @@ public distinct isolated client class StreamableHttpClient {
             listResult.ttlMs = 0;
         }
         listResult.tools = listResult.tools.filter(toolInfo => toolParameterHeaders(toolInfo.inputSchema, {}) !is Error);
-        if cacheMode != "bypass" {
+        if effectiveMode != "bypass" {
             resultCache.put(REQUEST_LIST_TOOLS, cursor, listResult, fetchGeneration);
-            resultCache.recordToolSchemas(listResult.tools, cursor);
+            resultCache.recordToolSchemas(listResult.tools, fetchGeneration);
         }
         return listResult;
     }
@@ -434,7 +436,7 @@ public distinct isolated client class StreamableHttpClient {
         if params.task !is () {
             return error ToolCallError("Legacy task parameters cannot be sent to modern servers");
         }
-        ToolDefinition? toolInfo = self.transport.cache().toolSchema(params.name);
+        ToolDefinition? toolInfo = hasAuthorizationHeader(headers) ? () : self.transport.cache().toolSchema(params.name);
         Cursor? nextCursor = ();
         map<boolean> visitedCursors = {};
         while toolInfo is () {

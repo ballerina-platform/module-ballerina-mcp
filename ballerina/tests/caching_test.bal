@@ -147,10 +147,10 @@ isolated function cacheMockHitCount(string scenario, string testId) returns int 
 }
 
 isolated function cacheMockListResult(RequestId requestId, int ttlMs, CacheScope cacheScope = "private",
-        string? nextCursor = ()) returns http:Response {
+        string? nextCursor = (), string toolName = "echo") returns http:Response {
     map<json> resultValue = {
         "resultType": "complete",
-        "tools": [{"name": "echo", "inputSchema": {"type": "object"}}],
+        "tools": [{"name": toolName, "inputSchema": {"type": "object"}}],
         "ttlMs": ttlMs,
         "cacheScope": cacheScope
     };
@@ -188,7 +188,7 @@ service /cacheMock on new http:Listener(3223) {
                 recordCacheMockHit(hitKey + ":call");
                 int callNumber = cacheMockHitCount(scenario, testId + ":call");
                 // The first call reports stale tool metadata, as a server whose tools changed would.
-                if callNumber == 1 {
+                if testId == "mismatch" && callNumber == 1 {
                     return cacheMockError(requestId, HEADER_MISMATCH, 400);
                 }
                 return mockJson({"jsonrpc": JSONRPC_VERSION, "id": requestId, "result": {"resultType": "complete", "content": []}});
@@ -220,6 +220,10 @@ service /cacheMock on new http:Listener(3223) {
                     return cacheMockListResult(requestId, 60000);
                 }
                 return cacheMockError(requestId, INVALID_PARAMS);
+            }
+            "pagedUncached" => {
+                return cursor is () ? cacheMockListResult(requestId, 0, nextCursor = "page2")
+                    : cacheMockListResult(requestId, 0, toolName = "second");
             }
         }
         return cacheMockError(requestId, METHOD_NOT_FOUND);
@@ -322,6 +326,33 @@ function testPagesAreCachedPerCursor() returns error? {
 }
 
 @test:Config {}
+function testFirstPageListingKeepsLaterPageSchemas() returns error? {
+    StreamableHttpClient pagedClient = check connectedCacheClient("pagedUncached", "schemas");
+    _ = check pagedClient->callToolOnce({name: "second"});
+    test:assertEquals(cacheMockHitCount("pagedUncached", "schemas"), 2);
+    _ = check pagedClient->listTools();
+    _ = check pagedClient->callToolOnce({name: "second"});
+    test:assertEquals(cacheMockHitCount("pagedUncached", "schemas"), 3,
+            "listing the first page again must not drop the schema learned from page 2");
+}
+
+@test:Config {}
+function testPerCallAuthorizationBypassesCache() returns error? {
+    StreamableHttpClient sharedClient = check connectedCacheClient("private", "perCallAuth");
+    _ = check sharedClient->listTools({"Authorization": "Bearer alice"});
+    _ = check sharedClient->listTools({"Authorization": "Bearer alice"});
+    test:assertEquals(cacheMockHitCount("private", "perCallAuth"), 2);
+    _ = check sharedClient->listTools();
+    _ = check sharedClient->listTools();
+    test:assertEquals(cacheMockHitCount("private", "perCallAuth"), 3, "bypassed calls must not store results");
+    _ = check sharedClient->listTools({"authorization": "Bearer bob"});
+    test:assertEquals(cacheMockHitCount("private", "perCallAuth"), 4, "a per-call credential must not read the cache");
+    _ = check sharedClient->callToolOnce({name: "echo"}, {"Authorization": "Bearer bob"});
+    test:assertEquals(cacheMockHitCount("private", "perCallAuth"), 5,
+            "a per-call credential must not use schemas listed for the client's own context");
+}
+
+@test:Config {}
 function testListChangedNotificationInvalidatesCachedList() returns error? {
     StreamableHttpClient notifiedClient = check connectedCacheClient("private", "notified");
     _ = check notifiedClient->listTools();
@@ -421,14 +452,17 @@ function testResultCacheToolSchemas() {
     ToolDefinition firstTool = {name: "first", inputSchema: {'type: "object"}};
     ToolDefinition secondTool = {name: "second", inputSchema: {'type: "object"}};
 
-    resultCache.recordToolSchemas([firstTool], ());
-    resultCache.recordToolSchemas([secondTool], "page2");
+    resultCache.recordToolSchemas([firstTool], resultCache.generation());
+    resultCache.recordToolSchemas([secondTool], resultCache.generation());
+    resultCache.recordToolSchemas([firstTool], resultCache.generation());
     test:assertEquals(resultCache.toolSchema("first"), firstTool);
-    test:assertEquals(resultCache.toolSchema("second"), secondTool);
-
-    resultCache.recordToolSchemas([secondTool], ());
-    test:assertEquals(resultCache.toolSchema("first"), (), "a first page starts a new listing");
+    test:assertEquals(resultCache.toolSchema("second"), secondTool, "recording a page must keep other pages' schemas");
 
     resultCache.invalidateFor({jsonrpc: JSONRPC_VERSION, method: "notifications/tools/list_changed"});
     test:assertEquals(resultCache.toolSchema("second"), ());
+
+    int staleGeneration = resultCache.generation();
+    resultCache.invalidate(REQUEST_LIST_TOOLS);
+    resultCache.recordToolSchemas([firstTool], staleGeneration);
+    test:assertEquals(resultCache.toolSchema("first"), (), "schemas fetched across an invalidation must not be recorded");
 }

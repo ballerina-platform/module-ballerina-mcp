@@ -135,11 +135,12 @@ isolated class ResultCache {
         }
     }
 
-    // Records the schemas of a listed page. A first page starts a new listing.
-    isolated function recordToolSchemas(ToolDefinition[] tools, Cursor? cursor) {
+    // Records the schemas of a fetched page, unless the cache was invalidated while it was in flight.
+    // Schemas are only removed by invalidate() and clear(), so other pages' schemas survive.
+    isolated function recordToolSchemas(ToolDefinition[] tools, int fetchGeneration) {
         lock {
-            if cursor is () {
-                self.toolSchemas = {};
+            if fetchGeneration != self.invalidationCount {
+                return;
             }
             foreach ToolDefinition toolInfo in tools.clone() {
                 self.toolSchemas[toolInfo.name] = toolInfo;

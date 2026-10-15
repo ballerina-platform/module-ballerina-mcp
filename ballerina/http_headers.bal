@@ -75,3 +75,6 @@ isolated function prepareProtocolRequestHeaders(JsonRpcRequest requestMessage, m
     }
     return requestHeaders;
 }
+
+isolated function hasAuthorizationHeader(map<string|string[]> headers) returns boolean =>
+    headers.keys().some(headerName => headerName.equalsIgnoreCaseAscii(AUTHORIZATION_HEADER));

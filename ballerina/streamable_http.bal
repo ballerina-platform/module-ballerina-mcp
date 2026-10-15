@@ -73,7 +73,8 @@ public type StreamableHttpClientConfig record {|
 
 # Configures how the client reuses modern results that carry caching hints. Each client keeps its own
 # cache and is treated as a single authorization context, so configure credentials through `auth`
-# rather than per-call headers, or use a separate client for each user.
+# rather than per-call headers, or use a separate client for each user. A call that passes its own
+# `Authorization` header bypasses the cache.
 public type ResultCacheConfig record {|
     # Upper bound, in milliseconds, on how long a result is treated as fresh
     int maxTtlMs = 86400000;
@@ -226,6 +227,10 @@ isolated class StreamableHttpClientTransport {
         if challenge is BearerChallenge {
             string? retryAuthorization = check self.getAuthorizationValue(challenge);
             if retryAuthorization is string {
+                // A token obtained after a challenge may carry other scopes, so the server may list other tools.
+                if retryAuthorization != authorization {
+                    self.resultCache.invalidate(REQUEST_LIST_TOOLS);
+                }
                 requestHeaders[AUTHORIZATION_HEADER] = retryAuthorization;
                 return self.dispatch(method, requestHeaders, message);
             }
