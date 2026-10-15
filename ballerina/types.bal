@@ -451,7 +451,7 @@ public type ListToolsResult record {
     # Freshness hint in milliseconds. Modern servers default this to zero.
     int ttlMs?;
     # Whether a modern response may be shared between callers.
-    "public"|"private" cacheScope?;
+    CacheScope cacheScope?;
 };
 
 # A content block that can be text, image, audio, resource link, or embedded resource.
@@ -655,6 +655,26 @@ public type ServerOptions record {|
     boolean enforceStrictCapabilities?;
 |};
 
+# Who may reuse a cached result. `public` results may be shared between callers, while `private`
+# results may only be reused for the same authorization context.
+public type CacheScope "public"|"private";
+
+# Caching hint for a cacheable result. Unset fields fall back to `ttlMs = 0` and `cacheScope = "private"`.
+public type CacheHint record {|
+    # How long, in milliseconds, a client may treat the result as fresh. Must be non-negative.
+    int ttlMs?;
+    # Who may reuse the cached result.
+    CacheScope cacheScope?;
+|};
+
+# Caching hints for the cacheable results of a modern MCP service.
+public type CacheHints record {|
+    # Hint for `server/discover` results.
+    CacheHint discover?;
+    # Hint for `tools/list` results. Fields set on the `ListToolsResult` returned by `onListTools` take precedence.
+    CacheHint listTools?;
+|};
+
 # Configuration for an MCP service exposed over the Streamable HTTP transport.
 public type StreamableHttpConfiguration record {|
     # Server implementation information
@@ -670,6 +690,8 @@ public type StreamableHttpConfiguration record {|
     # - STATELESS → No session management, each request is independent
     # - AUTO → Automatically determined based on client initialization behavior (default)
     HttpSessionMode sessionMode = AUTO;
+    # Caching hints sent to modern clients on cacheable results
+    CacheHints cacheHints = {};
 |};
 
 # Annotation to provide configuration to Streamable HTTP MCP services.
@@ -714,7 +736,7 @@ public type DiscoverResult record {
     # Freshness hint in milliseconds; zero disables caching.
     int ttlMs = 0;
     # Whether a response may be shared between callers.
-    "public"|"private" cacheScope = "private";
+    CacheScope cacheScope = "private";
 };
 
 # Information established when a client connects to a server.

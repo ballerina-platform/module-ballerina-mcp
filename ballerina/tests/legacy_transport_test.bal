@@ -162,3 +162,33 @@ function testAdditionalHeadersOverrideGeneratedTransportHeaders() returns error?
     ListToolsResult toolList = check legacyClient->listTools({"Accept": CONTENT_TYPE_JSON});
     test:assertEquals(toolList.tools.length(), 1);
 }
+
+@test:Config {}
+function testCloseResetsTheClientWhenSessionTerminationFails() returns error? {
+    StreamableHttpAdvancedService sessionService = @StreamableHttpConfig {
+        info: {name: "closing-session", version: "1"},
+        sessionMode: STATEFUL
+    } isolated service object {
+        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+
+        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    };
+    StreamableHttpListener sessionListener = check new (3225);
+    check sessionListener.attach(sessionService, "/mcp");
+    check sessionListener.'start();
+    StreamableHttpClient sessionClient = check new ("http://localhost:3225/mcp", protocolMode = "legacy");
+    _ = check sessionClient->connect();
+
+    // With the server gone, the session DELETE fails at the network level.
+    check sessionListener.immediateStop();
+    ClientError? closeResult = sessionClient->close();
+    test:assertTrue(closeResult is ClientError);
+    ListToolsResult|ClientError listResult = sessionClient->listTools();
+    if listResult !is ClientError {
+        test:assertFail("expected the client to be disconnected");
+    }
+    test:assertEquals(listResult.message(), "Client is not connected; call connect() first");
+    // A second close does not retry the DELETE, so the local session was dropped.
+    ClientError? secondClose = sessionClient->close();
+    test:assertEquals(secondClose, ());
+}

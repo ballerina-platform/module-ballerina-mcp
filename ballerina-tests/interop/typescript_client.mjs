@@ -33,3 +33,17 @@ try {
 } finally {
     await modern.close();
 }
+const cached = new Client({ name: 'typescript-cached', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } });
+try {
+    await cached.connect(new StreamableHTTPClientTransport(new URL('/cached', baseUrl)));
+    const first = await cached.listTools();
+    assert.equal(first.ttlMs, 60000);
+    assert.equal(first.cacheScope, 'public');
+    const again = await cached.listTools();
+    const refreshed = await cached.listTools(undefined, { cacheMode: 'refresh' });
+    assert.equal(again.tools[0].description, first.tools[0].description, 'expected a cached tools/list');
+    assert.notEqual(refreshed.tools[0].description, first.tools[0].description, 'expected a refetched tools/list');
+    console.log('TypeScript cached tools/list PASS');
+} finally {
+    await cached.close();
+}

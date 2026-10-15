@@ -67,7 +67,26 @@ public type StreamableHttpClientConfig record {|
     int maxInputRounds = 8;
     # Optional application callback for embedded input requests.
     InputHandler inputHandler?;
+    # Reuse of modern results while their caching hints keep them fresh. `()` disables reuse.
+    ResultCacheConfig? resultCache = {};
 |};
+
+# Configures how the client reuses modern results that carry caching hints. Each client keeps its own
+# cache and is treated as a single authorization context, so configure credentials through `auth`
+# rather than per-call headers, or use a separate client for each user. A call that passes its own
+# `Authorization` header bypasses the cache.
+public type ResultCacheConfig record {|
+    # Upper bound, in milliseconds, on how long a result is treated as fresh
+    int maxTtlMs = 86400000;
+    # Maximum number of results kept; the least recently used result is dropped first
+    int maxEntries = 1024;
+|};
+
+# Selects how a call uses the client's result cache.
+# - `use` serves a fresh cached result, or fetches and caches the response
+# - `refresh` always fetches and caches the response
+# - `bypass` always fetches and leaves the cache untouched
+public type CacheMode "use"|"refresh"|"bypass";
 
 # Derives the HTTP settings for metadata and token endpoint requests. The trust store and
 # proxy are carried over from the transport configuration; other settings use OAuth defaults.
@@ -98,6 +117,7 @@ isolated class StreamableHttpClientTransport {
     # Protocol version negotiated during initialization, sent on all subsequent requests.
     private string? protocolVersion = ();
     private map<ClientSubscriptionStream> activeSubscriptions = {};
+    private final ResultCache resultCache;
 
     # Initializes the HTTP client transport with the provided server URL.
     #
@@ -111,7 +131,7 @@ isolated class StreamableHttpClientTransport {
         // Neither is an `http:Client` setting: `auth` may hold an `OAuthConfig`, which is
         // handled by this module rather than by the HTTP client.
         StreamableHttpClientConfig {sessionId, protocolMode: _, maxInputRounds: _,
-            inputHandler: _, auth: authConfig, ...rest} = config;
+            inputHandler: _, resultCache: cacheConfig, auth: authConfig, ...rest} = config;
         http:ClientConfiguration clientConfig = {...rest};
 
         OAuthConfig? oauth =
@@ -147,7 +167,10 @@ isolated class StreamableHttpClientTransport {
             self.oauthProvider = provider;
         }
         self.sessionId = sessionId;
+        self.resultCache = new (cacheConfig);
     }
+
+    isolated function cache() returns ResultCache => self.resultCache;
 
     // Returns the configured MCP authorization extension, if any.
     isolated function oauthExtension() returns string? {
@@ -204,6 +227,10 @@ isolated class StreamableHttpClientTransport {
         if challenge is BearerChallenge {
             string? retryAuthorization = check self.getAuthorizationValue(challenge);
             if retryAuthorization is string {
+                // A token obtained after a challenge may carry other scopes, so the server may list other tools.
+                if retryAuthorization != authorization {
+                    self.resultCache.invalidate(REQUEST_LIST_TOOLS);
+                }
                 requestHeaders[AUTHORIZATION_HEADER] = retryAuthorization;
                 return self.dispatch(method, requestHeaders, message);
             }
@@ -450,6 +477,9 @@ isolated class StreamableHttpClientTransport {
                 self.protocolVersion = ();
                 return;
             } on fail error e {
+                // The session is abandoned locally either way; the server expires it on its own.
+                self.sessionId = ();
+                self.protocolVersion = ();
                 return error SessionOperationError(
                     string `Failed to terminate session: ${e.message()}`
                 );

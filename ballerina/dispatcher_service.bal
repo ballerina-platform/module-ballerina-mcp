@@ -287,10 +287,15 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                         string `Failed to list tools: ${listToolsResult.message()}`, request.id);
             }
 
+            // Cache hints are not part of the legacy protocol.
+            ListToolsResult legacyResult = {...listToolsResult};
+            foreach string fieldName in ["resultType", "ttlMs", "cacheScope"] {
+                _ = legacyResult.removeIfHasKey(fieldName);
+            }
             JsonRpcResponse responseBody = {
                 jsonrpc: JSONRPC_VERSION,
                 id: request.id,
-                result: listToolsResult.cloneReadOnly()
+                result: legacyResult.cloneReadOnly()
             };
 
             return <http:Ok>{

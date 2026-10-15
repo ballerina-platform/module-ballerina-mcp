@@ -68,8 +68,6 @@ public final class McpServiceMethodHelper {
     private static final String OUTPUT_SCHEMA_FIELD_NAME = "outputSchema";
     private static final String STRUCTURED_OUTPUT_FIELD_NAME = "structuredOutput";
     private static final String STRUCTURED_CONTENT_FIELD_NAME = "structuredContent";
-    private static final String TTL_MILLIS_FIELD_NAME = "ttlMs";
-    private static final String CACHE_SCOPE_FIELD_NAME = "cacheScope";
     private static final String ARGUMENTS_FIELD_NAME = "arguments";
     private static final String CONTENT_FIELD_NAME = "content";
     private static final String TYPE_FIELD_NAME = "type";
@@ -227,10 +225,6 @@ public final class McpServiceMethodHelper {
                     ));
         }
         result.put(fromString(TOOLS_FIELD_NAME), tools);
-        if (includeOutputSchema) {
-            result.put(fromString(TTL_MILLIS_FIELD_NAME), 0L);
-            result.put(fromString(CACHE_SCOPE_FIELD_NAME), fromString("private"));
-        }
         return result;
     }
 

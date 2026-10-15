@@ -192,6 +192,7 @@ isolated class ClientSubscriptionStream {
                 return error SseEventStreamError("Notification was not accepted by the subscription filter");
             }
         }
+        self.ownerTransport.cache().invalidateFor(notificationMessage);
         return {value: messageValue};
     }
 

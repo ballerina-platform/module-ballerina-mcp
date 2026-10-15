@@ -24,6 +24,25 @@ async def main():
         result = await client.call_tool('scalar', {})
         assert result.structured_content == 42, result
         print('Python SDK scalar result PASS')
+    # Pinned mode skips server/discover, so auto mode is what exercises the discovery hints.
+    async with SDKClient(base_url + '/cached', mode='auto') as client:
+        assert client.session.discover_result.ttl_ms == 300000, client.session.discover_result
+        assert client.session.discover_result.cache_scope == 'public'
+        first = await client.list_tools()
+        assert first.ttl_ms == 60000 and first.cache_scope == 'public', first
+        cached = await client.list_tools()
+        refreshed = await client.list_tools(cache_mode='refresh')
+        assert cached.tools[0].description == first.tools[0].description, 'expected a cached tools/list'
+        assert refreshed.tools[0].description != first.tools[0].description, 'expected a refetched tools/list'
+        print('Python SDK cached tools/list PASS')
+    # FastMCP only caches when the client is built with a cache.
+    async with FastMCPClient(base_url + '/cached', mode='2026-07-28', cache=True) as client:
+        first = await client.list_tools()
+        cached = await client.list_tools()
+        refreshed = await client.list_tools(cache_mode='refresh')
+        assert cached[0].description == first[0].description, 'expected a cached tools/list'
+        assert refreshed[0].description != first[0].description, 'expected a refetched tools/list'
+        print('FastMCP cached tools/list PASS')
 
 
 anyio.run(main)

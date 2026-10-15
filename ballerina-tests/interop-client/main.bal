@@ -34,7 +34,33 @@ public function main() returns error? {
         if echoText.text != "世界" {
             return error("Unexpected mirrored-header result");
         }
+        if protocolMode == "modern" {
+            check verifyToolListCaching(peerClient);
+        }
         check peerClient->close();
         io:println(protocolMode, " HTTP/SSE add and mirrored-header echo PASS");
     }
+}
+
+// A listing within the peer's hinted TTL must not reach the peer; a peer that sends no TTL is listed every time.
+function verifyToolListCaching(mcp:StreamableHttpClient peerClient) returns error? {
+    mcp:ListToolsResult firstList = check peerClient->listTools();
+    int listingsBefore = check peerListingCount(peerClient);
+    _ = check peerClient->listTools();
+    int repeatListings = check peerListingCount(peerClient) - listingsBefore;
+    int expectedListings = (firstList.ttlMs ?: 0) > 0 ? 0 : 1;
+    if repeatListings != expectedListings {
+        return error(string `Expected ${expectedListings} tools/list request(s) for ttlMs ${firstList.ttlMs.toString()}, got ${repeatListings}`);
+    }
+    _ = check peerClient->listTools(cacheMode = "refresh");
+    if check peerListingCount(peerClient) != listingsBefore + repeatListings + 1 {
+        return error("A refreshed tools/list did not reach the peer");
+    }
+    io:println("modern tools/list caching with ttlMs ", firstList.ttlMs, " PASS");
+}
+
+function peerListingCount(mcp:StreamableHttpClient peerClient) returns int|error {
+    mcp:CallToolResult countResult = check peerClient->callTool({name: "listCount"});
+    mcp:TextContent countText = check countResult.content[0].ensureType();
+    return int:fromString(countText.text);
 }

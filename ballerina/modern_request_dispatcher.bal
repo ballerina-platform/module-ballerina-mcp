@@ -61,7 +61,7 @@ isolated function modernCapabilities(StreamableHttpConfiguration serviceConfig, 
 }
 
 isolated function modernResult(Result resultValue, Implementation serverInfo, RequestId requestId,
-        boolean cacheable = false) returns http:Ok {
+        CacheHint? cacheHint = ()) returns http:Ok {
     Result wireResult = {...resultValue};
     wireResult["resultType"] = wireResult["resultType"] ?: "complete";
     ResultMetaObject resultMeta = {...(wireResult._meta ?: {})};
@@ -69,9 +69,10 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
     _ = resultMeta.removeIfHasKey("serverInfo");
     resultMeta[SERVER_INFO_META_KEY] = effectiveServerInfo;
     wireResult._meta = resultMeta;
-    if cacheable {
-        wireResult["ttlMs"] = wireResult["ttlMs"] ?: 0;
-        wireResult["cacheScope"] = wireResult["cacheScope"] ?: "private";
+    // Each hint field resolves independently: the handler's value, then the configured hint, then the default.
+    if cacheHint is CacheHint {
+        wireResult["ttlMs"] = wireResult["ttlMs"] ?: cacheHint.ttlMs ?: 0;
+        wireResult["cacheScope"] = wireResult["cacheScope"] ?: cacheHint.cacheScope ?: "private";
     }
     return {body: {jsonrpc: JSONRPC_VERSION, id: requestId, result: wireResult}};
 }
@@ -117,16 +118,19 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
         return modernError(HEADER_MISMATCH, "Mcp-Method must match the request method", requestMessage.id);
     }
     if requestMessage.method == "server/discover" {
+        CacheHint discoverHint = serviceConfig.cacheHints.discover ?: {};
         DiscoverResult discoverResult = {
             supportedVersions: serviceConfig.protocolMode == "modern" ? [MODERN_PROTOCOL_VERSION] : SUPPORTED_PROTOCOL_VERSIONS,
             capabilities: modernCapabilities(serviceConfig,
-                mcpService is StreamableHttpAdvancedService && hasSubscriptionHandler(mcpService))
+                mcpService is StreamableHttpAdvancedService && hasSubscriptionHandler(mcpService)),
+            ttlMs: discoverHint.ttlMs ?: 0,
+            cacheScope: discoverHint.cacheScope ?: "private"
         };
         string? instructionsText = serviceConfig.options?.instructions;
         if instructionsText is string {
             discoverResult.instructions = instructionsText;
         }
-        return modernResult(discoverResult, serviceConfig.info, requestMessage.id, cacheable = true);
+        return modernResult(discoverResult, serviceConfig.info, requestMessage.id, discoverHint);
     }
     if requestMessage.method == "subscriptions/listen" && mcpService is StreamableHttpAdvancedService &&
             hasSubscriptionHandler(mcpService) {
@@ -166,7 +170,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     }
     if requestMessage.method == REQUEST_LIST_TOOLS {
         toolList.tools = toolList.tools.sort(key = isolated function(ToolDefinition toolInfo) returns string => toolInfo.name);
-        return modernResult(toolList, serviceConfig.info, requestMessage.id, cacheable = true);
+        return modernResult(toolList, serviceConfig.info, requestMessage.id, serviceConfig.cacheHints.listTools ?: {});
     }
     CallToolParams|error callParams = requestMessage.params.cloneWithType();
     if callParams is error {
