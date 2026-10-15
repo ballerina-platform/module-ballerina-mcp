@@ -236,7 +236,7 @@ public distinct isolated client class StreamableHttpClient {
                 return cachedList;
             }
         }
-        int fetchGeneration = resultCache.generation();
+        int fetchNumber = resultCache.beginFetch();
         Result|ClientError wireResponse = self.sendModernRequest(REQUEST_LIST_TOOLS, listParams, headers);
         if wireResponse is ClientError {
             var rpcValue = wireResponse.detail()["rpcError"];
@@ -260,8 +260,8 @@ public distinct isolated client class StreamableHttpClient {
         }
         listResult.tools = listResult.tools.filter(toolInfo => toolParameterHeaders(toolInfo.inputSchema, {}) !is Error);
         if effectiveMode != "bypass" {
-            resultCache.put(REQUEST_LIST_TOOLS, cursor, listResult, fetchGeneration);
-            resultCache.recordToolSchemas(listResult.tools, fetchGeneration);
+            resultCache.put(REQUEST_LIST_TOOLS, cursor, listResult, fetchNumber);
+            resultCache.recordToolSchemas(cursor, listResult.tools, fetchNumber);
         }
         return listResult;
     }

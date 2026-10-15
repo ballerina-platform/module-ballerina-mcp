@@ -16,6 +16,9 @@
 
 import ballerina/time;
 
+// Bounds the per-page fetch order kept for servers whose cursors change on every listing.
+const FETCH_ORDER_LIMIT = 1024;
+
 type CachedResult record {|
     string method;
     Result & readonly resultValue;
@@ -33,7 +36,11 @@ isolated class ResultCache {
     // Iterated in insertion order, so a hit is re-inserted to keep the least recently used entry first.
     private map<CachedResult> entries = {};
     private map<ToolDefinition> toolSchemas = {};
-    private int invalidationCount = 0;
+    // Fetches are numbered as they start. A fetch is stale if it started before the last invalidation, or
+    // before the most recent fetch of the same page that completed.
+    private int lastFetch = 0;
+    private int invalidatedThrough = 0;
+    private map<int> latestCompletedFetch = {};
 
     isolated function init(ResultCacheConfig? config, isolated function () returns decimal clock = time:monotonicNow) {
         self.enabled = config is ResultCacheConfig;
@@ -59,18 +66,17 @@ isolated class ResultCache {
         }
     }
 
-    // Marks the start of a fetch, so that a result fetched across an invalidation is not stored.
-    isolated function generation() returns int {
+    // Numbers a fetch as it starts; the number is passed back when its result is stored.
+    isolated function beginFetch() returns int {
         lock {
-            return self.invalidationCount;
+            self.lastFetch += 1;
+            return self.lastFetch;
         }
     }
 
-    // Stores a result for as long as its hints keep it fresh, replacing the request's earlier entry.
-    isolated function put(string method, Cursor? cursor, Result resultValue, int fetchGeneration) {
-        if !self.enabled {
-            return;
-        }
+    // Stores a result for as long as its hints keep it fresh, replacing the request's earlier entry. A stale
+    // fetch stores nothing, and an accepted one is ordered even when its result is not kept.
+    isolated function put(string method, Cursor? cursor, Result resultValue, int fetchNumber) {
         string entryKey = [method, cursor].toJsonString();
         anydata ttlValue = resultValue["ttlMs"];
         decimal ttlSeconds = ttlValue is int && ttlValue > 0 ? <decimal>ttlValue / 1000 : 0;
@@ -80,7 +86,15 @@ isolated class ResultCache {
         decimal now = self.clock();
         Result & readonly storedResult = resultValue.cloneReadOnly();
         lock {
-            if fetchGeneration != self.invalidationCount {
+            if self.isStaleFetch(entryKey, fetchNumber) {
+                return;
+            }
+            _ = self.latestCompletedFetch.removeIfHasKey(entryKey);
+            self.latestCompletedFetch[entryKey] = fetchNumber;
+            if self.latestCompletedFetch.length() > FETCH_ORDER_LIMIT {
+                _ = self.latestCompletedFetch.remove(self.latestCompletedFetch.keys()[0]);
+            }
+            if !self.enabled {
                 return;
             }
             _ = self.entries.removeIfHasKey(entryKey);
@@ -102,7 +116,7 @@ isolated class ResultCache {
     // Drops every cached result of a method, including all of its pages.
     isolated function invalidate(string method) {
         lock {
-            self.invalidationCount += 1;
+            self.markInvalidated();
             foreach [string, CachedResult] [storedKey, storedEntry] in self.entries.entries() {
                 if storedEntry.method == method {
                     _ = self.entries.remove(storedKey);
@@ -123,7 +137,7 @@ isolated class ResultCache {
 
     isolated function clear() {
         lock {
-            self.invalidationCount += 1;
+            self.markInvalidated();
             self.entries = {};
             self.toolSchemas = {};
         }
@@ -135,16 +149,31 @@ isolated class ResultCache {
         }
     }
 
-    // Records the schemas of a fetched page, unless the cache was invalidated while it was in flight.
-    // Schemas are only removed by invalidate() and clear(), so other pages' schemas survive.
-    isolated function recordToolSchemas(ToolDefinition[] tools, int fetchGeneration) {
+    // Records the schemas of a fetched page unless the fetch is stale. Schemas are only removed by
+    // invalidate() and clear(), so other pages' schemas survive.
+    isolated function recordToolSchemas(Cursor? cursor, ToolDefinition[] tools, int fetchNumber) {
+        string entryKey = [REQUEST_LIST_TOOLS, cursor].toJsonString();
         lock {
-            if fetchGeneration != self.invalidationCount {
+            if self.isStaleFetch(entryKey, fetchNumber) {
                 return;
             }
             foreach ToolDefinition toolInfo in tools.clone() {
                 self.toolSchemas[toolInfo.name] = toolInfo;
             }
+        }
+    }
+
+    private isolated function isStaleFetch(string entryKey, int fetchNumber) returns boolean {
+        lock {
+            return fetchNumber <= self.invalidatedThrough || fetchNumber < (self.latestCompletedFetch[entryKey] ?: 0);
+        }
+    }
+
+    // Every fetch started so far becomes stale; their completion order no longer matters.
+    private isolated function markInvalidated() {
+        lock {
+            self.invalidatedThrough = self.lastFetch;
+            self.latestCompletedFetch = {};
         }
     }
 }

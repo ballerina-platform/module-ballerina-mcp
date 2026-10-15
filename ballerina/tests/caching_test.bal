@@ -409,39 +409,39 @@ isolated function advanceFakeCacheClock(decimal seconds) {
 @test:Config {}
 function testResultCacheFreshness() {
     ResultCache resultCache = new ({}, fakeCacheClock);
-    resultCache.put(REQUEST_LIST_TOOLS, (), {"ttlMs": 1000, "cacheScope": "public"}, resultCache.generation());
+    resultCache.put(REQUEST_LIST_TOOLS, (), {"ttlMs": 1000, "cacheScope": "public"}, resultCache.beginFetch());
     advanceFakeCacheClock(0.999);
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, ()) is Result);
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, "page2") is ());
     advanceFakeCacheClock(0.001);
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, ()) is ());
 
-    int staleGeneration = resultCache.generation();
+    int staleFetch = resultCache.beginFetch();
     resultCache.invalidate(REQUEST_LIST_TOOLS);
-    resultCache.put(REQUEST_LIST_TOOLS, (), {"ttlMs": 1000}, staleGeneration);
+    resultCache.put(REQUEST_LIST_TOOLS, (), {"ttlMs": 1000}, staleFetch);
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, ()) is (),
             "a result fetched across an invalidation must not be stored");
 
     ResultCache disabledCache = new ((), fakeCacheClock);
-    disabledCache.put(REQUEST_LIST_TOOLS, (), {"ttlMs": 1000}, disabledCache.generation());
+    disabledCache.put(REQUEST_LIST_TOOLS, (), {"ttlMs": 1000}, disabledCache.beginFetch());
     test:assertTrue(disabledCache.get(REQUEST_LIST_TOOLS, ()) is ());
 }
 
 @test:Config {}
 function testResultCacheEvictsLeastRecentlyUsed() {
     ResultCache resultCache = new ({maxEntries: 2}, fakeCacheClock);
-    resultCache.put(REQUEST_LIST_TOOLS, "first", {"ttlMs": 60000}, resultCache.generation());
-    resultCache.put(REQUEST_LIST_TOOLS, "second", {"ttlMs": 60000}, resultCache.generation());
+    resultCache.put(REQUEST_LIST_TOOLS, "first", {"ttlMs": 60000}, resultCache.beginFetch());
+    resultCache.put(REQUEST_LIST_TOOLS, "second", {"ttlMs": 60000}, resultCache.beginFetch());
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, "first") is Result);
-    resultCache.put(REQUEST_LIST_TOOLS, "third", {"ttlMs": 60000}, resultCache.generation());
+    resultCache.put(REQUEST_LIST_TOOLS, "third", {"ttlMs": 60000}, resultCache.beginFetch());
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, "first") is Result);
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, "second") is ());
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, "third") is Result);
 
     // An expired entry is pruned on the next store rather than taking a slot from a fresh one.
-    resultCache.put(REQUEST_LIST_TOOLS, "shortLived", {"ttlMs": 10}, resultCache.generation());
+    resultCache.put(REQUEST_LIST_TOOLS, "shortLived", {"ttlMs": 10}, resultCache.beginFetch());
     advanceFakeCacheClock(0.02);
-    resultCache.put(REQUEST_LIST_TOOLS, "fourth", {"ttlMs": 60000}, resultCache.generation());
+    resultCache.put(REQUEST_LIST_TOOLS, "fourth", {"ttlMs": 60000}, resultCache.beginFetch());
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, "third") is Result);
     test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, "fourth") is Result);
 }
@@ -452,17 +452,49 @@ function testResultCacheToolSchemas() {
     ToolDefinition firstTool = {name: "first", inputSchema: {'type: "object"}};
     ToolDefinition secondTool = {name: "second", inputSchema: {'type: "object"}};
 
-    resultCache.recordToolSchemas([firstTool], resultCache.generation());
-    resultCache.recordToolSchemas([secondTool], resultCache.generation());
-    resultCache.recordToolSchemas([firstTool], resultCache.generation());
+    resultCache.recordToolSchemas((), [firstTool], resultCache.beginFetch());
+    resultCache.recordToolSchemas("page2", [secondTool], resultCache.beginFetch());
+    resultCache.recordToolSchemas((), [firstTool], resultCache.beginFetch());
     test:assertEquals(resultCache.toolSchema("first"), firstTool);
     test:assertEquals(resultCache.toolSchema("second"), secondTool, "recording a page must keep other pages' schemas");
 
     resultCache.invalidateFor({jsonrpc: JSONRPC_VERSION, method: "notifications/tools/list_changed"});
     test:assertEquals(resultCache.toolSchema("second"), ());
 
-    int staleGeneration = resultCache.generation();
+    int staleFetch = resultCache.beginFetch();
     resultCache.invalidate(REQUEST_LIST_TOOLS);
-    resultCache.recordToolSchemas([firstTool], staleGeneration);
+    resultCache.recordToolSchemas((), [firstTool], staleFetch);
     test:assertEquals(resultCache.toolSchema("first"), (), "schemas fetched across an invalidation must not be recorded");
+}
+
+@test:Config {}
+function testResultCacheKeepsTheNewestFetchOfAPage() {
+    ResultCache resultCache = new ({}, fakeCacheClock);
+    int olderFetch = resultCache.beginFetch();
+    int newerFetch = resultCache.beginFetch();
+    resultCache.put(REQUEST_LIST_TOOLS, (), {"ttlMs": 60000, "listing": "newer"}, newerFetch);
+    resultCache.put(REQUEST_LIST_TOOLS, (), {"ttlMs": 60000, "listing": "older"}, olderFetch);
+    test:assertEquals(resultCache.get(REQUEST_LIST_TOOLS, ())["listing"], "newer",
+            "a fetch that started earlier must not replace a newer completed fetch");
+
+    ToolDefinition olderTool = {name: "echo", description: "older", inputSchema: {'type: "object"}};
+    ToolDefinition newerTool = {name: "echo", description: "newer", inputSchema: {'type: "object"}};
+    resultCache.recordToolSchemas((), [newerTool], newerFetch);
+    resultCache.recordToolSchemas((), [olderTool], olderFetch);
+    test:assertEquals(resultCache.toolSchema("echo"), newerTool);
+
+    // A newer response that is not kept still orders the page, so an older one cannot be stored after it.
+    int olderUncached = resultCache.beginFetch();
+    int newerUncached = resultCache.beginFetch();
+    resultCache.put(REQUEST_LIST_TOOLS, "page2", {"ttlMs": 0}, newerUncached);
+    resultCache.put(REQUEST_LIST_TOOLS, "page2", {"ttlMs": 60000}, olderUncached);
+    test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, "page2") is ());
+
+    // Ordering is per page.
+    int firstPageFetch = resultCache.beginFetch();
+    int thirdPageFetch = resultCache.beginFetch();
+    resultCache.put(REQUEST_LIST_TOOLS, "page3", {"ttlMs": 60000}, thirdPageFetch);
+    resultCache.put(REQUEST_LIST_TOOLS, (), {"ttlMs": 60000, "listing": "latest"}, firstPageFetch);
+    test:assertEquals(resultCache.get(REQUEST_LIST_TOOLS, ())["listing"], "latest");
+    test:assertTrue(resultCache.get(REQUEST_LIST_TOOLS, "page3") is Result);
 }
