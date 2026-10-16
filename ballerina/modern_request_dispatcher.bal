@@ -158,6 +158,10 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     }
     ListToolsResult|error toolList = listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig,
             authContext);
+    // The tool list also resolves `tools/call`, so a listing that needs more scope challenges both.
+    if toolList is InsufficientScopeError {
+        return insufficientScopeFor(authenticator, toolList);
+    }
     if toolList is error {
         return createJsonRpcErrorResponse(INTERNAL_ERROR, toolList.message(), requestMessage.id);
     }

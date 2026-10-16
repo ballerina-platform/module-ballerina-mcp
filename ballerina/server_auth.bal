@@ -114,7 +114,7 @@ public type OAuthProtectedResourceConfig record {|
 # function, or on `onListTools`/`onCallTool` of an advanced service, to receive it. It is nil
 # when the service is not configured with `mcp:OAuthProtectedResourceConfig`.
 public type AuthContext record {|
-    # Subject of the access token (`sub`, or `username` from introspection)
+    # Subject of the access token (`sub`)
     string? subject;
     # OAuth client the token was issued to (`client_id` or `azp`)
     string? clientId;
@@ -482,7 +482,7 @@ isolated class ServerAuthenticator {
 
 isolated function createAuthContext(map<json> claims, string token, TokenVerifier verifier,
         readonly & map<string[]> scopeHierarchy) returns readonly & AuthContext {
-    json subject = claims["sub"] ?: claims["username"];
+    json subject = claims["sub"];
     json clientId = claims[CLIENT_ID_CLAIM] ?: claims[AZP_CLAIM];
     return {
         subject: subject is string ? subject : (),
@@ -682,23 +682,20 @@ isolated function insufficientScopeFor(ServerAuthenticator? authenticator, Insuf
         : insufficientScopeResponse(scopes, ());
 }
 
-# Returns the principal a session is bound to: the token subject, or the client for tokens
-# issued without a subject. The key is a JSON array of the issuer, the kind of identifier and the
-# identifier, so subjects and clients, and identifiers of different issuers, cannot collide.
+# Returns the principal a session is bound to: the issuer, the client and the subject of the token.
+# A user signed in through two clients is two principals, so neither client can use the other's
+# sessions. The key is a JSON array with `null` for a component the token does not name, so a
+# subject and a client with the same identifier, or identifiers of different issuers, cannot collide.
 #
 # + authContext - The authenticated caller
-# + return - The principal, or nil when the token identifies neither
+# + return - The principal, or nil when the token names neither a client nor a subject
 isolated function principalOf(AuthContext authContext) returns string? {
-    string issuer = authContext.issuer ?: "";
-    string? subject = authContext.subject;
-    if subject is string {
-        return [issuer, "sub", subject].toJsonString();
-    }
     string? clientId = authContext.clientId;
-    if clientId is string {
-        return [issuer, "client_id", clientId].toJsonString();
+    string? subject = authContext.subject;
+    if clientId is () && subject is () {
+        return;
     }
-    return;
+    return [authContext.issuer, clientId, subject].toJsonString();
 }
 
 # Returns whether a caller may use a session.

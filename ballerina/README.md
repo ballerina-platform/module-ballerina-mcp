@@ -282,8 +282,9 @@ service mcp:StreamableHttpService /files on mcpListener {
 - Scopes must be valid OAuth scope tokens: printable ASCII without spaces, `"` or `\`.
 - When the introspection endpoint cannot be reached, requests are answered with `503` rather than `invalid_token`, so
   clients keep their token and retry.
-- A legacy session belongs to the principal that created it and cannot be used with another principal's token. A token
-  that names neither a subject nor a client gets no session.
+- A legacy session belongs to the issuer, client and subject of the token that created it, and cannot be used with a
+  token that differs in any of them, including a token issued to another client for the same user. A token that names
+  neither a subject nor a client gets no session.
 
 `httpConfig.auth` still accepts `http:ListenerAuthConfig[]`, HTTP listener authentication without discovery, exactly
 as in 1.x. Failures are answered with `401` or `403` without a challenge, and tool scopes and `mcp:AuthContext` are

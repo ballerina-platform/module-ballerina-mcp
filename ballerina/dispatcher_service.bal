@@ -299,7 +299,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 
         private isolated function handleListToolsRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers, readonly & AuthContext? authContext)
-            returns http:BadRequest|http:NotFound|http:Ok {
+            returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
             StreamableHttpConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
@@ -327,6 +327,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 
             ListToolsResult|error listToolsResult = self.executeOnListTools(headers, httpRequest,
                     serviceConfig.httpConfig.treatNilableAsOptional, authContext);
+            if listToolsResult is InsufficientScopeError {
+                return insufficientScopeFor(self.authenticator, listToolsResult);
+            }
             if listToolsResult is error {
                 // Parameter binding failures are caller errors, reported as invalid params
                 int errorCode = listToolsResult is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;

@@ -87,6 +87,30 @@ service StreamableHttpAdvancedService /advanced on serverAuthListener {
     }
 }
 
+@StreamableHttpConfig {
+    info: {name: "protected-listing", version: "1"},
+    httpConfig: {
+        auth: {
+            'resource: "http://localhost:3235/listing",
+            authorizationServers: [
+                {issuer: SERVER_AUTH_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SERVER_AUTH_SECRET}}}}
+            ],
+            requiredScopes: ["mcp:tools"]
+        }
+    }
+}
+service StreamableHttpAdvancedService /listing on serverAuthListener {
+    remote isolated function onListTools(AuthContext auth) returns ListToolsResult|InsufficientScopeError {
+        if auth.scopes.indexOf("tools:list") is () {
+            return error InsufficientScopeError("Listing tools requires the tools:list scope", scopes = ["tools:list"]);
+        }
+        return {tools: [{name: "echo", inputSchema: {'type: "object"}}]};
+    }
+
+    remote isolated function onCallTool(CallToolParams params) returns CallToolResult =>
+        {content: [{'type: "text", text: params.name}]};
+}
+
 final http:Client serverAuthClient = check new ("http://localhost:3235");
 
 isolated function serverAuthToken(string scope = "mcp:tools", string subject = "alice",
@@ -272,6 +296,49 @@ function testAdvancedServiceReceivesAuthContext() returns error? {
     // A token issued for the basic service is not accepted by the advanced one.
     http:Response otherAudience = check callProtectedTool("whoami", check serverAuthToken(), "/advanced");
     test:assertEquals(otherAudience.statusCode, 401);
+}
+
+isolated function assertListingChallenge(http:Response response) returns error? {
+    test:assertEquals(response.statusCode, 403);
+    string challenge = check challengeOf(response);
+    test:assertTrue(challenge.startsWith("Bearer "), challenge);
+    test:assertTrue(challenge.includes("error=\"insufficient_scope\""), challenge);
+    // The challenge names every scope the operation needs, not only the one that was missing.
+    test:assertTrue(challenge.includes("scope=\"mcp:tools tools:list\""), challenge);
+    test:assertTrue(challenge.includes(
+        "resource_metadata=\"http://localhost:3235/.well-known/oauth-protected-resource/listing\""), challenge);
+}
+
+@test:Config {}
+function testModernListToolsInsufficientScopeIsChallenged() returns error? {
+    string audience = "http://localhost:3235/listing";
+    string token = check serverAuthToken(audience = audience);
+    check assertListingChallenge(check protectedModernPost("/listing", REQUEST_LIST_TOOLS, token = token));
+    // A tool call is resolved against the listing, so it is challenged the same way.
+    check assertListingChallenge(check callProtectedTool("echo", token, "/listing"));
+
+    string stepUp = check serverAuthToken(scope = "mcp:tools tools:list", audience = audience);
+    http:Response listed = check protectedModernPost("/listing", REQUEST_LIST_TOOLS, token = stepUp);
+    test:assertEquals(listed.statusCode, 200);
+    http:Response called = check callProtectedTool("echo", stepUp, "/listing");
+    test:assertEquals(check textResult(called), "echo");
+}
+
+@test:Config {}
+function testLegacyListToolsInsufficientScopeIsChallenged() returns error? {
+    map<string|string[]> requestHeaders = {
+        [AUTHORIZATION_HEADER]: "Bearer " + check serverAuthToken(audience = "http://localhost:3235/listing")
+    };
+    http:Response initialized = check serverAuthClient->post("/listing", legacyRequest(REQUEST_INITIALIZE, {
+        protocolVersion: LATEST_LEGACY_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: {name: "test", version: "1"}
+    }), headers = legacyHeaders(requestHeaders));
+    test:assertEquals(initialized.statusCode, 200);
+    requestHeaders[SESSION_ID_HEADER] = check initialized.getHeader(SESSION_ID_HEADER);
+    http:Response listed = check serverAuthClient->post("/listing", legacyRequest(REQUEST_LIST_TOOLS),
+            headers = legacyHeaders(requestHeaders));
+    check assertListingChallenge(listed);
 }
 
 @test:Config {}
@@ -462,6 +529,10 @@ service /oauth2 on new http:Listener(3237) {
             "opaque-carol" => {
                 return {active: true, sub: "carol", client_id: "partner-app", scope: "mcp:tools", aud: PARTNER_AUDIENCE};
             }
+            "opaque-username-only" => {
+                return {active: true, username: "dave", client_id: "partner-app", scope: "mcp:tools",
+                    aud: PARTNER_AUDIENCE};
+            }
             "opaque-wrong-issuer" => {
                 return {active: true, sub: "carol", iss: "https://other-idp.example.com", scope: "mcp:tools",
                     aud: PARTNER_AUDIENCE};
@@ -574,6 +645,49 @@ function testPrincipalsDoNotCollide() {
     AuthContext user = {subject: "x", clientId: (), issuer: SERVER_AUTH_ISSUER, scopes: [], claims: {}, token: ""};
     AuthContext clientCaller = {subject: (), clientId: "x", issuer: SERVER_AUTH_ISSUER, scopes: [], claims: {}, token: ""};
     test:assertNotEquals(principalOf(user), principalOf(clientCaller));
+}
+
+@test:Config {}
+function testUsernameIsNotTakenAsTheSubject() returns error? {
+    // `username` is a display name that may be reassigned, so it does not identify the caller.
+    http:Response subject = check callProtectedTool("whoami", "opaque-username-only", "/multi");
+    test:assertEquals(check textResult(subject), "@" + PARTNER_ISSUER);
+    http:Response clientId = check callProtectedTool("clientOf", "opaque-username-only", "/multi");
+    test:assertEquals(check textResult(clientId), "partner-app");
+}
+
+@test:Config {}
+function testSessionIsBoundToItsClient() returns error? {
+    // The same user signed in through two clients: the second client cannot use the first one's session.
+    string desktopToken = check jwt:issue({
+        issuer: SERVER_AUTH_ISSUER,
+        username: "alice",
+        audience: SERVER_AUTH_RESOURCE,
+        customClaims: {scope: "mcp:tools", client_id: "desktop-app"},
+        signatureConfig: {algorithm: jwt:HS256, config: SERVER_AUTH_SECRET}
+    });
+    string otherToken = check jwt:issue({
+        issuer: SERVER_AUTH_ISSUER,
+        username: "alice",
+        audience: SERVER_AUTH_RESOURCE,
+        customClaims: {scope: "mcp:tools", client_id: "other-app"},
+        signatureConfig: {algorithm: jwt:HS256, config: SERVER_AUTH_SECRET}
+    });
+    http:Response initialized = check serverAuthClient->post("/mcp", legacyRequest(REQUEST_INITIALIZE, {
+        protocolVersion: LATEST_LEGACY_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: {name: "test", version: "1"}
+    }), headers = legacyHeaders({[AUTHORIZATION_HEADER]: "Bearer " + desktopToken}));
+    test:assertEquals(initialized.statusCode, 200);
+    string sessionId = check initialized.getHeader(SESSION_ID_HEADER);
+
+    http:Response otherClient = check serverAuthClient->post("/mcp", legacyRequest(REQUEST_LIST_TOOLS),
+            headers = legacyHeaders({[AUTHORIZATION_HEADER]: "Bearer " + otherToken, [SESSION_ID_HEADER]: sessionId}));
+    test:assertEquals(otherClient.statusCode, 404);
+
+    http:Response sameClient = check serverAuthClient->post("/mcp", legacyRequest(REQUEST_LIST_TOOLS),
+            headers = legacyHeaders({[AUTHORIZATION_HEADER]: "Bearer " + desktopToken, [SESSION_ID_HEADER]: sessionId}));
+    test:assertEquals(sameClient.statusCode, 200);
 }
 
 @test:Config {}
