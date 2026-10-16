@@ -256,6 +256,7 @@ dependencies = [
 	{org = "ballerina", name = "lang.array"},
 	{org = "ballerina", name = "lang.regexp"},
 	{org = "ballerina", name = "log"},
+	{org = "ballerina", name = "oauth2"},
 	{org = "ballerina", name = "test"},
 	{org = "ballerina", name = "time"},
 	{org = "ballerina", name = "url"},
@@ -287,6 +288,9 @@ dependencies = [
 	{org = "ballerina", name = "log"},
 	{org = "ballerina", name = "time"},
 	{org = "ballerina", name = "url"}
+]
+modules = [
+	{org = "ballerina", packageName = "oauth2", moduleName = "oauth2"}
 ]
 
 [[package]]

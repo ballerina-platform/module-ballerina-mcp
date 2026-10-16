@@ -630,6 +630,10 @@ public type McpToolConfig record {|
     OutputSchema outputSchema?;
     # Whether modern requests should receive structured output for this tool.
     boolean structuredOutput = true;
+    # Scopes the caller's access token must grant to call this tool, in addition to the
+    # `requiredScopes` of the service's `mcp:OAuthProtectedResourceConfig`. They are enforced by the server
+    # and never sent to clients; a caller without them receives a `403` challenge.
+    string[] scopes?;
 |};
 
 # Annotation to mark a function as an MCP tool configuration.
@@ -683,8 +687,8 @@ public type StreamableHttpConfiguration record {|
     ProtocolMode protocolMode = "auto";
     # Optional server configuration options
     ServerOptions options?;
-    # HTTP service configuration for the underlying transport
-    http:HttpServiceConfig httpConfig = {};
+    # HTTP service configuration for the underlying transport, including authentication
+    HttpServiceConfig httpConfig = {};
     # Controls the session management mode for the transport.
     # - STATEFUL → Sessions are managed by the transport with session IDs
     # - STATELESS → No session management, each request is independent
@@ -692,6 +696,47 @@ public type StreamableHttpConfiguration record {|
     HttpSessionMode sessionMode = AUTO;
     # Caching hints sent to modern clients on cacheable results
     CacheHints cacheHints = {};
+|};
+
+# HTTP settings of the service that serves an MCP endpoint. These are the settings of
+# `http:HttpServiceConfig`, with `auth` also accepting an `mcp:OAuthProtectedResourceConfig`.
+#
+# The fields mirror `http:HttpServiceConfig` and must be kept in step with it when the HTTP
+# module adds or changes a setting.
+public type HttpServiceConfig record {|
+    # Domain name of the service
+    string host = DEFAULT_HTTP_SERVICE_HOST;
+    # The status of compression
+    http:CompressionConfig compression = {};
+    # Configures the chunking behaviour for the service
+    http:Chunking chunking = http:CHUNKING_AUTO;
+    # The cross origin resource sharing configurations for the service
+    http:CorsConfig cors = {};
+    # How callers are authenticated.
+    # - `mcp:OAuthProtectedResourceConfig`: OAuth protected resource authorization (RFC 9728), as the MCP
+    #   authorization specification requires. The service publishes protected resource metadata,
+    #   challenges unauthenticated requests, accepts only tokens issued for it, enforces tool scopes,
+    #   and provides `mcp:AuthContext` to tools.
+    # - `http:ListenerAuthConfig[]`: HTTP listener authentication, without discovery.
+    OAuthProtectedResourceConfig|http:ListenerAuthConfig[] auth?;
+    # Service specific media-type subtype prefix
+    string mediaTypeSubtypePrefix?;
+    # Treat Nilable parameters as optional
+    boolean treatNilableAsOptional = true;
+    # The generated OpenAPI definition for the HTTP service. This is auto-generated at compile-time if
+    # OpenAPI doc auto generation is enabled
+    byte[] openApiDefinition = [];
+    # Enables the inbound payload validation functionality which provided by the constraint package.
+    # Enabled by default
+    boolean validation = true;
+    # The service object type which defines the service contract. This is auto-generated at compile-time
+    typedesc<http:ServiceContract> serviceType?;
+    # Base path to be used with the service implementation. This is only allowed on service contract types
+    string basePath?;
+    # Enables or disables relaxed data binding on the service side. Disabled by default.
+    # When enabled, the JSON data will be projected to the Ballerina record type and during the projection,
+    # nil values will be considered as optional fields and absent fields will be considered for nilable types
+    boolean laxDataBinding = false;
 |};
 
 # Annotation to provide configuration to Streamable HTTP MCP services.

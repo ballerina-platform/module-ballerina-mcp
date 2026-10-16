@@ -12,9 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Transport-specific MCP service types with access to HTTP headers and the raw request](https://github.com/ballerina-platform/ballerina-library/issues/8808)
 - Mutual TLS client authentication (`tls_client_auth` and `self_signed_tls_client_auth`, RFC 8705) for client OAuth, including Client ID Metadata Document clients. The token endpoint alias in `mtls_endpoint_aliases` is used when published.
 - Result caching for MCP `2026-07-28`. Services set `ttlMs` and `cacheScope` hints for `server/discover` and `tools/list` through the `cacheHints` field of `@mcp:StreamableHttpConfig`, and the client reuses fresh `tools/list` results by default. Use the `resultCache` client configuration and the `cacheMode` parameter of `listTools()` to control reuse.
+- Server-side authorization as an OAuth protected resource with an `mcp:OAuthProtectedResourceConfig` in `httpConfig.auth` of `@mcp:StreamableHttpConfig`: protected resource metadata (RFC 9728), `WWW-Authenticate` challenges, audience-bound validation of JWT and introspected bearer tokens from one or more authorization servers, per-tool `scopes` on `@mcp:Tool`, scope hierarchies (`scopeHierarchy`), `mcp:InsufficientScopeError` for step-up, and the `mcp:AuthContext` parameter for the authenticated caller.
 
 ### Changed
 - [Relaxed the requirement for the `mcp:Meta?` parameter of a tool function to be declared last](https://github.com/ballerina-platform/ballerina-library/issues/8972)
+- `httpConfig` of `@mcp:StreamableHttpConfig` is now an `mcp:HttpServiceConfig`, which has the fields of `http:HttpServiceConfig` and whose `auth` also accepts `mcp:OAuthProtectedResourceConfig`. Existing `httpConfig` settings, including `auth: [...]`, are unchanged.
 
 ### Deprecated
 - The `mcp:Listener` class, in favour of `mcp:StreamableHttpListener`.

@@ -39,12 +39,14 @@ record ToolAnnotationConfig(
         String description,
         String schema,
         String outputSchema,
-        String structuredOutput) {
+        String structuredOutput,
+        String scopes) {
 
     public static final String DESCRIPTION_FIELD_NAME = "description";
     public static final String SCHEMA_FIELD_NAME = "schema";
     public static final String OUTPUT_SCHEMA_FIELD_NAME = "outputSchema";
     public static final String STRUCTURED_OUTPUT_FIELD_NAME = "structuredOutput";
+    public static final String SCOPES_FIELD_NAME = "scopes";
 
     public String get(String field) {
         return switch (field) {
@@ -52,6 +54,7 @@ record ToolAnnotationConfig(
             case SCHEMA_FIELD_NAME -> schema();
             case OUTPUT_SCHEMA_FIELD_NAME -> outputSchema();
             case STRUCTURED_OUTPUT_FIELD_NAME -> structuredOutput();
+            case SCOPES_FIELD_NAME -> scopes();
             default -> null;
         };
     }

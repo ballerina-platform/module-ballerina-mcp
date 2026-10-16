@@ -93,6 +93,19 @@ type DispatcherError distinct ServerError;
 # such as missing or invalid header values.
 type ParameterBindingError distinct ServerError;
 
+# Details of an `InsufficientScopeError`.
+#
+# + scopes - Scopes the operation needs, in addition to the scopes every request requires
+public type InsufficientScopeErrorDetail record {|
+    string[] scopes;
+|};
+
+# Error a tool or an advanced service handler returns when the caller's access token does not
+# grant the scopes an operation needs. The server answers the request with a `403` challenge
+# carrying `error="insufficient_scope"` and the needed scopes, so that the client can obtain a
+# token with them and retry.
+public type InsufficientScopeError distinct ServerError & error<InsufficientScopeErrorDetail>;
+
 # Error for failures while obtaining authorization for a request.
 public type AuthorizationError distinct StreamableHttpTransportError;
 
