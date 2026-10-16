@@ -45,7 +45,8 @@ import java.util.Optional;
  *
  * <p>The service type is an empty marker, so this task enforces the contract the type used to pin: the service
  * must declare {@code onListTools} and {@code onCallTool} remote methods, and their parameters are restricted to the
- * supported set (CallToolParams, HttpSession, http:Headers, http:Request, and {@code @http:Header} parameters).</p>
+ * supported set (CallToolParams, HttpSession, AuthContext, http:Headers, http:Request, and {@code @http:Header}
+ * parameters).</p>
  */
 public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
 
@@ -55,6 +56,7 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
     private static final String HTTP_HEADERS_DISPLAY = "http:Headers";
     private static final String HTTP_REQUEST_DISPLAY = "http:Request";
     private static final String SESSION_DISPLAY = "mcp:HttpSession";
+    private static final String AUTH_CONTEXT_DISPLAY = "mcp:AuthContext";
     private static final String CALL_TOOL_RESULT_DISPLAY =
             "mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError";
     private static final String LIST_TOOLS_RESULT_DISPLAY =
@@ -137,6 +139,7 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         boolean hasHeaders = false;
         boolean hasRequest = false;
         boolean hasSession = false;
+        boolean hasAuthContext = false;
 
         for (ParameterSymbol parameter : functionType.params().orElse(List.of())) {
             TypeSymbol type = parameter.typeDescriptor();
@@ -160,6 +163,12 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
                             methodName, paramName, HTTP_REQUEST_DISPLAY);
                 }
                 hasRequest = true;
+            } else if (Utils.isAuthContextType(type)) {
+                if (hasAuthContext) {
+                    report(context, CompilationDiagnostic.DUPLICATE_PARAMETER, paramLocation,
+                            methodName, paramName, AUTH_CONTEXT_DISPLAY);
+                }
+                hasAuthContext = true;
             } else if (isCallTool && Utils.isCallToolParamsType(type)) {
                 callToolParamsCount++;
             } else if (isCallTool && isSessionParam(type)) {

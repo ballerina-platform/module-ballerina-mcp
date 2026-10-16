@@ -93,6 +93,9 @@ public final class McpServiceMethodHelper {
     private static final String META_TYPE_NAME = "RequestMetaObject";
     private static final String META_FIELD_NAME = "_meta";
     private static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
+    private static final String AUTH_CONTEXT_TYPE_NAME = "AuthContext";
+    private static final String INSUFFICIENT_SCOPE_ERROR = "InsufficientScopeError";
+    private static final String SCOPES_FIELD_NAME = "scopes";
 
     // Advanced service remote method names
     private static final String ON_CALL_TOOL_METHOD = "onCallTool";
@@ -134,10 +137,44 @@ public final class McpServiceMethodHelper {
         return false;
     }
 
+    /** Returns whether a service has an 'mcp:AuthContext' parameter that cannot receive nil. */
+    public static boolean requiresAuthContext(BObject mcpService) {
+        for (RemoteMethodType method : getRemoteMethods(mcpService)) {
+            for (Parameter parameter : method.getParameters()) {
+                if (isAuthContextParameter(parameter) && !parameter.type.isNilable()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns the scopes declared with '@mcp:Tool' on the tools of a basic service, keyed by tool name.
+     * The map is read once when the service is attached and is immutable.
+     *
+     * @param mcpService The MCP service object.
+     * @return           An immutable map of tool name to the scopes the tool requires.
+     */
+    public static BMap<BString, Object> getToolScopes(BObject mcpService) {
+        BMap<BString, Object> toolScopes = ValueCreator.createMapValue(
+                TypeCreator.createMapType(TypeCreator.createArrayType(PredefinedTypes.TYPE_STRING)));
+        for (RemoteMethodType remoteMethod : getRemoteMethods(mcpService)) {
+            remoteMethod.getAnnotations().entrySet().stream()
+                    .filter(e -> e.getKey().getValue().contains(ANNOTATION_MCP_TOOL))
+                    .map(e -> ((BMap<?, ?>) e.getValue()).get(fromString(SCOPES_FIELD_NAME)))
+                    .filter(BArray.class::isInstance)
+                    .findFirst()
+                    .ifPresent(scopes -> toolScopes.put(fromString(remoteMethod.getName()), scopes));
+        }
+        toolScopes.freezeDirect();
+        return toolScopes;
+    }
+
     /**
      * Invoke the 'onCallTool' remote method of a Streamable HTTP advanced service. The method's
-     * declared parameters are inspected and bound flexibly (CallToolParams, HttpSession, http:Headers,
-     * http:Request, and '@http:Header' parameters), mirroring how basic service tools are bound.
+     * declared parameters are inspected and bound flexibly (CallToolParams, HttpSession, AuthContext,
+     * http:Headers, http:Request, and '@http:Header' parameters), mirroring how basic service tools are bound.
      *
      * @param env                    The Ballerina runtime environment.
      * @param mcpService             The MCP service object.
@@ -147,17 +184,19 @@ public final class McpServiceMethodHelper {
      * @param request                The HTTP request.
      * @param headerValues           Header values keyed by lower-cased name, for '@http:Header' binding.
      * @param treatNilableAsOptional Whether a missing header binds a nilable '@http:Header' param to nil.
+     * @param authContext            The authenticated caller (or null without an mcp:OAuthProtectedResourceConfig).
      * @return                       Result of remote method invocation, or a binding error.
      */
     public static Object invokeAdvancedOnCallTool(Environment env, BObject mcpService, BMap<?, ?> params,
                                                   Object session, BObject headers, BObject request,
-                                                  BMap<?, ?> headerValues, boolean treatNilableAsOptional) {
+                                                  BMap<?, ?> headerValues, boolean treatNilableAsOptional,
+                                                  Object authContext) {
         Optional<RemoteMethodType> method = getRemoteMethod(mcpService, ON_CALL_TOOL_METHOD);
         if (method.isEmpty()) {
             return ModuleUtils.createServerError("Remote method '" + ON_CALL_TOOL_METHOD + "' not found");
         }
         Object argsOrError = buildAdvancedArgs(method.get(), params, session, headers, request, headerValues,
-                treatNilableAsOptional);
+                treatNilableAsOptional, authContext);
         if (argsOrError instanceof BError) {
             return argsOrError;
         }
@@ -166,7 +205,7 @@ public final class McpServiceMethodHelper {
 
     /**
      * Invoke the 'onListTools' remote method of a Streamable HTTP advanced service. The method's
-     * declared parameters are inspected and bound flexibly (http:Headers, http:Request, and
+     * declared parameters are inspected and bound flexibly (AuthContext, http:Headers, http:Request, and
      * '@http:Header' parameters).
      *
      * @param env                    The Ballerina runtime environment.
@@ -175,17 +214,18 @@ public final class McpServiceMethodHelper {
      * @param request                The HTTP request.
      * @param headerValues           Header values keyed by lower-cased name, for '@http:Header' binding.
      * @param treatNilableAsOptional Whether a missing header binds a nilable '@http:Header' param to nil.
+     * @param authContext            The authenticated caller (or null without an mcp:OAuthProtectedResourceConfig).
      * @return                       Result of remote method invocation, or a binding error.
      */
     public static Object invokeAdvancedOnListTools(Environment env, BObject mcpService, BObject headers,
                                                    BObject request, BMap<?, ?> headerValues,
-                                                   boolean treatNilableAsOptional) {
+                                                   boolean treatNilableAsOptional, Object authContext) {
         Optional<RemoteMethodType> method = getRemoteMethod(mcpService, ON_LIST_TOOLS_METHOD);
         if (method.isEmpty()) {
             return ModuleUtils.createServerError("Remote method '" + ON_LIST_TOOLS_METHOD + "' not found");
         }
         Object argsOrError = buildAdvancedArgs(method.get(), null, null, headers, request, headerValues,
-                treatNilableAsOptional);
+                treatNilableAsOptional, authContext);
         if (argsOrError instanceof BError) {
             return argsOrError;
         }
@@ -240,23 +280,24 @@ public final class McpServiceMethodHelper {
     public static Object callToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
                                                     Object session, BObject headers, BObject request,
                                                     BMap<?, ?> headerValues, boolean treatNilableAsOptional,
-                                                    BTypedesc typed) {
+                                                    Object authContext, BTypedesc typed) {
         return callToolForRemoteFunctions(env, mcpService, params, session, headers, request, headerValues,
-                treatNilableAsOptional, typed, false);
+                treatNilableAsOptional, authContext, typed, false);
     }
 
     public static Object callProtocolToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
                                                             Object session, BObject headers, BObject request,
                                                             BMap<?, ?> headerValues, boolean treatNilableAsOptional,
-                                                            BTypedesc typed) {
+                                                            Object authContext, BTypedesc typed) {
         return callToolForRemoteFunctions(env, mcpService, params, session, headers, request, headerValues,
-                treatNilableAsOptional, typed, true);
+                treatNilableAsOptional, authContext, typed, true);
     }
 
     private static Object callToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
                                                      Object session, BObject headers, BObject request,
                                                      BMap<?, ?> headerValues, boolean treatNilableAsOptional,
-                                                     BTypedesc typed, boolean structuredResult) {
+                                                     Object authContext, BTypedesc typed,
+                                                     boolean structuredResult) {
         BString toolName = (BString) params.get(fromString(NAME_FIELD_NAME));
 
         Optional<RemoteMethodType> method = getRemoteMethods(mcpService).stream()
@@ -272,7 +313,7 @@ public final class McpServiceMethodHelper {
 
         Object argsOrError =
                 buildArgsForMethod(env, method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)),
-                        session, meta, headers, request, headerValues, treatNilableAsOptional);
+                        session, meta, headers, request, headerValues, treatNilableAsOptional, authContext);
 
         // Header binding failures are transport-level and stay protocol errors; anything else is an
         // invalid tool argument, which the spec reports as a tool execution error.
@@ -283,6 +324,10 @@ public final class McpServiceMethodHelper {
 
         Object[] args = (Object[]) argsOrError;
         Object toolResult = env.getRuntime().callMethod(mcpService, toolName.getValue(), null, args);
+        // A tool asking for a step-up is answered with a 403 challenge, not a tool execution error.
+        if (toolResult instanceof BError toolError && isInsufficientScopeError(toolError)) {
+            return toolError;
+        }
         if (structuredResult && isStructuredOutputEnabled(method.get())) {
             return createStructuredCallToolResult(typed, toolResult);
         }
@@ -341,7 +386,7 @@ public final class McpServiceMethodHelper {
      */
     private static Object buildAdvancedArgs(RemoteMethodType method, Object callToolParams, Object session,
                                             Object headers, Object request, BMap<?, ?> headerValues,
-                                            boolean treatNilableAsOptional) {
+                                            boolean treatNilableAsOptional, Object authContext) {
         List<Parameter> params = List.of(method.getParameters());
         Object[] args = new Object[params.size()];
         for (int i = 0; i < params.size(); i++) {
@@ -352,6 +397,8 @@ public final class McpServiceMethodHelper {
                 args[i] = callToolParams;
             } else if (isSessionParameter(param)) {
                 args[i] = session;
+            } else if (isAuthContextParameter(param)) {
+                args[i] = authContext;
             } else if (isHeadersParameter(param)) {
                 args[i] = headers;
             } else if (isRequestParameter(param)) {
@@ -409,7 +456,8 @@ public final class McpServiceMethodHelper {
 
     private static Object buildArgsForMethod(Environment env, RemoteMethodType method, BMap<?, ?> arguments,
                                              Object session, Object meta, Object headers, Object request,
-                                             BMap<?, ?> headerValues, boolean treatNilableAsOptional) {
+                                             BMap<?, ?> headerValues, boolean treatNilableAsOptional,
+                                             Object authContext) {
         List<Parameter> params = List.of(method.getParameters());
         Object[] args = new Object[params.size()];
         for (int i = 0; i < params.size(); i++) {
@@ -418,6 +466,8 @@ public final class McpServiceMethodHelper {
 
             if (isSessionParameter(param)) {
                 args[i] = session;
+            } else if (isAuthContextParameter(param)) {
+                args[i] = authContext;
             } else if (isMetaParameter(param)) {
                 args[i] = meta;
             } else if (isHeadersParameter(param)) {
@@ -501,20 +551,29 @@ public final class McpServiceMethodHelper {
 
     private static boolean isSessionParameter(Parameter param) {
         // HttpSession is commonly declared nilable, so look through the union as well.
-        return isMcpSessionType(param.type);
+        return isMcpType(param.type, SESSION_TYPE_NAME);
     }
 
-    private static boolean isMcpSessionType(Type type) {
+    private static boolean isAuthContextParameter(Parameter param) {
+        // AuthContext is commonly declared nilable, so look through the union as well.
+        return isMcpType(param.type, AUTH_CONTEXT_TYPE_NAME);
+    }
+
+    private static boolean isMcpType(Type type, String typeName) {
         Type impliedType = TypeUtils.getImpliedType(type);
         if (impliedType != type) {
-            return isMcpSessionType(impliedType);
+            return isMcpType(impliedType, typeName);
         }
         if (type instanceof UnionType unionType) {
-            return unionType.getMemberTypes().stream().anyMatch(McpServiceMethodHelper::isMcpSessionType);
+            return unionType.getMemberTypes().stream().anyMatch(member -> isMcpType(member, typeName));
         }
         return type.getPackage() != null
                 && MCP_PACKAGE_NAME.equals(type.getPackage().getName())
-                && SESSION_TYPE_NAME.equals(type.getName());
+                && typeName.equals(type.getName());
+    }
+
+    private static boolean isInsufficientScopeError(BError error) {
+        return INSUFFICIENT_SCOPE_ERROR.equals(error.getType().getName());
     }
 
     private static boolean isHeadersParameter(Parameter param) {

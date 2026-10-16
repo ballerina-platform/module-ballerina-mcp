@@ -44,6 +44,7 @@ import java.util.stream.Collectors;
 import static io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask.EMPTY_STRING;
 import static io.ballerina.stdlib.mcp.plugin.Utils.hasHttpHeaderAnnotation;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getMcpArgumentHeaderName;
+import static io.ballerina.stdlib.mcp.plugin.Utils.isAuthContextType;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isHttpHeadersType;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isHttpRequestType;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isMetaParameter;
@@ -71,10 +72,11 @@ public class SchemaUtils {
         TypeMapper typeMapper = new TypeMapperImpl(context);
         for (ParameterSymbol parameterSymbol : parameterSymbolList) {
             try {
-                // Session, Meta, http:Headers, http:Request, and @http:Header parameters are injected
+                // Session, Meta, AuthContext, http:Headers, http:Request, and @http:Header parameters are injected
                 // by the runtime and are not part of the tool input schema
                 if (isSessionType(parameterSymbol.typeDescriptor())
                         || isMetaParameter(parameterSymbol.typeDescriptor())
+                        || isAuthContextType(parameterSymbol.typeDescriptor())
                         || isHttpHeadersType(parameterSymbol.typeDescriptor())
                         || isHttpRequestType(parameterSymbol.typeDescriptor())
                         || hasHttpHeaderAnnotation(parameterSymbol)) {

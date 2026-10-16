@@ -138,6 +138,10 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
         sb.append("schema:").append(config.schema()).append(",");
         sb.append("outputSchema:").append(config.outputSchema()).append(",");
         sb.append("structuredOutput:").append(config.structuredOutput());
+        // Scopes are enforced by the server only; they are carried through unchanged.
+        if (config.scopes() != null) {
+            sb.append(",scopes:").append(config.scopes());
+        }
         sb.append(closeBraceSource);
         return sb.toString();
     }

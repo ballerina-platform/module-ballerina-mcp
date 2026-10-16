@@ -18,14 +18,16 @@ import ballerina/http;
 import ballerina/jballerina.java;
 
 isolated function invokeAdvancedOnListTools(StreamableHttpAdvancedService 'service, http:Headers headers,
-        http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional)
+        http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional,
+        AuthContext? authContext)
         returns ListToolsResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
 isolated function invokeAdvancedOnCallTool(StreamableHttpAdvancedService 'service, CallToolParams params,
         HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
-        boolean treatNilableAsOptional) returns CallToolResult|InputRequiredResult|Error = @java:Method {
+        boolean treatNilableAsOptional, AuthContext? authContext)
+        returns CallToolResult|InputRequiredResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
@@ -41,13 +43,15 @@ isolated function listProtocolToolsForRemoteFunctions(StreamableHttpService 'ser
 
 isolated function callToolForRemoteFunctions(StreamableHttpService 'service, CallToolParams params,
         HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
-        boolean treatNilableAsOptional, typedesc<CallToolResult> t = <>) returns t|error = @java:Method {
+        boolean treatNilableAsOptional, AuthContext? authContext, typedesc<CallToolResult> t = <>)
+        returns t|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
 isolated function callProtocolToolForRemoteFunctions(StreamableHttpService 'service, CallToolParams params,
         HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
-        boolean treatNilableAsOptional, typedesc<CallToolResult> t = <>) returns t|error = @java:Method {
+        boolean treatNilableAsOptional, AuthContext? authContext, typedesc<CallToolResult> t = <>)
+        returns t|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
@@ -65,5 +69,18 @@ isolated function getMcpServiceFromDispatcher(http:Service dispatcherService)
 // Runtime counterpart of the compiler diagnostic, including dynamically attached services.
 isolated function requiresLegacySession(StreamableHttpService|StreamableHttpAdvancedService mcpService)
         returns boolean = @java:Method {
+    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+} external;
+
+// Runtime counterpart of the compiler diagnostic: a non-nilable `mcp:AuthContext` parameter can
+// only be bound when the service uses an `mcp:OAuthProtectedResourceConfig`.
+isolated function requiresAuthContext(StreamableHttpService|StreamableHttpAdvancedService mcpService)
+        returns boolean = @java:Method {
+    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+} external;
+
+// Returns the scopes declared with `@mcp:Tool`, keyed by tool name. Advanced services declare none.
+isolated function getToolScopes(StreamableHttpService|StreamableHttpAdvancedService mcpService)
+        returns readonly & map<string[]> = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;

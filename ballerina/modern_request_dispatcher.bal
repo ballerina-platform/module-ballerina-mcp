@@ -79,7 +79,9 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
 
 isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpConfiguration serviceConfig) returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:Response {
+        StreamableHttpConfiguration serviceConfig, ServerAuthenticator? authenticator = (),
+        readonly & AuthContext? authContext = ())
+        returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:InternalServerError|http:Response {
     string|http:HeaderNotFoundError originHeader = requestHeaders.getHeader("origin");
     if originHeader is string {
         boolean allowedOrigin = false;
@@ -154,7 +156,12 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if requestMessage.method != REQUEST_LIST_TOOLS && requestMessage.method != REQUEST_CALL_TOOL {
         return <http:NotFound>{body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", requestMessage.id)};
     }
-    ListToolsResult|error toolList = listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig);
+    ListToolsResult|error toolList = listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig,
+            authContext);
+    // The tool list also resolves `tools/call`, so a listing that needs more scope challenges both.
+    if toolList is InsufficientScopeError {
+        return insufficientScopeFor(authenticator, toolList);
+    }
     if toolList is error {
         return createJsonRpcErrorResponse(INTERNAL_ERROR, toolList.message(), requestMessage.id);
     }
@@ -194,6 +201,12 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if selectedTool is () {
         return createJsonRpcErrorResponse(INVALID_PARAMS, "Unknown tool name", requestMessage.id);
     }
+    if authenticator is ServerAuthenticator && authContext is AuthContext {
+        http:Forbidden? denied = authenticator.authorizeTool(authContext, callParams.name);
+        if denied is http:Forbidden {
+            return denied;
+        }
+    }
     Error? headerError = validateToolHeaders(selectedTool.inputSchema, callParams.arguments ?: {}, requestHeaders);
     if headerError is Error {
         return modernError(HEADER_MISMATCH, headerError.message(), requestMessage.id);
@@ -203,7 +216,10 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
                 requestMessage.id);
     }
     CallToolResult|InputRequiredResult|error callResult = callProtocolTool(mcpService, callParams,
-            httpRequest, requestHeaders, serviceConfig);
+            httpRequest, requestHeaders, serviceConfig, authContext);
+    if callResult is InsufficientScopeError {
+        return insufficientScopeFor(authenticator, callResult);
+    }
     if callResult is error {
         return createJsonRpcErrorResponse(INTERNAL_ERROR, callResult.message(), requestMessage.id);
     }
@@ -240,13 +256,14 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
 }
 
 isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
-        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpConfiguration serviceConfig)
-        returns ListToolsResult|error {
+        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpConfiguration serviceConfig,
+        readonly & AuthContext? authContext) returns ListToolsResult|error {
     ListToolsResult|Error listResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
         ListToolsResult|error advancedResult =
                 trap invokeAdvancedOnListTools(mcpService, requestHeaders, httpRequest,
-                    extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
+                    extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
+                    authContext);
         if advancedResult is error {
             listResult = trapListToolsFailure(advancedResult);
         } else {
@@ -263,7 +280,8 @@ isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvanced
 
 isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         CallToolParams callParams, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpConfiguration serviceConfig) returns CallToolResult|InputRequiredResult|error {
+        StreamableHttpConfiguration serviceConfig, readonly & AuthContext? authContext)
+        returns CallToolResult|InputRequiredResult|error {
     CallToolParams applicationParams = callParams.clone();
     RequestMetaObject applicationMeta = {...(callParams._meta ?: {})};
     foreach string metaKey in [PROTOCOL_META_KEY, CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LOG_LEVEL_META_KEY] {
@@ -278,7 +296,8 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
     if mcpService is StreamableHttpAdvancedService {
         CallToolResult|InputRequiredResult|error advancedResult =
                 trap invokeAdvancedOnCallTool(mcpService, applicationParams, (), requestHeaders, httpRequest,
-                    extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
+                    extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
+                    authContext);
         if advancedResult is InputRequiredResult {
             return advancedResult;
         }
@@ -290,7 +309,11 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
     } else if mcpService is StreamableHttpService {
         CallToolResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
                 applicationParams, (), requestHeaders, httpRequest,
-                extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional);
+                extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
+                authContext);
+        if structuredResult is InsufficientScopeError {
+            return structuredResult;
+        }
         if structuredResult is error {
             return toToolExecutionError(structuredResult, callParams.name).cloneWithType();
         }

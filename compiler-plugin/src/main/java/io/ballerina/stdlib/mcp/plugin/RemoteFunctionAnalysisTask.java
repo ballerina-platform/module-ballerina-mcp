@@ -46,6 +46,7 @@ import java.util.stream.Collectors;
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.DESCRIPTION_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.OUTPUT_SCHEMA_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCHEMA_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCOPES_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.STRUCTURED_OUTPUT_FIELD_NAME;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpServiceFunction;
@@ -118,7 +119,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         if (annotationNode == null) {
             String schema = getParameterSchema(functionSymbol, functionNodeLocation);
             String outputSchema = getReturnSchema(functionSymbol, functionNodeLocation);
-            return new ToolAnnotationConfig(description, schema, outputSchema, "true");
+            return new ToolAnnotationConfig(description, schema, outputSchema, "true", null);
         }
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty() ?
                 NodeFactory.createSeparatedNodeList() : annotationNode.annotValue().get().fields();
@@ -143,7 +144,9 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                 fieldValues.containsKey(OUTPUT_SCHEMA_FIELD_NAME)
                         ? fieldValues.get(OUTPUT_SCHEMA_FIELD_NAME).toSourceCode()
                         : getReturnSchema(functionSymbol, functionNodeLocation);
-        return new ToolAnnotationConfig(description, parameters, outputSchema, structuredOutput);
+        String scopes = fieldValues.containsKey(SCOPES_FIELD_NAME)
+                ? fieldValues.get(SCOPES_FIELD_NAME).toSourceCode() : null;
+        return new ToolAnnotationConfig(description, parameters, outputSchema, structuredOutput, scopes);
     }
 
     private Optional<FunctionSymbol> getFunctionSymbol(FunctionDefinitionNode functionDefinitionNode) {
