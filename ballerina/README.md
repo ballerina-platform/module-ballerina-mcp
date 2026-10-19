@@ -166,6 +166,41 @@ remote isolated function deleteRepository(string name, mcp:Context context)
 }
 ```
 
+The schema can also be a record type. Its form schema is generated at compile time: each field becomes a form
+field, its doc comment becomes the field's description, and optional fields and fields with defaults are left out of
+`required`. Read the answer back as the same type.
+
+```ballerina
+enum Seating {
+    INDOOR = "indoor",
+    PATIO = "patio"
+}
+
+type TableBooking record {|
+    # Who the table is for
+    string name;
+    # How many people are coming
+    int guests;
+    # Where to sit
+    Seating seating;
+    # Anything the kitchen should know
+    string notes?;
+|};
+
+remote isolated function bookTable(mcp:Context context) returns string|mcp:InputRequiredResult {
+    TableBooking? booking = context.acceptedContent("booking");
+    if booking is () {
+        return {inputRequests: {"booking": mcp:elicitForm("Book a table", TableBooking)}};
+    }
+    return string `Booked for ${booking.name}`;
+}
+```
+
+A field must be a `string`, `int`, `float`, `decimal` or `boolean`, which become text, integer, number and yes/no
+fields; a union of string constants or an `enum`, which becomes a single-select field; or an array of those, which
+becomes a multi-select field. Any other field type, such as a nested record, `json`, an array of records or a nilable
+type, is a compile error. The record type must be named at the call site; a `typedesc` variable is a compile error.
+
 `mcp:Context` is read-only and covers one round:
 
 - `acceptedContent(key, T)` returns the submitted content as `T`. It returns `()` when the input request was not

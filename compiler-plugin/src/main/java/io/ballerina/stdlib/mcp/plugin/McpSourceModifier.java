@@ -20,16 +20,20 @@ package io.ballerina.stdlib.mcp.plugin;
 
 import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
+import io.ballerina.compiler.syntax.tree.ExpressionNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
 import io.ballerina.compiler.syntax.tree.MetadataNode;
 import io.ballerina.compiler.syntax.tree.ModuleMemberDeclarationNode;
 import io.ballerina.compiler.syntax.tree.ModulePartNode;
+import io.ballerina.compiler.syntax.tree.NamedArgumentNode;
 import io.ballerina.compiler.syntax.tree.Node;
 import io.ballerina.compiler.syntax.tree.NodeFactory;
 import io.ballerina.compiler.syntax.tree.NodeList;
 import io.ballerina.compiler.syntax.tree.NodeParser;
+import io.ballerina.compiler.syntax.tree.PositionalArgumentNode;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SyntaxTree;
+import io.ballerina.compiler.syntax.tree.TreeModifier;
 import io.ballerina.projects.DocumentId;
 import io.ballerina.projects.Module;
 import io.ballerina.projects.plugins.ModifierTask;
@@ -100,10 +104,12 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
                                                                        NodeList<ModuleMemberDeclarationNode> members,
                                                                        ModifierContext modifierContext) {
         Map<FunctionDefinitionNode, AnnotationNode> modifiedAnnotations = getModifiedAnnotations(modifierContext);
+        FormSchemaModifier formSchemaModifier = new FormSchemaModifier(modifierContext.getFormSchemaMap());
         List<ModuleMemberDeclarationNode> modifiedMembers = new ArrayList<>();
 
         for (ModuleMemberDeclarationNode member : members) {
-            modifiedMembers.add(getModifiedModuleMember(semanticModel, member, modifiedAnnotations));
+            modifiedMembers.add(getModifiedModuleMember(semanticModel, member, modifiedAnnotations,
+                    formSchemaModifier));
         }
 
         return modifiedMembers;
@@ -149,39 +155,44 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
     private ModuleMemberDeclarationNode getModifiedModuleMember(
             SemanticModel semanticModel,
             ModuleMemberDeclarationNode member,
-            Map<FunctionDefinitionNode, AnnotationNode> modifiedAnnotations) {
+            Map<FunctionDefinitionNode, AnnotationNode> modifiedAnnotations,
+            FormSchemaModifier formSchemaModifier) {
 
         if (member.kind() == SERVICE_DECLARATION && Utils.isMcpBasicService(semanticModel, member)) {
-            return modifyServiceDeclaration(semanticModel, (ServiceDeclarationNode) member, modifiedAnnotations);
+            return modifyServiceDeclaration(semanticModel, (ServiceDeclarationNode) member, modifiedAnnotations,
+                    formSchemaModifier);
         }
-        return member;
+        return formSchemaModifier.modify(member);
     }
 
     private ModuleMemberDeclarationNode modifyServiceDeclaration(
             SemanticModel semanticModel,
             ServiceDeclarationNode classDefinitionNode,
-            Map<FunctionDefinitionNode, AnnotationNode> modifiedAnnotations) {
+            Map<FunctionDefinitionNode, AnnotationNode> modifiedAnnotations,
+            FormSchemaModifier formSchemaModifier) {
 
         NodeList<Node> members = classDefinitionNode.members();
         ArrayList<Node> modifiedMembers = new ArrayList<>();
 
         for (Node member : members) {
             if (member.kind() != OBJECT_METHOD_DEFINITION) {
-                modifiedMembers.add(member);
+                modifiedMembers.add(formSchemaModifier.modify(member));
                 continue;
             }
 
+            // The analysis results are keyed by the original nodes, so annotations are looked up on those.
             FunctionDefinitionNode functionDefinitionNode = (FunctionDefinitionNode) member;
+            FunctionDefinitionNode modifiedFunction = formSchemaModifier.modify(functionDefinitionNode);
             AnnotationNode modifiedAnnotationNode = modifiedAnnotations.get(functionDefinitionNode);
             if (modifiedAnnotationNode == null) {
-                modifiedMembers.add(member);
+                modifiedMembers.add(modifiedFunction);
                 continue;
             }
 
             MetadataNode newMetadata = createOrUpdateMetadata(
                     semanticModel, functionDefinitionNode, modifiedAnnotationNode);
 
-            FunctionDefinitionNode updatedFunction = functionDefinitionNode.modify()
+            FunctionDefinitionNode updatedFunction = modifiedFunction.modify()
                     .withMetadata(newMetadata)
                     .apply();
 
@@ -245,6 +256,40 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
             context.modifySourceFile(textDocument, documentId);
         } else {
             context.modifyTestSourceFile(textDocument, documentId);
+        }
+    }
+
+    /**
+     * Replaces each record type argument of an {@code mcp:elicitForm} call with its generated form schema.
+     */
+    private static class FormSchemaModifier extends TreeModifier {
+        private final Map<ExpressionNode, String> formSchemas;
+
+        FormSchemaModifier(Map<ExpressionNode, String> formSchemas) {
+            this.formSchemas = formSchemas;
+        }
+
+        @SuppressWarnings("unchecked")
+        <T extends Node> T modify(T node) {
+            return formSchemas.isEmpty() ? node : (T) node.apply(this);
+        }
+
+        @Override
+        public PositionalArgumentNode transform(PositionalArgumentNode node) {
+            return formSchemaOf(node.expression())
+                    .map(formSchema -> node.modify().withExpression(formSchema).apply())
+                    .orElseGet(() -> super.transform(node));
+        }
+
+        @Override
+        public NamedArgumentNode transform(NamedArgumentNode node) {
+            return formSchemaOf(node.expression())
+                    .map(formSchema -> node.modify().withExpression(formSchema).apply())
+                    .orElseGet(() -> super.transform(node));
+        }
+
+        private Optional<ExpressionNode> formSchemaOf(ExpressionNode argument) {
+            return Optional.ofNullable(formSchemas.get(argument)).map(NodeParser::parseExpression);
         }
     }
 }

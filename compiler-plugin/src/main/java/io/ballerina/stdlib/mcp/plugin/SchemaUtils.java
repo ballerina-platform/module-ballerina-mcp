@@ -18,10 +18,18 @@
 
 package io.ballerina.stdlib.mcp.plugin;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.ballerina.compiler.api.symbols.ArrayTypeSymbol;
+import io.ballerina.compiler.api.symbols.EnumSymbol;
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
 import io.ballerina.compiler.api.symbols.FunctionTypeSymbol;
 import io.ballerina.compiler.api.symbols.ParameterKind;
 import io.ballerina.compiler.api.symbols.ParameterSymbol;
+import io.ballerina.compiler.api.symbols.RecordFieldSymbol;
+import io.ballerina.compiler.api.symbols.RecordTypeSymbol;
 import io.ballerina.compiler.api.symbols.TypeDescKind;
 import io.ballerina.compiler.api.symbols.TypeReferenceTypeSymbol;
 import io.ballerina.compiler.api.symbols.TypeSymbol;
@@ -35,13 +43,16 @@ import io.swagger.v3.oas.models.media.Schema;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 import static io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask.EMPTY_STRING;
+import static io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.EndpointYamlGenerator.unescapeIdentifier;
 import static io.ballerina.stdlib.mcp.plugin.Utils.hasHttpHeaderAnnotation;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getMcpArgumentHeaderName;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isAuthContextType;
@@ -59,6 +70,17 @@ public class SchemaUtils {
     private static final String STRING = "string";
     private static final String BYTE = "byte";
     private static final String NUMBER = "number";
+    private static final String INTEGER = "integer";
+    private static final String BOOLEAN = "boolean";
+    private static final String ARRAY = "array";
+    private static final String OBJECT = "object";
+    private static final String TYPE = "type";
+    private static final String ENUM = "enum";
+    private static final String NULLABLE = "nullable";
+    private static final String ITEMS = "items";
+    private static final String DESCRIPTION = "description";
+    private static final String PROPERTIES = "properties";
+    private static final String REQUIRED = "required";
 
     private SchemaUtils() {
     }
@@ -166,6 +188,151 @@ public class SchemaUtils {
         } catch (RuntimeException e) {
             throw new SchemaGenerationException(e);
         }
+    }
+
+    /**
+     * Generates the form schema of a record type, as Ballerina source for an {@code mcp:FormSchema} value.
+     *
+     * @param recordType the record type whose fields become form fields
+     * @param context    the analysis context
+     * @return the form schema as a mapping constructor
+     * @throws UnsupportedFormFieldException if a field has a type a form schema cannot express
+     */
+    public static String getFormSchema(RecordTypeSymbol recordType, SyntaxNodeAnalysisContext context)
+            throws UnsupportedFormFieldException {
+        TypeMapper typeMapper = new TypeMapperImpl(context);
+        ObjectNode properties = Json.mapper().createObjectNode();
+        ArrayNode required = Json.mapper().createArrayNode();
+        for (Map.Entry<String, RecordFieldSymbol> entry : recordType.fieldDescriptors().entrySet()) {
+            String fieldName = unescapeIdentifier(entry.getKey());
+            RecordFieldSymbol field = entry.getValue();
+            ObjectNode fieldSchema = getFormField(typeMapper, field.typeDescriptor())
+                    .orElseThrow(() -> new UnsupportedFormFieldException(fieldName));
+            orderEnumOptions(fieldSchema, field.typeDescriptor());
+            String description = Utils.getDescription(field);
+            if (description != null) {
+                fieldSchema.put(DESCRIPTION, description);
+            }
+            properties.set(fieldName, fieldSchema);
+            if (!field.isOptional() && !field.hasDefaultValue()) {
+                required.add(fieldName);
+            }
+        }
+        ObjectNode formSchema = Json.mapper().createObjectNode().put(TYPE, OBJECT);
+        formSchema.set(PROPERTIES, properties);
+        if (!required.isEmpty()) {
+            formSchema.set(REQUIRED, required);
+        }
+        return toBallerinaSource(formSchema);
+    }
+
+    private static Optional<ObjectNode> getFormField(TypeMapper typeMapper, TypeSymbol fieldType) {
+        try {
+            return Optional.ofNullable(toFormField(Json.mapper().readTree(
+                    getJsonSchema(typeMapper.getSchema(fieldType)))));
+        } catch (RuntimeException | JsonProcessingException e) {
+            return Optional.empty();
+        }
+    }
+
+    // Keeps the parts of a generated field schema that the form schema subset can express; null if none fit.
+    private static ObjectNode toFormField(JsonNode schema) {
+        // A form field cannot be nil; an optional field is how a form leaves a value out.
+        if (schema.path(NULLABLE).asBoolean(false)) {
+            return null;
+        }
+        String type = schema.path(TYPE).isTextual() ? schema.get(TYPE).asText() : null;
+        JsonNode options = schema.get(ENUM);
+        ObjectNode formField = Json.mapper().createObjectNode().put(TYPE, type);
+        if (STRING.equals(type)) {
+            if (options == null) {
+                return formField;
+            }
+            return isStringOptions(options) ? formField.set(ENUM, options) : null;
+        }
+        if (options != null) {
+            return null;
+        }
+        if (INTEGER.equals(type) || NUMBER.equals(type) || BOOLEAN.equals(type)) {
+            return formField;
+        }
+        if (ARRAY.equals(type)) {
+            JsonNode items = schema.path(ITEMS);
+            if (!STRING.equals(items.path(TYPE).asText()) || !isStringOptions(items.get(ENUM))) {
+                return null;
+            }
+            formField.putObject(ITEMS).put(TYPE, STRING).set(ENUM, items.get(ENUM));
+            return formField;
+        }
+        return null;
+    }
+
+    // Enum members are not listed in declaration order, so the options are put back in source order.
+    private static void orderEnumOptions(ObjectNode formField, TypeSymbol fieldType) {
+        TypeSymbol optionType = fieldType;
+        if (Utils.getRawType(fieldType) instanceof ArrayTypeSymbol arrayType) {
+            optionType = arrayType.memberTypeDescriptor();
+        }
+        if (!(optionType instanceof TypeReferenceTypeSymbol typeReference)
+                || !(typeReference.definition() instanceof EnumSymbol enumSymbol)) {
+            return;
+        }
+        ArrayNode options = Json.mapper().createArrayNode();
+        enumSymbol.members().stream()
+                .sorted(Comparator.comparingInt(member -> member.getLocation()
+                        .map(location -> location.textRange().startOffset()).orElse(0)))
+                .forEach(member -> options.add(member.constValue().toString()));
+        ObjectNode optionHolder = formField.has(ITEMS) ? (ObjectNode) formField.get(ITEMS) : formField;
+        optionHolder.set(ENUM, options);
+    }
+
+    private static boolean isStringOptions(JsonNode options) {
+        if (options == null || !options.isArray() || options.isEmpty()) {
+            return false;
+        }
+        for (JsonNode option : options) {
+            if (!option.isTextual()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // JSON escapes are not all valid Ballerina string escapes, so the source is written out directly.
+    private static String toBallerinaSource(JsonNode node) {
+        if (node.isObject()) {
+            StringJoiner fields = new StringJoiner(",", "{", "}");
+            node.fields().forEachRemaining(field ->
+                    fields.add(toBallerinaString(field.getKey()) + ":" + toBallerinaSource(field.getValue())));
+            return fields.toString();
+        }
+        if (node.isArray()) {
+            StringJoiner members = new StringJoiner(",", "[", "]");
+            node.forEach(member -> members.add(toBallerinaSource(member)));
+            return members.toString();
+        }
+        return node.isTextual() ? toBallerinaString(node.asText()) : node.toString();
+    }
+
+    private static String toBallerinaString(String value) {
+        StringBuilder literal = new StringBuilder("\"");
+        value.codePoints().forEach(codePoint -> {
+            switch (codePoint) {
+                case '"' -> literal.append("\\\"");
+                case '\\' -> literal.append("\\\\");
+                case '\n' -> literal.append("\\n");
+                case '\r' -> literal.append("\\r");
+                case '\t' -> literal.append("\\t");
+                default -> {
+                    if (Character.isISOControl(codePoint)) {
+                        literal.append(String.format("\\u{%X}", codePoint));
+                    } else {
+                        literal.appendCodePoint(codePoint);
+                    }
+                }
+            }
+        });
+        return literal.append('"').toString();
     }
 
     @SuppressWarnings("rawtypes")

@@ -651,7 +651,7 @@ public class Utils {
         return nonNilMembers.size() == 1 ? nonNilMembers.get(0) : typeSymbol;
     }
 
-    private static TypeSymbol getRawType(TypeSymbol typeSymbol) {
+    static TypeSymbol getRawType(TypeSymbol typeSymbol) {
         if (typeSymbol.typeKind() == TypeDescKind.INTERSECTION) {
             return getRawType(((IntersectionTypeSymbol) typeSymbol).effectiveTypeDescriptor());
         }

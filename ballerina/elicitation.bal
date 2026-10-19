@@ -54,10 +54,16 @@ public readonly class Context {
 # Builds a form elicitation.
 #
 # + message - The message to show the user
-# + schema - The form schema describing the fields to collect
+# + schema - The form schema describing the fields to collect, or a record type whose form schema is
+# generated at compile time from its fields and their doc comments
 # + return - The input request
-public isolated function elicitForm(string message, FormSchema schema) returns InputRequest =>
-    {params: {message, requestedSchema: schema.clone()}};
+public isolated function elicitForm(string message, FormSchema|typedesc<record {}> schema) returns InputRequest {
+    // The compiler plugin replaces a record type with its form schema, so a typedesc never arrives here.
+    if schema is typedesc {
+        panic error Error("The form schema of a record type is generated at compile time");
+    }
+    return {params: {message, requestedSchema: schema.clone()}};
+}
 
 # Builds a URL elicitation, which asks the user to open a URL for an out-of-band step.
 # Accepting it only means the user agreed to open the URL.
