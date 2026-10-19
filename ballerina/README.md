@@ -213,7 +213,7 @@ Neither `mcp:Context` nor `mcp:InputRequiredResult` appears in the generated too
 
 Because the tool runs again on every round, work done before it decides to ask is repeated. Keep that work safe to
 repeat, and put anything expensive or non-repeatable after the ask or in the request state. The request state is
-readable by the client, so do not put secrets in it.
+readable by the client, so do not put secrets in it; see [Request state](#request-state).
 
 On a legacy call the context is empty, so a tool that does not need input works for older clients. A tool that
 returns an input-required result on a legacy call gets a JSON-RPC error. The service checks input-required results
@@ -331,6 +331,47 @@ Before sending an input-required result, the service checks it:
   with `-32603`. `http` URLs are allowed.
 - An elicitation in a mode the client did not declare is rejected with the missing-capability error, whose
   `requiredCapabilities` names the mode. A client that declares an empty `elicitation` capability supports form.
+
+On a legacy call, `onCallTool` receives neither `inputResponses` nor `requestState`.
+
+### Request state
+
+The service signs every request state a handler returns (HMAC-SHA256) and verifies it on the continuation before
+the handler runs, so handlers only ever see the plain text they returned. The signature binds the state to:
+
+- the tool name and the arguments of the call, regardless of key order;
+- the caller's `mcp:AuthContext` (its issuer, client and subject), or to having no auth context;
+- an expiry, renewed on every round.
+
+A continuation whose state is malformed, tampered with, expired, or issued for another call or caller is rejected
+with JSON-RPC `-32602` "Invalid or expired requestState" and `data.reason` `invalid_request_state`. The specific
+reason is logged at debug level on the server only.
+
+Request state is signed, not encrypted: the client can read it, so do not put secrets in it.
+
+Configure signing with `requestState` on `@mcp:StreamableHttpConfig`:
+
+```ballerina
+configurable string requestStateKey = ?;
+configurable string previousRequestStateKey = ?;
+
+@mcp:StreamableHttpConfig {
+    info: {name: "files", version: "1.0.0"},
+    requestState: {keys: [requestStateKey, previousRequestStateKey], ttl: 300}
+}
+service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9090) {
+}
+```
+
+- `keys` are secrets of at least 32 bytes. The first signs and all verify, so rotate a key by putting its
+  replacement first and removing the old key once its state has expired.
+- `ttl` is how long, in seconds, a request state stays valid (default 600). It bounds the idle time of each round,
+  not the length of a whole flow.
+
+Services that share `keys` accept each other's request state for the same tool, arguments and caller, so give
+unrelated services their own keys. Without `keys`, the service generates a random key when it is attached. Its state does not survive a restart and is
+not accepted by other replicas, so deployments with more than one replica must configure the same `keys` on each.
+Invalid keys or a non-positive `ttl` fail when the service is attached.
 
 ## Server authorization
 

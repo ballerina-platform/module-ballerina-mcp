@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/log;
 
 isolated function isModernRequest(JsonRpcRequest|JsonRpcNotification requestMessage, http:Headers requestHeaders) returns boolean {
     // initialize always belongs to the legacy handshake, including older clients with a version header.
@@ -79,8 +80,8 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
 
 isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpConfiguration serviceConfig, ServerAuthenticator? authenticator = (),
-        readonly & AuthContext? authContext = ())
+        StreamableHttpConfiguration serviceConfig, RequestStateSigner requestStateSigner,
+        ServerAuthenticator? authenticator = (), readonly & AuthContext? authContext = ())
         returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:InternalServerError|http:Response {
     string|http:HeaderNotFoundError originHeader = requestHeaders.getHeader("origin");
     if originHeader is string {
@@ -215,6 +216,25 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
         return createJsonRpcErrorResponse(INVALID_PARAMS, "Legacy task parameters are not supported in modern MCP",
                 requestMessage.id);
     }
+    string? requestState = callParams.requestState;
+    if requestState is string {
+        string|error verifiedState = requestStateSigner.verify(requestState, callParams, authContext);
+        if verifiedState is error {
+            log:printDebug("Rejected request state", verifiedState, toolName = callParams.name);
+            return <http:Ok>{
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: requestMessage.id,
+                    'error: {
+                        code: INVALID_PARAMS,
+                        message: "Invalid or expired requestState",
+                        data: {reason: "invalid_request_state"}
+                    }
+                }
+            };
+        }
+        callParams.requestState = verifiedState;
+    }
     CallToolResult|InputRequiredResult|error callResult = callProtocolTool(mcpService, callParams,
             httpRequest, requestHeaders, serviceConfig, authContext);
     if callResult is InsufficientScopeError {
@@ -241,6 +261,14 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
                 };
             }
             return createJsonRpcErrorResponse(INTERNAL_ERROR, inputError.message(), requestMessage.id);
+        }
+        string? returnedState = callResult.requestState;
+        if returnedState is string {
+            string|error signedState = requestStateSigner.sign(returnedState, callParams, authContext);
+            if signedState is error {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, "Failed to sign request state", requestMessage.id);
+            }
+            callResult.requestState = signedState;
         }
     }
     if callResult is CallToolResult && callResult.isError != true {

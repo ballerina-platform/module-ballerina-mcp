@@ -16,11 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Typed form elicitation for MCP `2026-07-28` input-required results. `mcp:InputRequest` carries `mcp:FormElicitationParams` with an `mcp:FormSchema`, or `mcp:UrlElicitationParams`, and the service rejects empty input-required results and malformed form or URL elicitations with JSON-RPC `-32603`. The client removes content from URL-mode, decline and cancel answers before a continuation.
 - Elicitation from basic services. A tool returns `T|mcp:InputRequiredResult`, builds elicitations with `mcp:elicitForm` and `mcp:elicitUrl`, and reads the answers on the continuation through an injected `mcp:Context` (`acceptedContent`, `elicitResult` and `requestState`). Legacy calls receive an empty context.
 - Form schemas generated from record types. `mcp:elicitForm` accepts a record type, and the compiler plugin generates its form schema at compile time, with field descriptions from doc comments. Fields a form schema cannot express, and record types not known at compile time, are compile errors.
+- Signed request state. The service signs the request state of input-required results with HMAC-SHA256, binding it to the tool name, the arguments, the caller's auth context and an expiry, and rejects invalid state with JSON-RPC `-32602` (`invalid_request_state`) before the handler runs. Configure signing keys and the expiry with the `requestState` field of `@mcp:StreamableHttpConfig`.
 
 ### Changed
 - [Relaxed the requirement for the `mcp:Meta?` parameter of a tool function to be declared last](https://github.com/ballerina-platform/ballerina-library/issues/8972)
 - `httpConfig` of `@mcp:StreamableHttpConfig` is now an `mcp:HttpServiceConfig`, which has the fields of `http:HttpServiceConfig` and whose `auth` also accepts `mcp:OAuthProtectedResourceConfig`. Existing `httpConfig` settings, including `auth: [...]`, are unchanged.
 - The client's `inputHandler` is replaced by a typed `elicitationHandler` (`mcp:ElicitationHandler`), which also advertises the `elicitation` capability with form and URL modes. `mcp:InputRequest` and `mcp:InputResponse` now model elicitation only; sampling and roots input requests are removed.
+- Legacy tool calls no longer pass `inputResponses` or `requestState` to `onCallTool`, since they were never verified.
 - `maxInputRounds` of the client now defaults to 10 instead of 8. `callTool` continuations leave out `inputResponses` when nothing was asked, and retry state-only rounds after a backoff of 50 ms doubling to 250 ms.
 
 ### Deprecated

@@ -696,6 +696,19 @@ public type StreamableHttpConfiguration record {|
     HttpSessionMode sessionMode = AUTO;
     # Caching hints sent to modern clients on cacheable results
     CacheHints cacheHints = {};
+    # Signing of the request state returned in input-required results
+    RequestStateConfig requestState = {};
+|};
+
+# How the request state of input-required results is signed. Request state is signed, not
+# encrypted: clients can read it, so it must not hold anything they should not see.
+public type RequestStateConfig record {|
+    # Signing secrets, each at least 32 bytes. The first signs and all verify, so a key can be rotated
+    # by putting its replacement first. Without keys, a random key is generated when the service is
+    # attached, so replicas that share continuations must configure the same keys.
+    string[] keys = [];
+    # Seconds a request state stays valid, renewed on every round. Must be positive.
+    decimal ttl = 600;
 |};
 
 # HTTP settings of the service that serves an MCP endpoint. These are the settings of
