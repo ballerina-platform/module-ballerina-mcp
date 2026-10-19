@@ -21,16 +21,32 @@ isolated service class DispatcherService {
     *http:Service;
 }
 
-isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig) returns DispatcherService {
+isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
+        ServerAuthenticator? serviceAuthenticator) returns DispatcherService {
     return @http:ServiceConfig {
         ...httpServiceConfig
     } isolated service object {
         private map<HttpSession> sessionMap = {};
+        // Principal that created each session, when the service uses an `mcp:OAuthProtectedResourceConfig`.
+        private map<string> sessionOwners = {};
+        private final ServerAuthenticator? authenticator = serviceAuthenticator;
         private StreamableHttpConfiguration? cachedServiceConfig = ();
 
         isolated resource function delete .(http:Headers headers)
-                returns http:BadRequest|http:NotFound|http:InternalServerError|http:Ok|http:MethodNotAllowed {
-            http:authenticateResource(self, "delete", []);
+                returns http:BadRequest|http:NotFound|http:InternalServerError|http:Ok|http:MethodNotAllowed|
+                        http:Unauthorized|http:Forbidden|http:ServiceUnavailable {
+            readonly & AuthContext? authContext = ();
+            ServerAuthenticator? authenticator = self.authenticator;
+            if authenticator is ServerAuthenticator {
+                readonly & AuthContext|AuthenticationFailure authenticated =
+                        authenticator.authenticate(headers);
+                if authenticated is AuthenticationFailure {
+                    return authenticated;
+                }
+                authContext = authenticated;
+            } else {
+                http:authenticateResource(self, "delete", []);
+            }
             http:BadRequest? protocolVersionError =
                     validateProtocolVersionHeader(getProtocolVersionFromHeaders(headers));
             if protocolVersionError !is () {
@@ -61,11 +77,12 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             }
 
             lock {
-                if !self.sessionMap.hasKey(sessionId) {
+                if !self.sessionMap.hasKey(sessionId) || !isSessionOwner(self.sessionOwners[sessionId], authContext) {
                     return createSessionNotFoundResponse(sessionId);
                 }
 
                 _ = self.sessionMap.remove(sessionId);
+                _ = self.sessionOwners.removeIfHasKey(sessionId);
             }
 
             return <http:Ok>{
@@ -80,8 +97,22 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
 
         isolated resource function post .(http:Request httpRequest, http:Headers headers)
                 returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:NotFound|
-                        http:Accepted|http:Ok|http:Forbidden|http:Response {
-            http:authenticateResource(self, "post", []);
+                        http:Accepted|http:Ok|http:Unauthorized|http:Forbidden|http:Response|http:ServiceUnavailable|
+                        http:InternalServerError {
+            // Authentication runs before any other validation, so an unauthenticated caller learns
+            // nothing about the service beyond where to obtain a token.
+            readonly & AuthContext? authContext = ();
+            ServerAuthenticator? authenticator = self.authenticator;
+            if authenticator is ServerAuthenticator {
+                readonly & AuthContext|AuthenticationFailure authenticated =
+                        authenticator.authenticate(headers);
+                if authenticated is AuthenticationFailure {
+                    return authenticated;
+                }
+                authContext = authenticated;
+            } else {
+                http:authenticateResource(self, "post", []);
+            }
             http:NotAcceptable|http:UnsupportedMediaType? headerValidationError = validateRequiredHeaders(headers);
             if headerValidationError !is () {
                 return headerValidationError;
@@ -107,7 +138,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 if mcpService is Error {
                     return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), request.id);
                 }
-                var modernResponse = trap handleModernRequest(mcpService, request, httpRequest, headers, routeConfig);
+                var modernResponse = trap handleModernRequest(mcpService, request, httpRequest, headers, routeConfig,
+                        self.authenticator, authContext);
                 if modernResponse is error {
                     return createJsonRpcErrorResponse(INTERNAL_ERROR, "Failed to process MCP request", request.id);
                 }
@@ -130,7 +162,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             }
 
             if request is JsonRpcRequest {
-                return self.processJsonRpcRequest(request, httpRequest, headers);
+                return self.processJsonRpcRequest(request, httpRequest, headers, authContext);
             }
 
             if request is JsonRpcNotification {
@@ -154,17 +186,17 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Request httpRequest,
-                http:Headers headers)
-            returns http:BadRequest|http:NotFound|http:Ok {
+                http:Headers headers, readonly & AuthContext? authContext)
+            returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
             match request.method {
                 REQUEST_INITIALIZE => {
-                    return self.handleInitializeRequest(request, headers);
+                    return self.handleInitializeRequest(request, headers, authContext);
                 }
                 REQUEST_LIST_TOOLS => {
-                    return self.handleListToolsRequest(request, httpRequest, headers);
+                    return self.handleListToolsRequest(request, httpRequest, headers, authContext);
                 }
                 REQUEST_CALL_TOOL => {
-                    return self.handleCallToolRequest(request, httpRequest, headers);
+                    return self.handleCallToolRequest(request, httpRequest, headers, authContext);
                 }
                 _ => {
                     return createJsonRpcErrorResponse(METHOD_NOT_FOUND, "Method not found", request.id);
@@ -189,7 +221,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             };
         }
 
-        private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers)
+        private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers,
+                readonly & AuthContext? authContext)
             returns http:Ok {
             JsonRpcRequest {jsonrpc: _, id, ...request} = jsonRpcRequest;
             InitializeRequest|error initRequest = request.cloneWithType();
@@ -217,7 +250,25 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 serverInfo: serviceConfig.info.cloneReadOnly()
             };
 
-            if effectiveSessionMode == STATELESS {
+            // A session must belong to the principal that creates it. A token naming neither a subject
+            // nor a client cannot own one, so it gets a sessionless connection, or none if sessions are required.
+            string? sessionOwner = authContext is AuthContext ? principalOf(authContext) : ();
+            boolean unownable = authContext is AuthContext && sessionOwner is ();
+            boolean requiresSession = false;
+            if unownable {
+                StreamableHttpService|StreamableHttpAdvancedService|Error mcpService =
+                        getMcpServiceFromDispatcher(self);
+                if mcpService is Error {
+                    return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), id);
+                }
+                requiresSession = requiresLegacySession(mcpService);
+            }
+            if unownable && (serviceConfig.sessionMode == STATEFUL || requiresSession) {
+                return createJsonRpcErrorResponse(INVALID_REQUEST, "A session cannot be bound to this access " +
+                        "token: it names neither a subject nor a client", id);
+            }
+
+            if effectiveSessionMode == STATELESS || unownable {
                 return <http:Ok>{
                     body: {
                         jsonrpc: JSONRPC_VERSION,
@@ -239,6 +290,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 string newSessionId = uuid:createRandomUuid();
                 HttpSession session = new (newSessionId);
                 self.sessionMap[newSessionId] = session;
+                if sessionOwner is string {
+                    // A session belongs to the principal that created it; others cannot use it.
+                    self.sessionOwners[newSessionId] = sessionOwner;
+                }
 
                 return <http:Ok>{
                     headers: {[SESSION_ID_HEADER]: newSessionId},
@@ -252,8 +307,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         private isolated function handleListToolsRequest(JsonRpcRequest request, http:Request httpRequest,
-                http:Headers headers)
-            returns http:BadRequest|http:NotFound|http:Ok {
+                http:Headers headers, readonly & AuthContext? authContext)
+            returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
             StreamableHttpConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
@@ -272,14 +327,18 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 }
 
                 lock {
-                    if !self.sessionMap.hasKey(sessionId) {
+                    if !self.sessionMap.hasKey(sessionId) ||
+                            !isSessionOwner(self.sessionOwners[sessionId], authContext) {
                         return createSessionNotFoundResponse(sessionId, request.id);
                     }
                 }
             }
 
             ListToolsResult|error listToolsResult = self.executeOnListTools(headers, httpRequest,
-                    serviceConfig.httpConfig.treatNilableAsOptional);
+                    serviceConfig.httpConfig.treatNilableAsOptional, authContext);
+            if listToolsResult is InsufficientScopeError {
+                return insufficientScopeFor(self.authenticator, listToolsResult);
+            }
             if listToolsResult is error {
                 // Parameter binding failures are caller errors, reported as invalid params
                 int errorCode = listToolsResult is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
@@ -305,8 +364,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         private isolated function handleCallToolRequest(JsonRpcRequest request, http:Request httpRequest,
-                http:Headers headers)
-            returns http:BadRequest|http:NotFound|http:Ok {
+                http:Headers headers, readonly & AuthContext? authContext)
+            returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
             StreamableHttpConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
@@ -325,7 +384,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                 }
 
                 lock {
-                    if !self.sessionMap.hasKey(sessionId) {
+                    if !self.sessionMap.hasKey(sessionId) ||
+                            !isSessionOwner(self.sessionOwners[sessionId], authContext) {
                         return createSessionNotFoundResponse(sessionId, request.id);
                     }
                 }
@@ -343,13 +403,24 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
                         "Task-augmented tool calls are not supported", request.id);
             }
 
+            ServerAuthenticator? authenticator = self.authenticator;
+            if authenticator is ServerAuthenticator && authContext is AuthContext {
+                http:Forbidden? denied = authenticator.authorizeTool(authContext, params.name);
+                if denied is http:Forbidden {
+                    return denied;
+                }
+            }
+
             HttpSession? session;
             lock {
                 session = sessionId is string ? self.sessionMap[sessionId] : ();
             }
 
             CallToolResult|error callToolResult = self.executeOnCallTool(params, session, headers, httpRequest,
-                    serviceConfig.httpConfig.treatNilableAsOptional);
+                    serviceConfig.httpConfig.treatNilableAsOptional, authContext);
+            if callToolResult is InsufficientScopeError {
+                return insufficientScopeFor(self.authenticator, callToolResult);
+            }
             if callToolResult is error {
                 // Parameter binding failures are caller errors, reported as invalid params
                 int errorCode = callToolResult is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
@@ -370,13 +441,13 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         private isolated function executeOnListTools(http:Headers headers, http:Request httpRequest,
-                boolean treatNilableAsOptional) returns ListToolsResult|Error {
+                boolean treatNilableAsOptional, readonly & AuthContext? authContext) returns ListToolsResult|Error {
             StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
                 ListToolsResult|error advancedResult =
                         trap invokeAdvancedOnListTools(mcpService, headers, httpRequest,
-                            extractHeaderValues(headers), treatNilableAsOptional);
+                            extractHeaderValues(headers), treatNilableAsOptional, authContext);
                 if advancedResult is error {
                     return trapListToolsFailure(advancedResult);
                 }
@@ -390,15 +461,19 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
         }
 
         private isolated function executeOnCallTool(CallToolParams params, HttpSession? session, http:Headers headers,
-                http:Request httpRequest, boolean treatNilableAsOptional) returns CallToolResult|Error {
+                http:Request httpRequest, boolean treatNilableAsOptional, readonly & AuthContext? authContext)
+                returns CallToolResult|Error {
             StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
                 CallToolResult|InputRequiredResult|error result =
                         trap invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(), session, headers,
-                            httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
+                            httpRequest, extractHeaderValues(headers), treatNilableAsOptional, authContext);
                 if result is InputRequiredResult {
                     return error ServerError("Input-required tool calls require modern MCP");
+                }
+                if result is InsufficientScopeError {
+                    return result;
                 }
                 if result is error {
                     return toServerError(result, params.name);
@@ -412,8 +487,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig)
             }
             if mcpService is StreamableHttpService {
                 CallToolResult|error result = trap callToolForRemoteFunctions(mcpService, params.cloneReadOnly(),
-                        session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional);
-                if result is ParameterBindingError {
+                        session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional,
+                        authContext);
+                if result is ParameterBindingError || result is InsufficientScopeError {
                     return result;
                 }
                 if result is error {

@@ -44,6 +44,8 @@ public const UNSUPPORTED_PROTOCOL_VERSION = -32022;
 
 const AUTHORIZATION_HEADER = "Authorization";
 const WWW_AUTHENTICATE_HEADER = "WWW-Authenticate";
+// Default `host` of an HTTP service, which binds it to no particular virtual host.
+const DEFAULT_HTTP_SERVICE_HOST = "b7a.default";
 const INSUFFICIENT_SCOPE = "insufficient_scope";
 const OAUTH_CLIENT_CREDENTIALS_EXTENSION = "io.modelcontextprotocol/oauth-client-credentials";
 const ENTERPRISE_MANAGED_AUTHORIZATION_EXTENSION = "io.modelcontextprotocol/enterprise-managed-authorization";

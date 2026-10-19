@@ -58,6 +58,7 @@ import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 import io.ballerina.tools.diagnostics.Location;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -79,6 +80,7 @@ public class Utils {
     public static final String SESSION_TYPE_NAME = "HttpSession";
     public static final String META_TYPE_NAME = "RequestMetaObject";
     public static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
+    public static final String AUTH_CONTEXT_TYPE_NAME = "AuthContext";
     public static final String CALL_TOOL_RESULT_TYPE_NAME = "CallToolResult";
     public static final String LIST_TOOLS_RESULT_TYPE_NAME = "ListToolsResult";
     public static final String INPUT_REQUIRED_RESULT_TYPE_NAME = "InputRequiredResult";
@@ -95,13 +97,14 @@ public class Utils {
     // Human-readable lists of supported parameter types, used in the INVALID_PARAMETER_TYPE diagnostic.
     public static final String BASIC_TOOL_SUPPORTED_PARAM_TYPES =
             "'anydata' tool parameters, a first 'mcp:HttpSession' parameter, an optional "
-                    + "'mcp:RequestMetaObject' parameter, "
+                    + "'mcp:RequestMetaObject' parameter, an 'mcp:AuthContext' parameter, "
                     + "an 'http:Headers' parameter, an 'http:Request' parameter, or '@http:Header' parameters";
     public static final String ADVANCED_SUPPORTED_PARAM_TYPES =
-            "'mcp:CallToolParams', 'mcp:HttpSession', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
+            "'mcp:CallToolParams', 'mcp:HttpSession', 'mcp:AuthContext', 'http:Headers', 'http:Request', "
+                    + "or an '@http:Header' parameter";
     // 'onListTools' does not accept 'mcp:CallToolParams' or 'mcp:HttpSession'.
     public static final String ADVANCED_LIST_TOOLS_SUPPORTED_PARAM_TYPES =
-            "'http:Headers', 'http:Request', or an '@http:Header' parameter";
+            "'mcp:AuthContext', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
 
     public enum HttpSessionMode {
         STATEFUL("stateful"),
@@ -247,6 +250,7 @@ public class Utils {
         boolean hasMetaParam = false;
         boolean hasHeadersParam = false;
         boolean hasRequestParam = false;
+        boolean hasAuthContextParam = false;
         Set<String> argumentHeaderNames = new HashSet<>();
 
         for (int i = 0; i < parameterSymbolList.size(); i++) {
@@ -256,10 +260,11 @@ public class Utils {
 
             boolean isSessionType = isSessionType(parameterType);
             boolean isMetaParam = isMetaParameter(parameterType);
+            boolean isAuthContextParam = isAuthContextType(parameterType);
             boolean hasMcpArgument = hasMcpArgumentAnnotation(parameterSymbol);
 
             if (hasMcpArgument) {
-                if (hasHttpHeaderAnnotation(parameterSymbol) || isSessionType || isMetaParam
+                if (hasHttpHeaderAnnotation(parameterSymbol) || isSessionType || isMetaParam || isAuthContextParam
                         || isHttpHeadersType(parameterType) || isHttpRequestType(parameterType)
                         || !isValidMcpHeaderArgumentType(parameterType, context)) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
@@ -319,6 +324,16 @@ public class Utils {
                     return false;
                 }
                 hasRequestParam = true;
+            } else if (isAuthContextParam) {
+                if (hasAuthContextParam) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.DUPLICATE_PARAMETER,
+                            parameterSymbol.getLocation().orElse(alternativeLocation),
+                            functionName, parameterName, MCP_PACKAGE_NAME + ":" + AUTH_CONTEXT_TYPE_NAME);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+                hasAuthContextParam = true;
             } else if (isSessionType) {
                 if (hasSessionParam) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
@@ -391,6 +406,25 @@ public class Utils {
             return true;
         }
         return typeSymbol instanceof TypeReferenceTypeSymbol reference && isSessionType(reference.typeDescriptor());
+    }
+
+    /**
+     * Check if a TypeSymbol is {@code mcp:AuthContext} or a nilable {@code mcp:AuthContext?}.
+     *
+     * @param typeSymbol The type symbol to check
+     * @return true if the type is the authenticated caller context
+     */
+    static boolean isAuthContextType(TypeSymbol typeSymbol) {
+        if (typeSymbol.typeKind() == TypeDescKind.UNION) {
+            List<TypeSymbol> nonNilMembers = ((UnionTypeSymbol) typeSymbol).memberTypeDescriptors().stream()
+                    .filter(member -> member.typeKind() != TypeDescKind.NIL).toList();
+            return nonNilMembers.size() == 1 && isAuthContextType(nonNilMembers.get(0));
+        }
+        if (AUTH_CONTEXT_TYPE_NAME.equals(typeSymbol.getName().orElse("")) && isMcpModuleSymbol(typeSymbol)) {
+            return true;
+        }
+        return typeSymbol instanceof TypeReferenceTypeSymbol reference
+                && isAuthContextType(reference.typeDescriptor());
     }
 
     static boolean isCallToolParamsType(TypeSymbol typeSymbol) {
