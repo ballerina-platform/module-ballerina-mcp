@@ -44,6 +44,32 @@ service mcp:StreamableHttpAdvancedService /modern on interopListener {
     };
 }
 
+type SeatCount record {|
+    # How many seats to book
+    int seats;
+|};
+
+@mcp:StreamableHttpConfig {info: {name: "ballerina-elicitation-interop", version: "2.0.0"}}
+service mcp:StreamableHttpService /elicitation on interopListener {
+    // The module signs the request state, so getting the name back shows the client echoed it unchanged.
+    remote isolated function bookTable(string name, mcp:Context context)
+            returns string|mcp:InputRequiredResult|error {
+        mcp:InputResponse? answer = context.elicitResult("seats");
+        string? state = context.requestState();
+        if answer is () || state is () {
+            return {
+                inputRequests: {"seats": mcp:elicitForm(string `How many seats for ${name}?`, SeatCount)},
+                requestState: name
+            };
+        }
+        if state != name {
+            return error("Request state was altered");
+        }
+        SeatCount? seatCount = context.acceptedContent("seats");
+        return seatCount is () ? string `not booked: ${answer.action}` : string `booked ${seatCount.seats} for ${name}`;
+    }
+}
+
 isolated int cachedListingCount = 0;
 
 @mcp:StreamableHttpConfig {

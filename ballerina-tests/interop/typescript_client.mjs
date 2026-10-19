@@ -47,3 +47,24 @@ try {
 } finally {
     await cached.close();
 }
+// The Ballerina tool signs its request state and checks it comes back as written.
+let seatsAction = 'accept';
+const eliciting = new Client({ name: 'typescript-eliciting', version: '1' }, {
+    versionNegotiation: { mode: { pin: '2026-07-28' } },
+    capabilities: { elicitation: { form: {} } }
+});
+eliciting.setRequestHandler('elicitation/create', async request => {
+    assert.equal(request.params.message, 'How many seats for Ada?');
+    return seatsAction === 'accept' ? { action: 'accept', content: { seats: 4 } } : { action: seatsAction };
+});
+try {
+    await eliciting.connect(new StreamableHTTPClientTransport(new URL('/elicitation', baseUrl)));
+    const booked = await eliciting.callTool({ name: 'bookTable', arguments: { name: 'Ada' } });
+    assert.equal(booked.content[0].text, 'booked 4 for Ada');
+    seatsAction = 'decline';
+    const declined = await eliciting.callTool({ name: 'bookTable', arguments: { name: 'Ada' } });
+    assert.equal(declined.content[0].text, 'not booked: decline');
+    console.log('TypeScript form elicitation accept and decline PASS');
+} finally {
+    await eliciting.close();
+}

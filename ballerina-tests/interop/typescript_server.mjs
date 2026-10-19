@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
+import { McpServer, acceptedContent, createMcpHandler, inputRequired, inputResponse } from '@modelcontextprotocol/server';
 import * as z from 'zod';
 
 let toolListings = 0;
@@ -16,6 +16,25 @@ const handler = createMcpHandler(() => {
     }, async ({ region }) => ({ content: [{ type: 'text', text: region }] }));
     server.registerTool('listCount', { inputSchema: z.object({}) },
         async () => ({ content: [{ type: 'text', text: String(toolListings) }] }));
+    server.registerTool('bookTable', { inputSchema: z.object({ name: z.string() }) }, async ({ name }, ctx) => {
+        const answer = inputResponse(ctx.mcpReq.inputResponses, 'seats');
+        const state = ctx.mcpReq.requestState();
+        if (state === undefined || answer.kind !== 'elicit') {
+            return inputRequired({
+                inputRequests: {
+                    seats: inputRequired.elicit({
+                        message: `How many seats for ${name}?`,
+                        requestedSchema: { type: 'object', properties: { seats: { type: 'integer' } }, required: ['seats'] }
+                    })
+                },
+                requestState: name
+            });
+        }
+        if (state !== name) throw new Error('Request state was altered');
+        const content = acceptedContent(ctx.mcpReq.inputResponses, 'seats');
+        const text = content ? `booked ${content.seats} for ${name}` : `not booked: ${answer.action}`;
+        return { content: [{ type: 'text', text }] };
+    });
     return server;
 }, { responseMode: 'sse' });
 
