@@ -1,0 +1,4 @@
+[package]
+org = "mcp_examples"
+name = "calendar_connect"
+version = "0.1.0"

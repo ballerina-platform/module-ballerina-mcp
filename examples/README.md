@@ -219,3 +219,28 @@ bal run -- -CcartPort=9092
 ```
 
 The MCP endpoint is `http://127.0.0.1:9092/mcp`. The original shopping server remains the example for legacy protocol sessions.
+
+### Connecting a calendar through URL elicitation
+
+**Location:** `servers/mcp-calendar-connect-server/` and `clients/mcp-calendar-connect-client/`
+
+The `listEvents` tool needs the user's calendar connected first. Until it is, the tool returns a URL elicitation
+pointing at a connect page served by the same program, and carries the pending link's id in the request state.
+Accepting the elicitation only means the user agreed to open the link, so the tool asks again on each continuation
+until the page has recorded the connection. The page completes a link only for the user it was issued to, which is
+the MCP phishing defence: the demo client shows Mallory opening Alice's link and being rejected.
+
+Both programs issue demonstration HS256 access tokens with a shared secret, standing in for an authorization server,
+and the connect page signs the user in with the same bearer token instead of a browser login.
+
+```sh
+cd servers/mcp-calendar-connect-server
+bal run -- -CtokenSecret=demo-secret-of-at-least-32-characters
+
+# In another terminal
+cd clients/mcp-calendar-connect-client
+bal run -- -CtokenSecret=demo-secret-of-at-least-32-characters
+```
+
+The MCP endpoint is `http://localhost:9093/mcp` and the connect page is `http://localhost:9093/connect`. Run
+`bal test` in the server directory to check the flow, including the rejection of another user.

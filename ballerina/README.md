@@ -206,7 +206,7 @@ type, is a compile error. The record type must be named at the call site; a `typ
 - `acceptedContent(key, T)` returns the submitted content as `T`. It returns `()` when the input request was not
   answered, was declined or cancelled, or its content does not convert to `T`, so treat `()` as "ask again".
 - `elicitResult(key)` returns the raw `mcp:InputResponse`, to tell a decline from a cancel or to read the answer to
-  a URL elicitation.
+  a URL elicitation (see [Completing a URL elicitation](#completing-a-url-elicitation)).
 - `requestState()` returns the request state the tool returned in the previous round.
 
 Neither `mcp:Context` nor `mcp:InputRequiredResult` appears in the generated tool schemas.
@@ -218,6 +218,52 @@ readable by the client, so do not put secrets in it; see [Request state](#reques
 On a legacy call the context is empty, so a tool that does not need input works for older clients. A tool that
 returns an input-required result on a legacy call gets a JSON-RPC error. The service checks input-required results
 as described in [Eliciting input from an advanced service](#eliciting-input-from-an-advanced-service).
+
+### Completing a URL elicitation
+
+A URL elicitation sends the user to a page outside the MCP client, for example to connect a third-party account. An
+`accept` answer only means the user agreed to open the URL, not that they finished there. The page reports
+completion to the service out of band, so on each continuation the tool checks its own store and, until the step is
+done, returns the URL elicitation again. A `decline` or `cancel` answer means the user will not open it.
+
+```ballerina
+remote isolated function listEvents(mcp:AuthContext auth, mcp:Context context)
+        returns string[]|mcp:InputRequiredResult|error {
+    string? subject = auth.subject;
+    if subject is () {
+        return error("The access token names no user");
+    }
+    if isConnected(subject) {
+        return fetchEvents(subject);
+    }
+    mcp:InputResponse? answer = context.elicitResult("connect");
+    if answer is mcp:InputResponse && answer.action != "accept" {
+        return error("The calendar is not connected");
+    }
+    // Reuse the previous round's link, whose id the request state carries, or issue a new one.
+    string connectionId = check issueConnectLink(context.requestState(), subject);
+    return {
+        inputRequests: {
+            "connect": mcp:elicitUrl("Connect your calendar",
+                    string `https://calendar.example.com/connect?id=${connectionId}`)
+        },
+        requestState: connectionId
+    };
+}
+```
+
+Anyone the URL is passed to can open it, so the page must check that the user who opened it is the user the
+elicitation was issued to. Record the `mcp:AuthContext` subject when issuing the link, sign the user in on the page
+through the same authorization server, and compare the subjects before accepting anything. Keep the URL free of
+credentials and user identifiers, do not make it grant access by itself, and serve it over HTTPS outside development.
+Store third-party tokens obtained on the page in the service; never return them to the client.
+
+The service only checks that the URL is absolute (a scheme and a host); `http` URLs are allowed for development.
+The connect page must also hold when the URL is altered: an unknown or expired id completes nothing, and a valid id
+completes only for its own user. The [calendar connect example][calendar-connect-example] runs the whole flow,
+including a connect page that rejects other users.
+
+[calendar-connect-example]: https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-calendar-connect-server
 
 ## Sessions
 
@@ -593,6 +639,14 @@ Configuring `elicitationHandler` advertises the `elicitation` capability with fo
 request, merged with the capabilities passed to `connect()`. The client does not validate answers against the
 form schema; the handler is responsible for that. Before a continuation, it removes `content` from URL-mode answers
 and from any decline or cancel answer, so only an accepted form sends what the user submitted.
+
+The module never opens, fetches or follows the URL of a URL elicitation; the handler presents it. A handler should:
+
+- show the full URL, with its domain highlighted, and warn about suspicious ones such as Punycode domains;
+- open the URL only after the user explicitly agrees, and never fetch it beforehand;
+- open it in the system browser or another context that the client and the model cannot inspect;
+- return `accept` once the user agrees to open it, without waiting for them to finish. The server asks again until
+  the out-of-band step is done, so return `cancel` when the user gives up.
 
 Use `callToolOnce()` when the application needs to handle each continuation itself. It returns
 `CallToolResult|InputRequiredResult` after one logical request. On a legacy connection it delegates to
