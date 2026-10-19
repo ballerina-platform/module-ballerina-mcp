@@ -16,6 +16,7 @@
 
 import ballerina/http;
 import ballerina/test;
+import ballerina/time;
 
 @StreamableHttpConfig {info: {name: "modern-test", version: "1"}}
 service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
@@ -37,6 +38,10 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
                 {name: "survey", inputSchema: {'type: "object"}},
                 {name: "openLink", inputSchema: {'type: "object"}},
                 {name: "loop", inputSchema: {'type: "object"}},
+                {name: "count", inputSchema: {'type: "object"}},
+                {name: "probe", inputSchema: {'type: "object"}},
+                {name: "dropState", inputSchema: {'type: "object"}},
+                {name: "shed", inputSchema: {'type: "object"}},
                 {
                     name: "schemaMetadata",
                     inputSchema: {
@@ -114,12 +119,69 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
             }
             return {resultType: "complete", content: [{'type: "text", text: "connected"}]};
         }
+        if callParams.name == "count" {
+            // Never completes; each round's message is its 1-based round number.
+            int round = nextRound(callParams);
+            return {
+                requestState: round.toString(),
+                inputRequests: {
+                    "again": {
+                        params: {
+                            message: round.toString(),
+                            requestedSchema: {properties: {confirmed: {'type: "boolean"}}}
+                        }
+                    }
+                }
+            };
+        }
+        if callParams.name == "probe" {
+            // One state-only round, then report what the continuation carried.
+            string? requestState = callParams.requestState;
+            if requestState is () {
+                return {requestState: PROBE_STATE};
+            }
+            string sent = callParams.inputResponses is () ? "none" : "sent";
+            return {resultType: "complete", content: [{'type: "text", text: sent + "|" + requestState}]};
+        }
+        if callParams.name == "dropState" {
+            // Round one sends state, round two none; round three reports what it received.
+            InputRequest confirm = {params: {message: "Confirm", requestedSchema: {properties: {confirmed: {'type: "boolean"}}}}};
+            if callParams.inputResponses is () {
+                return {requestState: "first", inputRequests: {"one": confirm}};
+            }
+            if callParams.requestState == "first" {
+                return {inputRequests: {"two": confirm}};
+            }
+            return {resultType: "complete", content: [{'type: "text", text: callParams.requestState ?: "absent"}]};
+        }
+        if callParams.name == "shed" {
+            // Sheds load for five state-only rounds, recording when each call arrives.
+            lock {
+                shedArrivals.push(time:monotonicNow());
+            }
+            int round = nextRound(callParams);
+            if round <= 5 {
+                return {requestState: round.toString()};
+            }
+            return {resultType: "complete", content: [{'type: "text", text: "served"}]};
+        }
         if (callParams.name == "continue" && callParams.requestState is ()) || callParams.name == "loop" {
             return {resultType: "input_required", requestState: "opaque-state"};
         }
         return {resultType: "complete", content: [{'type: "text", text: callParams.requestState ?: "ok"}]};
     }
 }
+
+isolated decimal[] shedArrivals = [];
+
+// The 1-based round of a call whose request state holds the previous round number.
+isolated function nextRound(CallToolParams callParams) returns int {
+    int|error previous = int:fromString(callParams.requestState ?: "0");
+    return (previous is int ? previous : 0) + 1;
+}
+
+// Whitespace, escapes and non-ASCII that a lossy echo would alter.
+const PROBE_STATE = " ü\"{\\n}\t 💡 ";
 
 final http:Client modernHttpClient = check new ("http://localhost:3205");
 
@@ -190,7 +252,7 @@ function testClientCanDiscoverAndAdoptModernConnection() returns error? {
     test:assertEquals(connection.protocolVersion, MODERN_PROTOCOL_VERSION);
     test:assertEquals(connection.serverInfo?.name, "modern-test");
     ListToolsResult tools = check discoveryClient->listTools();
-    test:assertEquals(tools.tools.length(), 8);
+    test:assertEquals(tools.tools.length(), 12);
     check discoveryClient->close();
 }
 
@@ -210,7 +272,7 @@ function testModernClientWideResultAndContinuation() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
     ListToolsResult toolList = check modernClient->listTools();
-    test:assertEquals(toolList.tools.length(), 8);
+    test:assertEquals(toolList.tools.length(), 12);
     test:assertEquals(toolList.ttlMs, 0);
     test:assertEquals(toolList.cacheScope, "private");
     CallToolResult scalarResult = check modernClient->callTool({name: "scalar"});
@@ -449,6 +511,75 @@ function testContinuationLimit() returns error? {
     if exhaustedResult is ToolCallError {
         test:assertTrue(exhaustedResult.message().includes("Maximum input-required"));
     }
+    check modernClient->close();
+}
+
+@test:Config {}
+function testContinuationsStopAfterTenRoundsByDefault() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult|ClientError exhaustedResult = modernClient->callTool({name: "count"});
+    if exhaustedResult !is ToolCallError {
+        test:assertFail("Expected a tool call error once the rounds ran out");
+    }
+    // The first call plus ten continuations: the error carries the eleventh result.
+    InputRequiredResult lastResult = check exhaustedResult.detail()["inputRequired"].ensureType();
+    test:assertEquals((lastResult.inputRequests ?: {})["again"]?.params?.message, "11");
+    check modernClient->close();
+}
+
+@test:Config {}
+function testStateOnlyContinuationOmitsInputResponses() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "probe"});
+    TextContent text = check callResult.content[0].ensureType();
+    test:assertTrue(text.text.startsWith("none|"), text.text);
+    check modernClient->close();
+}
+
+@test:Config {}
+function testContinuationEchoesRequestStateExactly() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "probe"});
+    TextContent text = check callResult.content[0].ensureType();
+    test:assertEquals(text.text.substring(<int>text.text.indexOf("|") + 1), PROBE_STATE);
+    check modernClient->close();
+}
+
+@test:Config {}
+function testContinuationOmitsRequestStateTheServerDidNotSend() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "dropState"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "absent"});
+    check modernClient->close();
+}
+
+@test:Config {}
+function testStateOnlyRoundsBackOffToACap() returns error? {
+    lock {
+        shedArrivals.removeAll();
+    }
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "shed"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "served"});
+    decimal[] arrivals;
+    lock {
+        arrivals = shedArrivals.clone();
+    }
+    test:assertEquals(arrivals.length(), 6);
+    decimal[] minimumGaps = [0.05, 0.1, 0.2, 0.25, 0.25];
+    foreach int i in 0 ..< minimumGaps.length() {
+        decimal gap = arrivals[i + 1] - arrivals[i];
+        test:assertTrue(gap >= minimumGaps[i], string `Round ${i + 1} retried after ${gap}s`);
+    }
+    // Capped: the last wait stays at 250 ms instead of doubling to 400 ms.
+    test:assertTrue(arrivals[5] - arrivals[4] < 0.4d, string `Last retry after ${arrivals[5] - arrivals[4]}s`);
     check modernClient->close();
 }
 

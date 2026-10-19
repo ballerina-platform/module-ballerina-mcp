@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/lang.runtime;
+
 // Adds the configured MCP authorization extension to the advertised capabilities.
 isolated function withOAuthExtensionCapability(ClientCapabilities capabilities, string? extension)
         returns ClientCapabilities {
@@ -291,6 +293,7 @@ public distinct isolated client class StreamableHttpClient {
         check self.ensureConnected();
         if self.isModern() {
             CallToolParams currentParams = params.clone();
+            decimal stateOnlyDelay = STATE_ONLY_RETRY_DELAY;
             foreach int roundNumber in 0 ... self.maxInputRounds {
                 CallToolResult|InputRequiredResult callResult = check self->callToolOnce(currentParams, headers);
                 if callResult is CallToolResult {
@@ -309,7 +312,14 @@ public distinct isolated client class StreamableHttpClient {
                     }
                     inputResponses[inputId] = check elicitationHandler(inputRequest);
                 }
-                currentParams.inputResponses = inputResponses;
+                if inputResponses.length() > 0 {
+                    currentParams.inputResponses = inputResponses;
+                } else {
+                    _ = currentParams.removeIfHasKey("inputResponses");
+                    // Nothing for the user to answer, so pace the retries of a server shedding load.
+                    runtime:sleep(stateOnlyDelay);
+                    stateOnlyDelay = decimal:min(stateOnlyDelay * 2, STATE_ONLY_RETRY_MAX_DELAY);
+                }
                 if inputResult.requestState is string {
                     currentParams.requestState = inputResult.requestState;
                 } else {

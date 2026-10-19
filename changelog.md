@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Relaxed the requirement for the `mcp:Meta?` parameter of a tool function to be declared last](https://github.com/ballerina-platform/ballerina-library/issues/8972)
 - `httpConfig` of `@mcp:StreamableHttpConfig` is now an `mcp:HttpServiceConfig`, which has the fields of `http:HttpServiceConfig` and whose `auth` also accepts `mcp:OAuthProtectedResourceConfig`. Existing `httpConfig` settings, including `auth: [...]`, are unchanged.
 - The client's `inputHandler` is replaced by a typed `elicitationHandler` (`mcp:ElicitationHandler`), which also advertises the `elicitation` capability with form and URL modes. `mcp:InputRequest` and `mcp:InputResponse` now model elicitation only; sampling and roots input requests are removed.
+- `maxInputRounds` of the client now defaults to 10 instead of 8. `callTool` continuations leave out `inputResponses` when nothing was asked, and retry state-only rounds after a backoff of 50 ms doubling to 250 ms.
 
 ### Deprecated
 - The `mcp:Listener` class, in favour of `mcp:StreamableHttpListener`.

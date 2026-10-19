@@ -64,7 +64,7 @@ public type StreamableHttpClientConfig record {|
     # Auto probes discovery and falls back to the legacy handshake.
     ProtocolMode protocolMode = "auto";
     # Maximum number of input-required continuations per call.
-    int maxInputRounds = 8;
+    int maxInputRounds = 10;
     # Answers elicitations in input-required results, and advertises the elicitation capability.
     ElicitationHandler elicitationHandler?;
     # Reuse of modern results while their caching hints keep them fresh. `()` disables reuse.
