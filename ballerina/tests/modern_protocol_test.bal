@@ -34,6 +34,8 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
                 },
                 {name: "continue", inputSchema: {'type: "object"}},
                 {name: "ask", inputSchema: {'type: "object"}},
+                {name: "survey", inputSchema: {'type: "object"}},
+                {name: "openLink", inputSchema: {'type: "object"}},
                 {name: "loop", inputSchema: {'type: "object"}},
                 {
                     name: "schemaMetadata",
@@ -54,21 +56,63 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
         if callParams.name == "scalar" || callParams.name == "schemaMetadata" {
             return {resultType: "complete", content: [], structuredContent: 42};
         }
-        if callParams.name == "ask" && callParams.inputResponses is () {
-            return {
-                resultType: "input_required",
-                requestState: "echo-only-state",
-                inputRequests: {
-                    "answer": {
-                        method: "elicitation/create",
-                        params: {
-                            "mode": "form",
-                            "message": "Confirm",
-                            "requestedSchema": {"type": "object"}
+        if callParams.name == "ask" {
+            InputResponse? answer = (callParams.inputResponses ?: {})["answer"];
+            if answer is () {
+                return {
+                    requestState: "echo-only-state",
+                    inputRequests: {
+                        "answer": {
+                            params: {
+                                message: "Confirm the deletion",
+                                requestedSchema: {
+                                    properties: {confirmed: {'type: "boolean", description: "Delete it?"}},
+                                    required: ["confirmed"]
+                                }
+                            }
                         }
                     }
-                }
-            };
+                };
+            }
+            string confirmed = (answer.content ?: {})["confirmed"].toString();
+            string text = string `${answer.action}:${confirmed}:${callParams.requestState ?: ""}`;
+            return {resultType: "complete", content: [{'type: "text", text}]};
+        }
+        if callParams.name == "survey" {
+            map<InputResponse> answers = callParams.inputResponses ?: {};
+            if answers.length() == 0 {
+                // Every field schema kind, so the client parses each one from the wire.
+                FormSchema confirmSchema = {
+                    properties: {
+                        confirmed: {'type: "boolean", default: false},
+                        name: {'type: "string", minLength: 1, format: "email"},
+                        age: {'type: "integer", minimum: 0, maximum: 150},
+                        color: {'type: "string", 'enum: ["red", "green"], default: "red"},
+                        size: {'type: "string", oneOf: [{'const: "s", title: "Small"}]},
+                        tags: {'type: "array", maxItems: 2, items: {'enum: ["a", "b"]}},
+                        labels: {'type: "array", items: {anyOf: [{'const: "x", title: "X"}]}, default: ["x"]}
+                    },
+                    required: ["confirmed"]
+                };
+                // Keys deliberately out of alphabetical order: the client must follow the server's order.
+                return {
+                    inputRequests: {
+                        "zeta": {params: {message: "First", requestedSchema: confirmSchema}},
+                        "alpha": {params: {message: "Second", requestedSchema: confirmSchema}}
+                    }
+                };
+            }
+            return {resultType: "complete", content: [{'type: "text", text: answers.keys().sort().toString()}]};
+        }
+        if callParams.name == "openLink" {
+            if callParams.inputResponses is () {
+                return {
+                    inputRequests: {
+                        "connect": {params: {mode: "url", message: "Connect", url: "https://example.com/connect"}}
+                    }
+                };
+            }
+            return {resultType: "complete", content: [{'type: "text", text: "connected"}]};
         }
         if (callParams.name == "continue" && callParams.requestState is ()) || callParams.name == "loop" {
             return {resultType: "input_required", requestState: "opaque-state"};
@@ -146,7 +190,7 @@ function testClientCanDiscoverAndAdoptModernConnection() returns error? {
     test:assertEquals(connection.protocolVersion, MODERN_PROTOCOL_VERSION);
     test:assertEquals(connection.serverInfo?.name, "modern-test");
     ListToolsResult tools = check discoveryClient->listTools();
-    test:assertEquals(tools.tools.length(), 6);
+    test:assertEquals(tools.tools.length(), 8);
     check discoveryClient->close();
 }
 
@@ -166,7 +210,7 @@ function testModernClientWideResultAndContinuation() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
     ListToolsResult toolList = check modernClient->listTools();
-    test:assertEquals(toolList.tools.length(), 6);
+    test:assertEquals(toolList.tools.length(), 8);
     test:assertEquals(toolList.ttlMs, 0);
     test:assertEquals(toolList.cacheScope, "private");
     CallToolResult scalarResult = check modernClient->callTool({name: "scalar"});
@@ -344,21 +388,62 @@ function testModernErrorWithoutIdDoesNotTriggerLegacyFallback() returns error? {
     }
 }
 
-isolated function acceptTestInput(InputRequest inputRequest) returns InputResponse|ClientError {
-    if inputRequest.method != "elicitation/create" {
-        return error ClientError("Unexpected input request");
-    }
-    return {"action": "accept"};
+isolated function confirmTestElicitation(InputRequest inputRequest) returns InputResponse|ClientError {
+    return {action: "accept", content: {confirmed: true}};
 }
 
 @test:Config {}
-function testElicitationHandlerAndContinuationLimit() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp", inputHandler = acceptTestInput,
-        maxInputRounds = 2
-    );
-    _ = check modernClient->connect(capabilities = {elicitation: {form: {}}});
+function testHandlerCompletesFormElicitation() returns error? {
+    // No capabilities passed to connect(): the configured handler advertises elicitation itself.
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation);
+    _ = check modernClient->connect();
     CallToolResult callResult = check modernClient->callTool({name: "ask"});
-    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "echo-only-state"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "accept:true:echo-only-state"});
+    check modernClient->close();
+}
+
+isolated string[] handledMessages = [];
+
+isolated function recordTestElicitation(InputRequest inputRequest) returns InputResponse|ClientError {
+    lock {
+        handledMessages.push(inputRequest.params.message);
+    }
+    return {action: "accept", content: {confirmed: true}};
+}
+
+@test:Config {}
+function testHandlerAnswersInputRequestsInServerOrder() returns error? {
+    lock {
+        handledMessages.removeAll();
+    }
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = recordTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "survey"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "[\"alpha\",\"zeta\"]"});
+    lock {
+        test:assertEquals(handledMessages, ["First", "Second"]);
+    }
+    check modernClient->close();
+}
+
+@test:Config {}
+function testHandlerCapabilityMergesWithConnectCapabilities() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation);
+    // Declaring only form must not hide the URL mode the handler also answers.
+    _ = check modernClient->connect(capabilities = {elicitation: {form: {}}});
+    CallToolResult callResult = check modernClient->callTool({name: "openLink"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "connected"});
+    check modernClient->close();
+}
+
+@test:Config {}
+function testContinuationLimit() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation, maxInputRounds = 2);
+    _ = check modernClient->connect();
     var exhaustedResult = modernClient->callTool({name: "loop"});
     test:assertTrue(exhaustedResult is ToolCallError);
     if exhaustedResult is ToolCallError {
@@ -388,9 +473,9 @@ function testMissingClientCapabilityRemainsAModernError() returns error? {
 
 @test:Config {}
 function testEmptyElicitationCapabilityRetainsFormCompatibility() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp", inputHandler = acceptTestInput);
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect(capabilities = {elicitation: {}});
-    CallToolResult callResult = check modernClient->callTool({name: "ask"});
-    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "echo-only-state"});
+    CallToolResult|InputRequiredResult callResult = check modernClient->callToolOnce({name: "ask"});
+    test:assertTrue(callResult is InputRequiredResult);
     check modernClient->close();
 }

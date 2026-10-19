@@ -330,26 +330,77 @@ isolated function validateInputRequired(InputRequiredResult inputResult, ClientC
         return error("Input-required result must contain inputRequests or requestState");
     }
     foreach InputRequest inputRequest in (inputResult.inputRequests ?: {}).toArray() {
-        string capabilityName = inputRequest.method == "elicitation/create" ? "elicitation" :
-                inputRequest.method == "sampling/createMessage" ? "sampling" : "roots";
-        if !clientCapabilities.hasKey(capabilityName) {
-            return error("Client did not declare the required capability: " + capabilityName,
-                    requiredCapabilities = {[capabilityName]: {}});
+        FormElicitationParams|UrlElicitationParams inputParams = inputRequest.params;
+        if !clientCapabilities.hasKey("elicitation") {
+            return error("Client did not declare the required capability: elicitation",
+                    requiredCapabilities = {elicitation: {}});
         }
-        if inputRequest.method == "elicitation/create" {
-            RequestParams inputParams = inputRequest.params ?: {};
-            anydata inputMode = inputParams["mode"] ?: "form";
-            if inputMode != "form" && inputMode != "url" {
-                return error("Invalid elicitation mode");
-            }
-            record {} elicitationCapabilities = clientCapabilities.elicitation ?: {};
-            boolean supportedMode = inputMode == "form" ?
-                    (elicitationCapabilities.length() == 0 || elicitationCapabilities.hasKey("form")) :
-                    elicitationCapabilities.hasKey("url");
-            if !supportedMode {
-                return error("Client did not declare the required elicitation mode",
-                        requiredCapabilities = {elicitation: {[<string>inputMode]: {}}});
-            }
+        record {} elicitationCapabilities = clientCapabilities.elicitation ?: {};
+        boolean supportedMode = inputParams.mode == "form" ?
+                (elicitationCapabilities.length() == 0 || elicitationCapabilities.hasKey("form")) :
+                elicitationCapabilities.hasKey("url");
+        if !supportedMode {
+            return error("Client did not declare the required elicitation mode",
+                    requiredCapabilities = {elicitation: {[inputParams.mode]: {}}});
+        }
+        if inputParams is FormElicitationParams {
+            check validateFormElicitation(inputParams);
         }
     }
+}
+
+isolated function validateFormElicitation(FormElicitationParams formParams) returns Error? {
+    if formParams.message.trim().length() == 0 {
+        return error("Form elicitation must have a message");
+    }
+    map<FormFieldSchema> properties = formParams.requestedSchema.properties;
+    foreach string fieldName in formParams.requestedSchema.required ?: [] {
+        if !properties.hasKey(fieldName) {
+            return error(string `Form schema requires undeclared field '${fieldName}'`);
+        }
+    }
+    foreach [string, FormFieldSchema] [fieldName, fieldSchema] in properties.entries() {
+        if !isValidFormField(fieldSchema) {
+            return error(string `Form schema field '${fieldName}' is outside the allowed subset`);
+        }
+    }
+}
+
+// The types fix each field's shape; this checks the constraints types cannot express.
+isolated function isValidFormField(FormFieldSchema fieldSchema) returns boolean {
+    if fieldSchema is StringFieldSchema {
+        return isValidRange(fieldSchema.minLength, fieldSchema.maxLength);
+    }
+    if fieldSchema is NumberFieldSchema {
+        decimal? minimum = fieldSchema.minimum;
+        decimal? maximum = fieldSchema.maximum;
+        return minimum is () || maximum is () || minimum <= maximum;
+    }
+    if fieldSchema is EnumFieldSchema {
+        return isValidSelection(fieldSchema.'enum, fieldSchema.default);
+    }
+    if fieldSchema is TitledEnumFieldSchema {
+        return isValidSelection(fieldSchema.oneOf.map(option => option.'const), fieldSchema.default);
+    }
+    if fieldSchema is MultiSelectEnumFieldSchema {
+        return isValidRange(fieldSchema.minItems, fieldSchema.maxItems) &&
+                isValidSelection(fieldSchema.items.'enum, ...fieldSchema.default ?: []);
+    }
+    if fieldSchema is TitledMultiSelectEnumFieldSchema {
+        return isValidRange(fieldSchema.minItems, fieldSchema.maxItems) &&
+                isValidSelection(fieldSchema.items.anyOf.map(option => option.'const), ...fieldSchema.default ?: []);
+    }
+    return true;
+}
+
+isolated function isValidRange(int? minimum, int? maximum) returns boolean =>
+    (minimum ?: 0) >= 0 && (maximum ?: 0) >= 0 && (minimum is () || maximum is () || minimum <= maximum);
+
+isolated function isValidSelection(string[] options, string?... selected) returns boolean {
+    foreach string? selectedValue in selected {
+        if selectedValue is string && options.indexOf(selectedValue) is () {
+            return false;
+        }
+    }
+    return options.length() > 0;
 }

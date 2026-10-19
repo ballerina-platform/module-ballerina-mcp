@@ -65,8 +65,8 @@ public type StreamableHttpClientConfig record {|
     ProtocolMode protocolMode = "auto";
     # Maximum number of input-required continuations per call.
     int maxInputRounds = 8;
-    # Optional application callback for embedded input requests.
-    InputHandler inputHandler?;
+    # Answers elicitations in input-required results, and advertises the elicitation capability.
+    ElicitationHandler elicitationHandler?;
     # Reuse of modern results while their caching hints keep them fresh. `()` disables reuse.
     ResultCacheConfig? resultCache = {};
 |};
@@ -131,7 +131,7 @@ isolated class StreamableHttpClientTransport {
         // Neither is an `http:Client` setting: `auth` may hold an `OAuthConfig`, which is
         // handled by this module rather than by the HTTP client.
         StreamableHttpClientConfig {sessionId, protocolMode: _, maxInputRounds: _,
-            inputHandler: _, resultCache: cacheConfig, auth: authConfig, ...rest} = config;
+            elicitationHandler: _, resultCache: cacheConfig, auth: authConfig, ...rest} = config;
         http:ClientConfiguration clientConfig = {...rest};
 
         OAuthConfig? oauth =

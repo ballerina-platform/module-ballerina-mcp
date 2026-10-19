@@ -202,6 +202,49 @@ continuation. An optional `onSubscribe(mcp:SubscriptionFilter)` method may retur
 `stream<mcp:JsonRpcNotification, error?>|mcp:ServerError` for change notifications. Advanced handlers can bind the
 same HTTP request values as basic tools; `onCallTool` reads request metadata from `CallToolParams._meta`.
 
+### Eliciting input from an advanced service
+
+On the modern protocol, `onCallTool` can ask the user for input by returning an `InputRequiredResult` with
+elicitations. The client answers them and retries the call as a continuation, which carries the answers in
+`inputResponses` and echoes `requestState`. The handler runs again from the top, so work done before it decides
+to ask is repeated on every round.
+
+```ballerina
+remote isolated function onCallTool(mcp:CallToolParams params)
+        returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
+    mcp:InputResponse? answer = (params.inputResponses ?: {})["confirm"];
+    if answer is () {
+        return {
+            inputRequests: {
+                "confirm": {
+                    params: {
+                        message: "Delete the repository?",
+                        requestedSchema: {
+                            properties: {confirmed: {'type: "boolean", description: "Confirm deletion"}},
+                            required: ["confirmed"]
+                        }
+                    }
+                }
+            }
+        };
+    }
+    boolean confirmed = answer.action == "accept" && (answer.content ?: {})["confirmed"] == true;
+    return {resultType: "complete", content: [{'type: "text", text: confirmed ? "Deleted" : "Kept"}]};
+}
+```
+
+A form schema is a flat object whose fields are string, number or integer, boolean, single-select enum (`enum`,
+or `oneOf` with titles) and multi-select enum (`items.enum`, or `items.anyOf` with titles) schemas. Elicitations
+use form mode by default; set `mode: "url"` with a `url` to send the user to an out-of-band page.
+
+Before sending an input-required result, the service checks it:
+
+- A result with neither `inputRequests` nor `requestState` is rejected with JSON-RPC `-32603`.
+- A form elicitation with a blank `message`, a `required` field missing from `properties`, inverted or negative
+  bounds, an empty enum or a default outside the enum is rejected with `-32603`.
+- An elicitation in a mode the client did not declare is rejected with the missing-capability error, whose
+  `requiredCapabilities` names the mode. A client that declares an empty `elicitation` capability supports form.
+
 ## Server authorization
 
 Set `httpConfig.auth` on `@mcp:StreamableHttpConfig` to an `mcp:OAuthProtectedResourceConfig` to protect a service as an OAuth
@@ -309,10 +352,7 @@ public function main() returns error? {
         protocolMode = "auto"
     );
 
-    mcp:ConnectionInfo connection = check client->connect(
-        {name: "example-client", version: "2.0.0"},
-        {elicitation: {form: {}}}
-    );
+    mcp:ConnectionInfo connection = check client->connect({name: "example-client", version: "2.0.0"});
     io:println("Using MCP ", connection.protocolVersion);
 
     mcp:ListToolsResult listed = check client->listTools();
@@ -401,21 +441,29 @@ function needsReauthentication(error err) returns boolean {
 ```
 
 `callTool()` is the main API. When a modern server returns `InputRequiredResult`, it calls the configured
-`inputHandler`, echoes the opaque request state, and continues until the call completes or `maxInputRounds` is
-reached.
+`elicitationHandler` once for each input request, one at a time and in the order the server listed them. It then
+echoes the opaque request state and continues until the call completes or `maxInputRounds` is reached.
 
 ```ballerina
 mcp:StreamableHttpClientConfig config = {
     protocolMode: "auto",
     maxInputRounds: 4,
-    inputHandler: isolated function (mcp:InputRequest request)
+    elicitationHandler: isolated function (mcp:InputRequest request)
             returns mcp:InputResponse|mcp:ClientError {
-        return {action: "accept"};
+        mcp:FormElicitationParams|mcp:UrlElicitationParams params = request.params;
+        if params is mcp:UrlElicitationParams {
+            return {action: "decline"};
+        }
+        return {action: "accept", content: {confirmed: true}};
     },
     timeout: 30
 };
 final mcp:StreamableHttpClient client = check new ("http://localhost:9090/mcp", config);
 ```
+
+Configuring `elicitationHandler` advertises the `elicitation` capability with form and URL modes on every modern
+request, merged with the capabilities passed to `connect()`. The client does not validate answers against the
+form schema; the handler is responsible for that.
 
 Use `callToolOnce()` when the application needs to handle each continuation itself. It returns
 `CallToolResult|InputRequiredResult` after one logical request. On a legacy connection it delegates to

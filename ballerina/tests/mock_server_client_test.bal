@@ -356,7 +356,11 @@ service /mock on new http:Listener(3210) {
                             "inputRequests": {
                                 "answer": {
                                     "method": "elicitation/create",
-                                    "params": {"mode": "form", "message": "Confirm"}
+                                    "params": {
+                                        "mode": "form",
+                                        "message": "Confirm",
+                                        "requestedSchema": {"type": "object", "properties": {}}
+                                    }
                                 }
                             }
                         }
@@ -666,13 +670,13 @@ function testCloseTreatsFailedSessionTerminationAsClosed() returns error? {
 }
 
 @test:Config {}
-function testModernClientRequiresAnInputHandlerForContinuations() returns error? {
+function testModernClientRequiresAnElicitationHandlerForContinuations() returns error? {
     StreamableHttpClient noHandler = check new (mockUrl("inputRequiredNoHandler"), protocolMode = "modern");
     _ = check noHandler->connect(capabilities = {elicitation: {form: {}}});
     var callResult = noHandler->callTool({name: "echo"});
     test:assertTrue(callResult is ToolCallError);
     if callResult is ToolCallError {
-        test:assertTrue(callResult.message().includes("Input handler is not configured"));
+        test:assertTrue(callResult.message().includes("Elicitation handler is not configured"));
         test:assertTrue(callResult.detail()["inputRequired"] is InputRequiredResult);
     }
 }
