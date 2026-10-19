@@ -37,6 +37,7 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
                 {name: "ask", inputSchema: {'type: "object"}},
                 {name: "survey", inputSchema: {'type: "object"}},
                 {name: "openLink", inputSchema: {'type: "object"}},
+                {name: "mixedAnswers", inputSchema: {'type: "object"}},
                 {name: "loop", inputSchema: {'type: "object"}},
                 {name: "count", inputSchema: {'type: "object"}},
                 {name: "probe", inputSchema: {'type: "object"}},
@@ -118,6 +119,27 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
                 };
             }
             return {resultType: "complete", content: [{'type: "text", text: "connected"}]};
+        }
+        if callParams.name == "mixedAnswers" {
+            // Reports which answers arrived with content, so the client's stripping is visible on the wire.
+            map<InputResponse>? answers = callParams.inputResponses;
+            if answers is () {
+                FormSchema confirmSchema = {properties: {confirmed: {'type: "boolean"}}};
+                return {
+                    inputRequests: {
+                        "link": {params: {mode: "url", message: "url", url: "https://example.com/connect"}},
+                        "linkDeclined": {params: {mode: "url", message: "decline", url: "https://example.com/connect"}},
+                        "accepted": {params: {message: "accept", requestedSchema: confirmSchema}},
+                        "declined": {params: {message: "decline", requestedSchema: confirmSchema}},
+                        "cancelled": {params: {message: "cancel", requestedSchema: confirmSchema}}
+                    }
+                };
+            }
+            string[] withContent = from [string, InputResponse] [key, answer] in answers.entries()
+                where answer.hasKey("content")
+                order by key
+                select key;
+            return {resultType: "complete", content: [{'type: "text", text: withContent.toString()}]};
         }
         if callParams.name == "count" {
             // Never completes; each round's message is its 1-based round number.
@@ -252,7 +274,7 @@ function testClientCanDiscoverAndAdoptModernConnection() returns error? {
     test:assertEquals(connection.protocolVersion, MODERN_PROTOCOL_VERSION);
     test:assertEquals(connection.serverInfo?.name, "modern-test");
     ListToolsResult tools = check discoveryClient->listTools();
-    test:assertEquals(tools.tools.length(), 12);
+    test:assertEquals(tools.tools.length(), 13);
     check discoveryClient->close();
 }
 
@@ -272,7 +294,7 @@ function testModernClientWideResultAndContinuation() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
     ListToolsResult toolList = check modernClient->listTools();
-    test:assertEquals(toolList.tools.length(), 12);
+    test:assertEquals(toolList.tools.length(), 13);
     test:assertEquals(toolList.ttlMs, 0);
     test:assertEquals(toolList.cacheScope, "private");
     CallToolResult scalarResult = check modernClient->callTool({name: "scalar"});
@@ -498,6 +520,65 @@ function testHandlerCapabilityMergesWithConnectCapabilities() returns error? {
     _ = check modernClient->connect(capabilities = {elicitation: {form: {}}});
     CallToolResult callResult = check modernClient->callTool({name: "openLink"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "connected"});
+    check modernClient->close();
+}
+
+isolated string[] openedUrls = [];
+
+isolated function openTestUrl(InputRequest inputRequest) returns InputResponse|ClientError {
+    FormElicitationParams|UrlElicitationParams params = inputRequest.params;
+    if params !is UrlElicitationParams {
+        return error ClientError("Expected a URL elicitation");
+    }
+    lock {
+        openedUrls.push(params.url);
+    }
+    return {action: "accept"};
+}
+
+@test:Config {}
+function testHandlerCompletesUrlElicitation() returns error? {
+    lock {
+        openedUrls.removeAll();
+    }
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp", elicitationHandler = openTestUrl);
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "openLink"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "connected"});
+    lock {
+        test:assertEquals(openedUrls, ["https://example.com/connect"]);
+    }
+    check modernClient->close();
+}
+
+@test:Config {}
+function testFormOnlyClientCannotReceiveUrlElicitation() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    _ = check modernClient->connect(capabilities = {elicitation: {form: {}}});
+    CallToolResult|InputRequiredResult|ClientError callResult = modernClient->callToolOnce({name: "openLink"});
+    if callResult !is ServerResponseError {
+        test:assertFail("Expected the missing-capability error");
+    }
+    JsonRpcError rpcError = check callResult.detail()["rpcError"].ensureType();
+    test:assertEquals(rpcError.'error.code, MISSING_REQUIRED_CLIENT_CAPABILITY);
+    test:assertEquals(rpcError.'error["data"], {requiredCapabilities: {elicitation: {url: {}}}});
+    check modernClient->close();
+}
+
+// Answers every elicitation with content, even where the user submitted none.
+isolated function overshareTestElicitation(InputRequest inputRequest) returns InputResponse|ClientError {
+    string message = inputRequest.params.message;
+    "accept"|"decline"|"cancel" action = message == "decline" ? "decline" : message == "cancel" ? "cancel" : "accept";
+    return {action, content: {confirmed: true}};
+}
+
+@test:Config {}
+function testContinuationStripsContentTheUserDidNotSubmit() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = overshareTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "mixedAnswers"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "[\"accepted\"]"});
     check modernClient->close();
 }
 

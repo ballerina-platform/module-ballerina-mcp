@@ -345,7 +345,20 @@ isolated function validateInputRequired(InputRequiredResult inputResult, ClientC
         }
         if inputParams is FormElicitationParams {
             check validateFormElicitation(inputParams);
+        } else {
+            check validateUrlElicitation(inputParams);
         }
+    }
+}
+
+isolated function validateUrlElicitation(UrlElicitationParams urlParams) returns Error? {
+    if urlParams.message.trim().length() == 0 {
+        return error("URL elicitation must have a message");
+    }
+    // A scheme and a host, so the client can open the link without a base URL.
+    if !re `[A-Za-z][A-Za-z0-9+.\-]*://([^\s/?#@]*@)?(\[[0-9A-Fa-f:.]+\]|[^\s/?#@:\[\]]+)(:[0-9]*)?([/?#]\S*)?`
+            .isFullMatch(urlParams.url) {
+        return error("URL elicitation must have an absolute URL");
     }
 }
 

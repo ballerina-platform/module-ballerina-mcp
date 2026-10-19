@@ -242,6 +242,8 @@ Before sending an input-required result, the service checks it:
 - A result with neither `inputRequests` nor `requestState` is rejected with JSON-RPC `-32603`.
 - A form elicitation with a blank `message`, a `required` field missing from `properties`, inverted or negative
   bounds, an empty enum or a default outside the enum is rejected with `-32603`.
+- A URL elicitation with a blank `message`, or a `url` that is not absolute (a scheme and a host), is rejected
+  with `-32603`. `http` URLs are allowed.
 - An elicitation in a mode the client did not declare is rejected with the missing-capability error, whose
   `requiredCapabilities` names the mode. A client that declares an empty `elicitation` capability supports form.
 
@@ -463,7 +465,8 @@ final mcp:StreamableHttpClient client = check new ("http://localhost:9090/mcp", 
 
 Configuring `elicitationHandler` advertises the `elicitation` capability with form and URL modes on every modern
 request, merged with the capabilities passed to `connect()`. The client does not validate answers against the
-form schema; the handler is responsible for that.
+form schema; the handler is responsible for that. Before a continuation, it removes `content` from URL-mode answers
+and from any decline or cancel answer, so only an accepted form sends what the user submitted.
 
 Use `callToolOnce()` when the application needs to handle each continuation itself. It returns
 `CallToolResult|InputRequiredResult` after one logical request. On a legacy connection it delegates to

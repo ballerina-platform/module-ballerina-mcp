@@ -43,6 +43,16 @@ isolated function withElicitationCapability(ClientCapabilities capabilities) ret
     return advertised;
 }
 
+// Only an accepted form carries what the user submitted; a URL answer has nothing to submit.
+isolated function withSubmittedContentOnly(InputRequest inputRequest, InputResponse answer) returns InputResponse {
+    if answer.action == "accept" && inputRequest.params is FormElicitationParams {
+        return answer;
+    }
+    InputResponse stripped = answer.clone();
+    _ = stripped.removeIfHasKey("content");
+    return stripped;
+}
+
 # Represents an MCP client built on top of the Streamable HTTP transport.
 public distinct isolated client class StreamableHttpClient {
     # Transport for communication with the MCP server.
@@ -310,7 +320,8 @@ public distinct isolated client class StreamableHttpClient {
                         return error ToolCallError("Elicitation handler is not configured; use callToolOnce() for manual continuation",
                                 inputRequired = callResult);
                     }
-                    inputResponses[inputId] = check elicitationHandler(inputRequest);
+                    inputResponses[inputId] = withSubmittedContentOnly(inputRequest,
+                            check elicitationHandler(inputRequest));
                 }
                 if inputResponses.length() > 0 {
                     currentParams.inputResponses = inputResponses;
