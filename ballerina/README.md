@@ -79,6 +79,8 @@ A tool may bind these runtime values in addition to ordinary `anydata` arguments
 - `mcp:HttpSession` or `mcp:HttpSession?`, placed first, for legacy HTTP session state.
 - `mcp:RequestMetaObject?`, at any position, for the request's `_meta` value.
 - `@http:Header` parameters, `http:Headers`, and `http:Request` for Streamable HTTP request data.
+- `mcp:Context`, at any position, for the input responses and request state of a continuation (see
+  [Eliciting input from a basic service](#eliciting-input-from-a-basic-service)).
 
 Runtime parameters do not appear in the generated tool input schema. Request metadata must be nilable because clients
 may omit it.
@@ -134,6 +136,53 @@ remote isolated function weather(
 
 This produces a `region` property containing `"x-mcp-header": "Region"`. Use `@http:Header` when a value comes only
 from an HTTP header and must not be part of the MCP tool arguments.
+
+### Eliciting input from a basic service
+
+On the modern protocol, a tool can ask the user for input by returning an `mcp:InputRequiredResult` instead of its
+result. Build its elicitations with `mcp:elicitForm(message, schema)` or `mcp:elicitUrl(message, url)`. The client
+answers them and retries the call as a continuation. The tool then runs again from the top and reads the answers
+through an `mcp:Context` parameter.
+
+```ballerina
+type Confirmation record {|
+    boolean confirmed;
+|};
+
+remote isolated function deleteRepository(string name, mcp:Context context)
+        returns string|mcp:InputRequiredResult {
+    Confirmation? confirmation = context.acceptedContent("confirm");
+    if confirmation is () {
+        return {
+            inputRequests: {
+                "confirm": mcp:elicitForm(string `Delete ${name}?`, {
+                    properties: {confirmed: {'type: "boolean", description: "Confirm deletion"}},
+                    required: ["confirmed"]
+                })
+            }
+        };
+    }
+    return confirmation.confirmed ? "Deleted" : "Kept";
+}
+```
+
+`mcp:Context` is read-only and covers one round:
+
+- `acceptedContent(key, T)` returns the submitted content as `T`. It returns `()` when the input request was not
+  answered, was declined or cancelled, or its content does not convert to `T`, so treat `()` as "ask again".
+- `elicitResult(key)` returns the raw `mcp:InputResponse`, to tell a decline from a cancel or to read the answer to
+  a URL elicitation.
+- `requestState()` returns the request state the tool returned in the previous round.
+
+Neither `mcp:Context` nor `mcp:InputRequiredResult` appears in the generated tool schemas.
+
+Because the tool runs again on every round, work done before it decides to ask is repeated. Keep that work safe to
+repeat, and put anything expensive or non-repeatable after the ask or in the request state. The request state is
+readable by the client, so do not put secrets in it.
+
+On a legacy call the context is empty, so a tool that does not need input works for older clients. A tool that
+returns an input-required result on a legacy call gets a JSON-RPC error. The service checks input-required results
+as described in [Eliciting input from an advanced service](#eliciting-input-from-an-advanced-service).
 
 ## Sessions
 
@@ -235,7 +284,8 @@ remote isolated function onCallTool(mcp:CallToolParams params)
 
 A form schema is a flat object whose fields are string, number or integer, boolean, single-select enum (`enum`,
 or `oneOf` with titles) and multi-select enum (`items.enum`, or `items.anyOf` with titles) schemas. Elicitations
-use form mode by default; set `mode: "url"` with a `url` to send the user to an out-of-band page.
+use form mode by default; set `mode: "url"` with a `url` to send the user to an out-of-band page. The
+`mcp:elicitForm` and `mcp:elicitUrl` builders also work here.
 
 Before sending an input-required result, the service checks it:
 

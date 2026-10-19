@@ -45,8 +45,10 @@ import static io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask.EMPTY_ST
 import static io.ballerina.stdlib.mcp.plugin.Utils.hasHttpHeaderAnnotation;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getMcpArgumentHeaderName;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isAuthContextType;
+import static io.ballerina.stdlib.mcp.plugin.Utils.isContextType;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isHttpHeadersType;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isHttpRequestType;
+import static io.ballerina.stdlib.mcp.plugin.Utils.isInputRequiredResultType;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isMetaParameter;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isSessionType;
 
@@ -72,11 +74,12 @@ public class SchemaUtils {
         TypeMapper typeMapper = new TypeMapperImpl(context);
         for (ParameterSymbol parameterSymbol : parameterSymbolList) {
             try {
-                // Session, Meta, AuthContext, http:Headers, http:Request, and @http:Header parameters are injected
-                // by the runtime and are not part of the tool input schema
+                // Session, Meta, AuthContext, Context, http:Headers, http:Request, and @http:Header parameters are
+                // injected by the runtime and are not part of the tool input schema
                 if (isSessionType(parameterSymbol.typeDescriptor())
                         || isMetaParameter(parameterSymbol.typeDescriptor())
                         || isAuthContextType(parameterSymbol.typeDescriptor())
+                        || isContextType(parameterSymbol.typeDescriptor())
                         || isHttpHeadersType(parameterSymbol.typeDescriptor())
                         || isHttpRequestType(parameterSymbol.typeDescriptor())
                         || hasHttpHeaderAnnotation(parameterSymbol)) {
@@ -136,6 +139,10 @@ public class SchemaUtils {
 
     private static List<String> getSuccessfulReturnSchemas(TypeSymbol returnType, TypeMapper typeMapper)
             throws SchemaGenerationException {
+        // An input-required result is an interim answer, not tool output.
+        if (isInputRequiredResultType(returnType)) {
+            return Collections.emptyList();
+        }
         if (returnType.typeKind() == TypeDescKind.TYPE_REFERENCE) {
             return getSuccessfulReturnSchemas(((TypeReferenceTypeSymbol) returnType).typeDescriptor(), typeMapper);
         }

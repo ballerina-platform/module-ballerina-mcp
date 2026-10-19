@@ -470,7 +470,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                         trap invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(), session, headers,
                             httpRequest, extractHeaderValues(headers), treatNilableAsOptional, authContext);
                 if result is InputRequiredResult {
-                    return error ServerError("Input-required tool calls require modern MCP");
+                    return error ServerError(INPUT_REQUIRED_ON_LEGACY);
                 }
                 if result is InsufficientScopeError {
                     return result;
@@ -480,22 +480,25 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }
                 CallToolResult|error completedResult = result.cloneWithType();
                 if completedResult is error {
-                    return error ServerError("Input-required tool calls require modern MCP");
+                    return error ServerError(INPUT_REQUIRED_ON_LEGACY);
                 }
                 CallToolResult|error legacyResult = legacyToolCallResult(completedResult);
                 return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
             if mcpService is StreamableHttpService {
-                CallToolResult|error result = trap callToolForRemoteFunctions(mcpService, params.cloneReadOnly(),
-                        session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional,
-                        authContext);
+                CallToolResult|InputRequiredResult|error result = trap callToolForRemoteFunctions(mcpService,
+                        params.cloneReadOnly(), session, headers, httpRequest, extractHeaderValues(headers),
+                        treatNilableAsOptional, authContext, new);
                 if result is ParameterBindingError || result is InsufficientScopeError {
                     return result;
                 }
                 if result is error {
                     return toToolExecutionError(result, params.name);
                 }
-                return result;
+                if result is InputRequiredResult {
+                    return error ServerError(INPUT_REQUIRED_ON_LEGACY);
+                }
+                return <CallToolResult>result;
             }
             return error DispatcherError("MCP service is not available");
         }

@@ -307,10 +307,11 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
             callResult = advancedResult.cloneWithType();
         }
     } else if mcpService is StreamableHttpService {
-        CallToolResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
+        Context toolContext = new ((callParams.inputResponses ?: {}).cloneReadOnly(), callParams.requestState);
+        CallToolResult|InputRequiredResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
                 applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
-                authContext);
+                authContext, toolContext);
         if structuredResult is InsufficientScopeError {
             return structuredResult;
         }

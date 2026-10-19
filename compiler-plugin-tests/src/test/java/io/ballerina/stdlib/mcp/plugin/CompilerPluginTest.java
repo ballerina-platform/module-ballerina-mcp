@@ -19,6 +19,7 @@
 package io.ballerina.stdlib.mcp.plugin;
 
 import io.ballerina.projects.DiagnosticResult;
+import io.ballerina.projects.Module;
 import io.ballerina.projects.Package;
 import io.ballerina.projects.ProjectEnvironmentBuilder;
 import io.ballerina.projects.directory.BuildProject;
@@ -31,6 +32,7 @@ import org.testng.annotations.Test;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.stream.Collectors;
 
 /**
  * Tests for the MCP compiler plugin diagnostics on '@http:Header' and 'http:Headers' tool parameters.
@@ -256,5 +258,20 @@ public class CompilerPluginTest {
         DiagnosticResult conflictingBinding = compile("sample_package_31");
         Assert.assertEquals(errorCount(conflictingBinding), 1L);
         assertError(conflictingBinding, 0, "cannot use @mcp:Argument", "MCP_115");
+    }
+
+    @Test
+    public void testContextAndInputRequiredResultStayOutOfToolSchemas() {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve("sample_package_32"));
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+
+        Module module = project.currentPackage().getDefaultModule();
+        String source = module.documentIds().stream()
+                .map(documentId -> module.document(documentId).syntaxTree().toSourceCode())
+                .collect(Collectors.joining());
+        Assert.assertTrue(source.contains("\"required\":[\"path\"]"), source);
+        Assert.assertFalse(source.contains("\"context\""), source);
+        Assert.assertTrue(source.contains("outputSchema:{\"type\":\"string\"}"), source);
     }
 }
