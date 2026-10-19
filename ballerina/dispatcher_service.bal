@@ -254,7 +254,16 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             // nor a client cannot own one, so it gets a sessionless connection, or none if sessions are required.
             string? sessionOwner = authContext is AuthContext ? principalOf(authContext) : ();
             boolean unownable = authContext is AuthContext && sessionOwner is ();
-            if unownable && serviceConfig.sessionMode == STATEFUL {
+            boolean requiresSession = false;
+            if unownable {
+                StreamableHttpService|StreamableHttpAdvancedService|Error mcpService =
+                        getMcpServiceFromDispatcher(self);
+                if mcpService is Error {
+                    return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), id);
+                }
+                requiresSession = requiresLegacySession(mcpService);
+            }
+            if unownable && (serviceConfig.sessionMode == STATEFUL || requiresSession) {
                 return createJsonRpcErrorResponse(INVALID_REQUEST, "A session cannot be bound to this access " +
                         "token: it names neither a subject nor a client", id);
             }

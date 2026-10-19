@@ -252,7 +252,9 @@ service mcp:StreamableHttpService /files on mcpListener {
 ```
 
 - `resource` is the canonical URI clients use to reach the service. Set it explicitly behind a proxy.
-- `httpConfig.host` cannot be combined with an `mcp:OAuthProtectedResourceConfig`.
+- Protected services may use `httpConfig.host`. Each configured virtual host publishes its own protected resource
+  metadata service, so the same resource path can be used on different hosts. The OAuth `resource` remains the public
+  URI clients use and need not have the same host as the internal HTTP virtual host.
 - Each authorization server pairs its `issuer` with how its tokens are validated: as JWTs (`jwtValidatorConfig`)
   or through an introspection endpoint (`oauth2IntrospectionConfig`). The issuers are advertised in the metadata.
 - A token is only sent to the one authorization server that could have issued it. A JWT is validated by the server
@@ -261,8 +263,10 @@ service mcp:StreamableHttpService /files on mcpListener {
 - A token must be issued for `resource`. When an authorization server uses its own identifier for the API, set it
   as that server's `audience`. Set the issuer and audience on the authorization server, not in
   `jwtValidatorConfig`.
-- `scopesSupported` defaults to `requiredScopes`. `scopes` on `@mcp:Tool` are enforced by the server, are never sent
-  to clients in `tools/list`, and are requested through `403` challenges.
+- `requiredScopes` is local authorization policy applied to every request; it is not an OPRM field.
+  `scopesSupported` controls the informational `scopes_supported` field in protected resource metadata and defaults
+  to `requiredScopes`. `scopes` on `@mcp:Tool` are enforced by the server, are never sent to clients in `tools/list`,
+  and are requested through `403` challenges.
 - When the authorization server issues hierarchical scopes, declare them in `scopeHierarchy`, keyed by the broader
   scope. A token granted a broader scope then satisfies every scope it implies, transitively; challenges still name the
   exact scopes an operation needs, and `mcp:AuthContext.scopes` holds the implied scopes too.

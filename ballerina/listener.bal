@@ -23,6 +23,8 @@ public type ListenerConfiguration record {|
 
 type AttachedService record {|
     DispatcherService dispatcherService;
+    # Host whose protected resource metadata registry contains this service, when it uses MCP authorization
+    string? metadataHost;
     # Path of the service's protected resource metadata, when the service uses an `mcp:OAuthProtectedResourceConfig`
     string? metadataPath;
 |};
@@ -31,8 +33,9 @@ type AttachedService record {|
 public isolated class StreamableHttpListener {
     private http:Listener httpListener;
     private AttachedService[] attachedServices = [];
-    private final ProtectedResourceMetadataRegistry metadataRegistry = new;
-    private boolean metadataServiceAttached = false;
+    // Each virtual host has one protected resource metadata service and a path-keyed registry.
+    // A registry remains here for the lifetime of the listener after its metadata service is attached.
+    private final map<ProtectedResourceMetadataRegistry> metadataRegistries = {};
 
     # Initializes the Listener.
     #
@@ -71,23 +74,38 @@ public isolated class StreamableHttpListener {
         final DispatcherService dispatcherService = getDispatcherService(httpServiceConfig, authenticator);
         check addMcpServiceToDispatcher(dispatcherService, mcpService);
         lock {
+            string? metadataHost = ();
             string? metadataPath = authenticator is ServerAuthenticator ? authenticator.getMetadataPath() : ();
             if authenticator is ServerAuthenticator && metadataPath is string {
-                check self.metadataRegistry.add(metadataPath, authenticator.getMetadata());
-                error? metadataResult = self.attachMetadataService();
-                if metadataResult is error {
-                    self.metadataRegistry.remove(metadataPath);
-                    return error("Failed to publish protected resource metadata: " + metadataResult.message());
+                string serviceHost = serviceConfig.httpConfig.host;
+                // Use the exact configured value because the HTTP service registry also treats the host as an
+                // exact key. Normalizing only this registry could associate metadata with a different HTTP host.
+                metadataHost = serviceHost;
+                ProtectedResourceMetadataRegistry? existingRegistry = self.metadataRegistries[serviceHost];
+                if existingRegistry is ProtectedResourceMetadataRegistry {
+                    check existingRegistry.add(metadataPath, authenticator.getMetadata());
+                } else {
+                    ProtectedResourceMetadataRegistry newRegistry = new;
+                    check newRegistry.add(metadataPath, authenticator.getMetadata());
+                    error? metadataResult = self.attachMetadataService(serviceHost, newRegistry);
+                    if metadataResult is error {
+                        newRegistry.remove(metadataPath);
+                        return error("Failed to publish protected resource metadata: " + metadataResult.message());
+                    }
+                    self.metadataRegistries[serviceHost] = newRegistry;
                 }
             }
             error? result = self.httpListener.attach(dispatcherService, name.cloneReadOnly());
             if result is error {
-                if metadataPath is string {
-                    self.metadataRegistry.remove(metadataPath);
+                if metadataHost is string && metadataPath is string {
+                    ProtectedResourceMetadataRegistry? registry = self.metadataRegistries[metadataHost];
+                    if registry is ProtectedResourceMetadataRegistry {
+                        registry.remove(metadataPath);
+                    }
                 }
                 return error("Failed to attach MCP service: " + result.message());
             }
-            self.attachedServices.push({dispatcherService, metadataPath});
+            self.attachedServices.push({dispatcherService, metadataHost, metadataPath});
         }
     }
 
@@ -105,9 +123,13 @@ public isolated class StreamableHttpListener {
                     if result is error {
                         return error("Failed to detach MCP service: " + result.message());
                     }
+                    string? metadataHost = attachedService.metadataHost;
                     string? metadataPath = attachedService.metadataPath;
-                    if metadataPath is string {
-                        self.metadataRegistry.remove(metadataPath);
+                    if metadataHost is string && metadataPath is string {
+                        ProtectedResourceMetadataRegistry? registry = self.metadataRegistries[metadataHost];
+                        if registry is ProtectedResourceMetadataRegistry {
+                            registry.remove(metadataPath);
+                        }
                     }
                     _ = self.attachedServices.remove(index);
                     break;
@@ -116,16 +138,13 @@ public isolated class StreamableHttpListener {
         }
     }
 
-    // The metadata of every protected service on this listener is served by one well-known
-    // service, attached together with the first protected service.
-    private isolated function attachMetadataService() returns error? {
+    // The metadata of protected services on the same virtual host is served by one well-known
+    // service. The HTTP listener selects the host before that service resolves the resource path.
+    private isolated function attachMetadataService(string host, ProtectedResourceMetadataRegistry registry)
+            returns error? {
         lock {
-            if self.metadataServiceAttached {
-                return;
-            }
-            check self.httpListener.attach(createProtectedResourceMetadataService(self.metadataRegistry),
+            check self.httpListener.attach(createProtectedResourceMetadataService(registry, host),
                     PROTECTED_RESOURCE_METADATA_PATH);
-            self.metadataServiceAttached = true;
         }
     }
 
@@ -171,12 +190,6 @@ isolated function createServerAuthenticator(StreamableHttpService|StreamableHttp
     readonly & map<string[]> toolScopes = getToolScopes(mcpService);
     OAuthProtectedResourceConfig|http:ListenerAuthConfig[]? authConfig = serviceConfig.httpConfig.auth;
     if authConfig is OAuthProtectedResourceConfig {
-        // Protected resource metadata is published per listener and path, not per virtual host, so
-        // services on different hosts could not each publish their own.
-        if serviceConfig.httpConfig.host != DEFAULT_HTTP_SERVICE_HOST {
-            return error DispatcherError(
-                "'httpConfig.host' cannot be combined with an 'mcp:OAuthProtectedResourceConfig'");
-        }
         return new ServerAuthenticator(authConfig.cloneReadOnly(), toolScopes);
     }
     // Fail closed rather than serve tools whose declared scopes nothing enforces.

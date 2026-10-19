@@ -89,7 +89,9 @@ public type OAuthProtectedResourceConfig record {|
     string 'resource;
     # Authorization servers whose access tokens are accepted, each with how its tokens are validated
     AuthorizationServer[] authorizationServers;
-    # Scopes every request must carry, advertised in the `scope` of `401` challenges
+    # Scopes every request must carry. This is local authorization policy, not a field in the
+    # protected resource metadata document. These scopes are advertised in `401` challenges and
+    # combined with operation-specific scopes in `insufficient_scope` challenges.
     string[] requiredScopes = [];
     # Scopes that a broader scope grants, keyed by the broader scope, for authorization servers
     # that issue hierarchical scopes. A token granted a key also holds every scope listed for it,
@@ -97,7 +99,8 @@ public type OAuthProtectedResourceConfig record {|
     # `{"files:admin": ["files:write"], "files:write": ["files:read"]}` lets a token granted
     # `files:admin` call a tool that needs `files:read`.
     map<string[]> scopeHierarchy = {};
-    # Scopes advertised in protected resource metadata. Defaults to `requiredScopes`; scopes
+    # Scopes published in the `scopes_supported` field of protected resource metadata. This field
+    # is informational and is not used to authorize requests. Defaults to `requiredScopes`; scopes
     # declared on tools are requested through `403` step-up challenges instead.
     string[] scopesSupported?;
     # Human-readable name of the server, advertised in protected resource metadata
@@ -281,7 +284,10 @@ isolated class ServerAuthenticator {
             ["resourceTosUri", config.resourceTosUri]
         ] {
             if url is string {
-                _ = check parseAbsoluteUrl(url);
+                UrlParts|Error parsedUrl = parseAbsoluteUrl(url);
+                if parsedUrl is Error {
+                    return error ServerError(string `Invalid '${setting}': ${parsedUrl.message()}`, parsedUrl);
+                }
             }
         }
         check checkScopes(config.requiredScopes, "requiredScopes");
@@ -393,7 +399,9 @@ isolated class ServerAuthenticator {
             return self.invalidRequest("The bearer token is empty");
         }
 
-        [map<json>, TokenVerifier]|error verified = self.verify(authorizationHeader, token);
+        // The token has already been parsed and trimmed here. Give the JWT handler a canonical
+        // header so that it does not interpret otherwise-valid whitespace differently.
+        [map<json>, TokenVerifier]|error verified = self.verify("Bearer " + token, token);
         if verified is IntrospectionUnavailableError {
             // No `invalid_token`: the token was not judged, so the client should keep it and retry.
             return <http:ServiceUnavailable>{body: createJsonRpcError(INTERNAL_ERROR, verified.message())};
@@ -648,10 +656,12 @@ isolated class ProtectedResourceMetadataRegistry {
 # `/.well-known/oauth-protected-resource`.
 #
 # + registry - Metadata documents of the services attached to the listener
+# + host - Virtual host on which the metadata service is published
 # + return - The metadata service
-isolated function createProtectedResourceMetadataService(ProtectedResourceMetadataRegistry registry)
+isolated function createProtectedResourceMetadataService(ProtectedResourceMetadataRegistry registry, string host)
         returns http:Service {
     return @http:ServiceConfig {
+        host,
         cors: {allowOrigins: ["*"], allowMethods: ["GET"]}
     } isolated service object {
         isolated resource function get [string... path]() returns ProtectedResourceMetadata|http:NotFound {

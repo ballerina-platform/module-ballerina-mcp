@@ -17,12 +17,16 @@
 import ballerina/http;
 import ballerina/jwt;
 import ballerina/test;
+import ballerina/uuid;
 
-const SERVER_AUTH_SECRET = "server-auth-test-secret-0123456789abcdef";
-const SERVER_AUTH_ISSUER = "https://idp.example.com";
-const SERVER_AUTH_RESOURCE = "http://localhost:3235/mcp";
-const SERVER_AUTH_ADVANCED_RESOURCE = "http://localhost:3235/advanced";
-const SERVER_AUTH_METADATA_URL = "http://localhost:3235/.well-known/oauth-protected-resource/mcp";
+// Signing and client keys are generated per run, so that no key is kept in source.
+final string SIGNING_KEY = uuid:createType4AsString() + uuid:createType4AsString();
+const PROTECTED_ISSUER = "https://idp.example.com";
+const PROTECTED_RESOURCE = "http://localhost:3235/mcp";
+const PROTECTED_ADVANCED_RESOURCE = "http://localhost:3235/advanced";
+const SESSION_REQUIRED_RESOURCE = "http://localhost:3235/sessionRequired";
+const STATEFUL_RESOURCE = "http://localhost:3235/stateful";
+const PROTECTED_METADATA_URL = "http://localhost:3235/.well-known/oauth-protected-resource/mcp";
 
 listener StreamableHttpListener serverAuthListener = check new (3235);
 
@@ -30,9 +34,9 @@ listener StreamableHttpListener serverAuthListener = check new (3235);
     info: {name: "protected", version: "1"},
     httpConfig: {
         auth: {
-            'resource: SERVER_AUTH_RESOURCE,
+            'resource: PROTECTED_RESOURCE,
             authorizationServers: [
-                {issuer: SERVER_AUTH_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SERVER_AUTH_SECRET}}}}
+                {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
             ],
             requiredScopes: ["mcp:tools"],
             resourceName: "Protected test server"
@@ -63,9 +67,9 @@ service StreamableHttpService /mcp on serverAuthListener {
     info: {name: "protected-advanced", version: "1"},
     httpConfig: {
         auth: {
-            'resource: SERVER_AUTH_ADVANCED_RESOURCE,
+            'resource: PROTECTED_ADVANCED_RESOURCE,
             authorizationServers: [
-                {issuer: SERVER_AUTH_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SERVER_AUTH_SECRET}}}}
+                {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
             ]
         }
     }
@@ -93,7 +97,7 @@ service StreamableHttpAdvancedService /advanced on serverAuthListener {
         auth: {
             'resource: "http://localhost:3235/listing",
             authorizationServers: [
-                {issuer: SERVER_AUTH_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SERVER_AUTH_SECRET}}}}
+                {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
             ],
             requiredScopes: ["mcp:tools"]
         }
@@ -111,12 +115,45 @@ service StreamableHttpAdvancedService /listing on serverAuthListener {
         {content: [{'type: "text", text: params.name}]};
 }
 
+@StreamableHttpConfig {
+    info: {name: "protected-session-required", version: "1"},
+    httpConfig: {
+        auth: {
+            'resource: SESSION_REQUIRED_RESOURCE,
+            authorizationServers: [
+                {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
+            ]
+        }
+    }
+}
+service StreamableHttpService /sessionRequired on serverAuthListener {
+    @Tool {description: "Returns the required session ID", schema: {'type: "object"}}
+    remote isolated function sessionId(HttpSession session) returns string => session.getSessionId();
+}
+
+@StreamableHttpConfig {
+    info: {name: "protected-stateful", version: "1"},
+    sessionMode: STATEFUL,
+    httpConfig: {
+        auth: {
+            'resource: STATEFUL_RESOURCE,
+            authorizationServers: [
+                {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
+            ]
+        }
+    }
+}
+service StreamableHttpService /stateful on serverAuthListener {
+    @Tool {description: "Returns pong", schema: {'type: "object"}}
+    remote isolated function ping() returns string => "pong";
+}
+
 final http:Client serverAuthClient = check new ("http://localhost:3235");
 
 isolated function serverAuthToken(string scope = "mcp:tools", string subject = "alice",
-        string audience = SERVER_AUTH_RESOURCE, string secret = SERVER_AUTH_SECRET) returns string|error =>
+        string audience = PROTECTED_RESOURCE, string secret = SIGNING_KEY) returns string|error =>
     jwt:issue({
-        issuer: SERVER_AUTH_ISSUER,
+        issuer: PROTECTED_ISSUER,
         username: subject,
         audience,
         customClaims: {scope},
@@ -165,29 +202,29 @@ function testRequestWithoutTokenIsChallenged() returns error? {
     test:assertEquals(response.statusCode, 401);
     string challenge = check challengeOf(response);
     test:assertTrue(challenge.startsWith("Bearer "), challenge);
-    test:assertTrue(challenge.includes(string `resource_metadata="${SERVER_AUTH_METADATA_URL}"`), challenge);
+    test:assertTrue(challenge.includes(string `resource_metadata="${PROTECTED_METADATA_URL}"`), challenge);
     test:assertTrue(challenge.includes("scope=\"mcp:tools\""), challenge);
     // RFC 6750 section 3.1: a request without credentials gets no error code.
     test:assertFalse(challenge.includes("error="), challenge);
 
     // Our own client parses the challenge it receives from our server.
     BearerChallenge? parsed = parseBearerChallenge(challenge);
-    test:assertEquals(parsed?.resourceMetadata, SERVER_AUTH_METADATA_URL);
+    test:assertEquals(parsed?.resourceMetadata, PROTECTED_METADATA_URL);
     test:assertEquals(parsed?.scope, "mcp:tools");
 }
 
 @test:Config {}
 function testProtectedResourceMetadataIsPublished() returns error? {
     json metadata = check serverAuthClient->get("/.well-known/oauth-protected-resource/mcp");
-    test:assertEquals(metadata.'resource, SERVER_AUTH_RESOURCE);
-    test:assertEquals(metadata.authorization_servers, [SERVER_AUTH_ISSUER]);
+    test:assertEquals(metadata.'resource, PROTECTED_RESOURCE);
+    test:assertEquals(metadata.authorization_servers, [PROTECTED_ISSUER]);
     test:assertEquals(metadata.bearer_methods_supported, ["header"]);
     test:assertEquals(metadata.resource_name, "Protected test server");
     // Defaults to the required scopes; tool scopes are requested through step-up challenges.
     test:assertEquals(metadata.scopes_supported, ["mcp:tools"]);
 
     json advancedMetadata = check serverAuthClient->get("/.well-known/oauth-protected-resource/advanced");
-    test:assertEquals(advancedMetadata.'resource, SERVER_AUTH_ADVANCED_RESOURCE);
+    test:assertEquals(advancedMetadata.'resource, PROTECTED_ADVANCED_RESOURCE);
 
     // A root document would have to describe the origin as a resource, so none is published.
     http:Response rootMetadata = check serverAuthClient->get("/.well-known/oauth-protected-resource");
@@ -197,7 +234,7 @@ function testProtectedResourceMetadataIsPublished() returns error? {
 @test:Config {}
 function testInvalidTokensAreRejected() returns error? {
     map<string> invalidTokens = {
-        "wrong signature": check serverAuthToken(secret = "another-secret-0123456789abcdefghij"),
+        "wrong signature": check serverAuthToken(secret = uuid:createType4AsString()),
         "wrong audience": check serverAuthToken(audience = "http://localhost:3235/other"),
         "malformed": "not-a-jwt"
     };
@@ -223,6 +260,14 @@ function testInvalidTokensAreRejected() returns error? {
 }
 
 @test:Config {}
+function testBearerTokenAllowsExtraWhitespace() returns error? {
+    string token = check serverAuthToken();
+    // `protectedModernPost` adds the first separator, producing two spaces before the token here.
+    http:Response response = check protectedModernPost("/mcp", REQUEST_LIST_TOOLS, token = " " + token);
+    test:assertEquals(response.statusCode, 200);
+}
+
+@test:Config {}
 function testTokenWithoutRequiredScopeIsForbidden() returns error? {
     http:Response response = check protectedModernPost("/mcp", REQUEST_LIST_TOOLS,
             token = check serverAuthToken(scope = "profile"));
@@ -230,7 +275,7 @@ function testTokenWithoutRequiredScopeIsForbidden() returns error? {
     string challenge = check challengeOf(response);
     test:assertTrue(challenge.includes("error=\"insufficient_scope\""), challenge);
     test:assertTrue(challenge.includes("scope=\"mcp:tools\""), challenge);
-    test:assertTrue(challenge.includes(string `resource_metadata="${SERVER_AUTH_METADATA_URL}"`), challenge);
+    test:assertTrue(challenge.includes(string `resource_metadata="${PROTECTED_METADATA_URL}"`), challenge);
 }
 
 @test:Config {}
@@ -281,7 +326,7 @@ function testToolCanRequestStepUp() returns error? {
 
 @test:Config {}
 function testAdvancedServiceReceivesAuthContext() returns error? {
-    string token = check serverAuthToken(audience = SERVER_AUTH_ADVANCED_RESOURCE);
+    string token = check serverAuthToken(audience = PROTECTED_ADVANCED_RESOURCE);
     http:Response response = check callProtectedTool("whoami", token, "/advanced");
     test:assertEquals(response.statusCode, 200);
     test:assertEquals(check textResult(response), "alice");
@@ -372,64 +417,64 @@ function testLegacySessionIsBoundToItsCreator() returns error? {
 @test:Config {}
 function testServerAuthConfigurationIsValidated() returns error? {
     StreamableHttpListener validationListener = check new (3236);
-    JwtTokenValidator jwtValidator = {jwtValidatorConfig: {signatureConfig: {secret: SERVER_AUTH_SECRET}}};
+    JwtTokenValidator jwtValidator = {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}};
 
     map<OAuthProtectedResourceConfig> invalidConfigs = {
         "not canonical": {
             'resource: "HTTP://LOCALHOST:3236/x",
-            authorizationServers: [{issuer: SERVER_AUTH_ISSUER, validator: jwtValidator}]
+            authorizationServers: [{issuer: PROTECTED_ISSUER, validator: jwtValidator}]
         },
         "configured more than once": {
             'resource: "http://localhost:3236/x",
             authorizationServers: [
-                {issuer: SERVER_AUTH_ISSUER, validator: jwtValidator},
-                {issuer: SERVER_AUTH_ISSUER, validator: jwtValidator}
+                {issuer: PROTECTED_ISSUER, validator: jwtValidator},
+                {issuer: PROTECTED_ISSUER, validator: jwtValidator}
             ]
         },
         "not in 'jwtValidatorConfig'": {
             'resource: "http://localhost:3236/x",
             authorizationServers: [{
-                issuer: SERVER_AUTH_ISSUER,
-                validator: {jwtValidatorConfig: {audience: "x", signatureConfig: {secret: SERVER_AUTH_SECRET}}}
+                issuer: PROTECTED_ISSUER,
+                validator: {jwtValidatorConfig: {audience: "x", signatureConfig: {secret: SIGNING_KEY}}}
             }]
         },
         "does not match the authorization server issuer": {
             'resource: "http://localhost:3236/x",
             authorizationServers: [{
-                issuer: SERVER_AUTH_ISSUER,
+                issuer: PROTECTED_ISSUER,
                 validator: {jwtValidatorConfig: {issuer: "https://other.example.com",
-                    signatureConfig: {secret: SERVER_AUTH_SECRET}}}
+                    signatureConfig: {secret: SIGNING_KEY}}}
             }]
         },
         "At least one authorization server": {'resource: "http://localhost:3236/x", authorizationServers: []},
         "remove it from requiredScopes": {
             'resource: "http://localhost:3236/x",
-            authorizationServers: [{issuer: SERVER_AUTH_ISSUER, validator: jwtValidator}],
+            authorizationServers: [{issuer: PROTECTED_ISSUER, validator: jwtValidator}],
             requiredScopes: ["files:read", "offline_access"]
         },
         "remove it from scopesSupported": {
             'resource: "http://localhost:3236/x",
-            authorizationServers: [{issuer: SERVER_AUTH_ISSUER, validator: jwtValidator}],
+            authorizationServers: [{issuer: PROTECTED_ISSUER, validator: jwtValidator}],
             scopesSupported: ["files:read", "offline_access"]
         },
         "remove it from scopeHierarchy": {
             'resource: "http://localhost:3236/x",
-            authorizationServers: [{issuer: SERVER_AUTH_ISSUER, validator: jwtValidator}],
+            authorizationServers: [{issuer: PROTECTED_ISSUER, validator: jwtValidator}],
             scopeHierarchy: {"files:admin": ["files:read", "offline_access"]}
         },
         "entry for 'files:admin' lists no scopes": {
             'resource: "http://localhost:3236/x",
-            authorizationServers: [{issuer: SERVER_AUTH_ISSUER, validator: jwtValidator}],
+            authorizationServers: [{issuer: PROTECTED_ISSUER, validator: jwtValidator}],
             scopeHierarchy: {"files:admin": []}
         },
         "'has space' in requiredScopes is not a valid OAuth scope": {
             'resource: "http://localhost:3236/x",
-            authorizationServers: [{issuer: SERVER_AUTH_ISSUER, validator: jwtValidator}],
+            authorizationServers: [{issuer: PROTECTED_ISSUER, validator: jwtValidator}],
             requiredScopes: ["has space"]
         },
-        "is not an absolute URL": {
+        "Invalid 'resourceDocumentation': 'docs/files' is not an absolute URL.": {
             'resource: "http://localhost:3236/x",
-            authorizationServers: [{issuer: SERVER_AUTH_ISSUER, validator: jwtValidator}],
+            authorizationServers: [{issuer: PROTECTED_ISSUER, validator: jwtValidator}],
             resourceDocumentation: "docs/files"
         },
         "Only one authorization server can use 'oauth2IntrospectionConfig'": {
@@ -449,7 +494,7 @@ function testServerAuthConfigurationIsValidated() returns error? {
     // Tool scopes end up in 403 challenges, so they are checked too.
     OAuthProtectedResourceConfig validConfig = {
         'resource: "http://localhost:3236/x",
-        authorizationServers: [{issuer: SERVER_AUTH_ISSUER, validator: jwtValidator}]
+        authorizationServers: [{issuer: PROTECTED_ISSUER, validator: jwtValidator}]
     };
     ServerAuthenticator|Error toolScopeResult = new (validConfig.cloneReadOnly(), {"refresh": ["offline_access"]});
     test:assertTrue(toolScopeResult is Error &&
@@ -466,24 +511,152 @@ function testServerAuthConfigurationIsValidated() returns error? {
     Error? requiresAuthResult = validationListener.attach(requiresAuth, "/requires-auth");
     test:assertTrue(requiresAuthResult is Error && requiresAuthResult.message().includes("mcp:AuthContext"));
 
-    StreamableHttpAdvancedService virtualHost = @StreamableHttpConfig {
-        info: {name: "virtual-host", version: "1"},
+}
+
+isolated function newFilesVirtualHostService() returns StreamableHttpAdvancedService =>
+    @StreamableHttpConfig {
+        info: {name: "files", version: "1"},
         httpConfig: {
             host: "files.example.com",
             auth: {
-                'resource: "http://localhost:3236/virtual-host",
+                'resource: "http://public-a.example.com/shared",
                 authorizationServers: [
-                    {issuer: SERVER_AUTH_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SERVER_AUTH_SECRET}}}}
+                    {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
                 ]
             }
         }
-    } isolated service object {
+    } service object {
         remote isolated function onListTools() returns ListToolsResult => {tools: []};
 
         remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
     };
-    Error? virtualHostResult = validationListener.attach(virtualHost, "/virtual-host");
-    test:assertTrue(virtualHostResult is Error && virtualHostResult.message().includes("'httpConfig.host'"));
+
+isolated function newUppercaseFilesVirtualHostService() returns StreamableHttpAdvancedService =>
+    @StreamableHttpConfig {
+        info: {name: "uppercase-files", version: "1"},
+        httpConfig: {
+            host: "Files.Example.com",
+            auth: {
+                'resource: "http://public-uppercase.example.com/shared",
+                authorizationServers: [
+                    {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
+                ]
+            }
+        }
+    } service object {
+        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+
+        remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
+    };
+
+isolated function newMediaVirtualHostService() returns StreamableHttpAdvancedService =>
+    @StreamableHttpConfig {
+        info: {name: "media", version: "1"},
+        httpConfig: {
+            host: "media.example.com",
+            auth: {
+                'resource: "http://public-b.example.com/shared",
+                authorizationServers: [
+                    {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
+                ]
+            }
+        }
+    } service object {
+        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+
+        remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
+    };
+
+isolated function newOtherFilesVirtualHostService() returns StreamableHttpAdvancedService =>
+    @StreamableHttpConfig {
+        info: {name: "other-files", version: "1"},
+        httpConfig: {
+            host: "files.example.com",
+            auth: {
+                'resource: "http://public-a.example.com/other",
+                authorizationServers: [
+                    {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
+                ]
+            }
+        }
+    } service object {
+        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+
+        remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
+    };
+
+isolated function newDefaultHostService() returns StreamableHttpAdvancedService =>
+    @StreamableHttpConfig {
+        info: {name: "default-host", version: "1"},
+        httpConfig: {
+            auth: {
+                'resource: "http://public-default.example.com/shared",
+                authorizationServers: [
+                    {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
+                ]
+            }
+        }
+    } service object {
+        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+
+        remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
+    };
+
+@test:Config {}
+function testProtectedResourceMetadataIsIsolatedByVirtualHost() returns error? {
+    StreamableHttpListener virtualHostListener = check new (3240);
+    StreamableHttpAdvancedService files = newFilesVirtualHostService();
+    StreamableHttpAdvancedService uppercaseFiles = newUppercaseFilesVirtualHostService();
+    StreamableHttpAdvancedService media = newMediaVirtualHostService();
+    StreamableHttpAdvancedService otherFiles = newOtherFilesVirtualHostService();
+    StreamableHttpAdvancedService defaultHost = newDefaultHostService();
+
+    // The same metadata path is valid on different virtual hosts, and one host can serve multiple paths.
+    check virtualHostListener.attach(files, "/files");
+    // The HTTP module treats differently cased host configuration values as distinct routing keys.
+    check virtualHostListener.attach(uppercaseFiles, "/uppercaseFiles");
+    check virtualHostListener.attach(media, "/media");
+    check virtualHostListener.attach(otherFiles, "/otherFiles");
+    check virtualHostListener.attach(defaultHost, "/defaultHost");
+
+    StreamableHttpAdvancedService duplicate = newFilesVirtualHostService();
+    Error? duplicateResult = virtualHostListener.attach(duplicate, "/duplicate");
+    test:assertTrue(duplicateResult is Error && duplicateResult.message().includes("already published"));
+
+    check virtualHostListener.'start();
+    error? assertionResult = trap assertVirtualHostMetadata(virtualHostListener, files);
+    check virtualHostListener.gracefulStop();
+    return assertionResult;
+}
+
+isolated function assertVirtualHostMetadata(StreamableHttpListener virtualHostListener,
+        StreamableHttpAdvancedService files) returns error? {
+    http:Client virtualHostClient = check new ("http://localhost:3240");
+    string sharedMetadataPath = "/.well-known/oauth-protected-resource/shared";
+
+    json filesMetadata = check virtualHostClient->get(sharedMetadataPath, headers = {"Host": "files.example.com"});
+    json uppercaseFilesMetadata = check virtualHostClient->get(sharedMetadataPath,
+            headers = {"Host": "Files.Example.com"});
+    json mediaMetadata = check virtualHostClient->get(sharedMetadataPath, headers = {"Host": "media.example.com"});
+    json defaultMetadata = check virtualHostClient->get(sharedMetadataPath);
+    json otherFilesMetadata = check virtualHostClient->get("/.well-known/oauth-protected-resource/other",
+            headers = {"Host": "files.example.com"});
+    // The advertised public resource is independent of the internal virtual host.
+    test:assertEquals(filesMetadata.'resource, "http://public-a.example.com/shared");
+    test:assertEquals(uppercaseFilesMetadata.'resource, "http://public-uppercase.example.com/shared");
+    test:assertEquals(mediaMetadata.'resource, "http://public-b.example.com/shared");
+    test:assertEquals(defaultMetadata.'resource, "http://public-default.example.com/shared");
+    test:assertEquals(otherFilesMetadata.'resource, "http://public-a.example.com/other");
+
+    check virtualHostListener.detach(files);
+    http:Response detached = check virtualHostClient->get(sharedMetadataPath, headers = {"Host": "files.example.com"});
+    test:assertEquals(detached.statusCode, 404);
+    // Detaching one host's service does not remove the same path from another host's registry.
+    json stillPublished = check virtualHostClient->get(sharedMetadataPath, headers = {"Host": "media.example.com"});
+    test:assertEquals(stillPublished.'resource, "http://public-b.example.com/shared");
+    json uppercaseStillPublished = check virtualHostClient->get(sharedMetadataPath,
+            headers = {"Host": "Files.Example.com"});
+    test:assertEquals(uppercaseStillPublished.'resource, "http://public-uppercase.example.com/shared");
 }
 
 isolated function bearerQuoting() returns string => bearerChallenge("https://a/b", ["x"], "invalid_token",
@@ -500,9 +673,9 @@ function testGrantedScopesReadsScopeAndScpClaims() {
     test:assertEquals(grantedScopes({scope: " a  b "}, "scope"), ["a", "b"]);
     test:assertEquals(grantedScopes({scp: ["a", "b"]}, "scope"), ["a", "b"]);
     test:assertEquals(grantedScopes({}, "scope"), []);
-    test:assertTrue(audienceMatches(["x", SERVER_AUTH_RESOURCE], [SERVER_AUTH_RESOURCE]));
-    test:assertTrue(audienceMatches("api://files", ["api://files", SERVER_AUTH_RESOURCE]));
-    test:assertFalse(audienceMatches((), [SERVER_AUTH_RESOURCE]));
+    test:assertTrue(audienceMatches(["x", PROTECTED_RESOURCE], [PROTECTED_RESOURCE]));
+    test:assertTrue(audienceMatches("api://files", ["api://files", PROTECTED_RESOURCE]));
+    test:assertFalse(audienceMatches((), [PROTECTED_RESOURCE]));
 }
 
 // Two authorization servers: one issues JWTs, the other opaque tokens that are introspected and
@@ -551,7 +724,7 @@ service /oauth2 on new http:Listener(3237) {
         auth: {
             'resource: "http://localhost:3235/multi",
             authorizationServers: [
-                {issuer: SERVER_AUTH_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SERVER_AUTH_SECRET}}}},
+                {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}},
                 {
                     issuer: PARTNER_ISSUER,
                     audience: PARTNER_AUDIENCE,
@@ -626,10 +799,10 @@ function testInvalidRuntimeScopeIsAServerError() returns error? {
 function testTokenWithoutPrincipalGetsNoSession() returns error? {
     // A token naming neither a subject nor a client cannot own a session.
     string anonymousToken = check jwt:issue({
-        issuer: SERVER_AUTH_ISSUER,
-        audience: SERVER_AUTH_RESOURCE,
+        issuer: PROTECTED_ISSUER,
+        audience: PROTECTED_RESOURCE,
         customClaims: {scope: "mcp:tools"},
-        signatureConfig: {algorithm: jwt:HS256, config: SERVER_AUTH_SECRET}
+        signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
     });
     http:Response initialized = check serverAuthClient->post("/mcp", legacyRequest(REQUEST_INITIALIZE, {
         protocolVersion: LATEST_LEGACY_PROTOCOL_VERSION,
@@ -641,9 +814,50 @@ function testTokenWithoutPrincipalGetsNoSession() returns error? {
 }
 
 @test:Config {}
+function testTokenWithoutPrincipalIsRejectedWhenAutoServiceRequiresSession() returns error? {
+    string anonymousToken = check jwt:issue({
+        issuer: PROTECTED_ISSUER,
+        audience: SESSION_REQUIRED_RESOURCE,
+        signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
+    });
+    http:Response initialized = check serverAuthClient->post("/sessionRequired", legacyRequest(REQUEST_INITIALIZE, {
+        protocolVersion: LATEST_LEGACY_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: {name: "test", version: "1"}
+    }), headers = legacyHeaders({[AUTHORIZATION_HEADER]: "Bearer " + anonymousToken}));
+    test:assertEquals(initialized.statusCode, 200);
+    test:assertFalse(initialized.hasHeader(SESSION_ID_HEADER));
+    json payload = check initialized.getJsonPayload();
+    json errorPayload = check payload.'error;
+    string errorMessage = check (check errorPayload.message).ensureType();
+    test:assertTrue(errorMessage.includes("neither a subject nor a client"));
+}
+
+@test:Config {}
+function testTokenWithoutPrincipalRemainsRejectedInStatefulMode() returns error? {
+    string anonymousToken = check jwt:issue({
+        issuer: PROTECTED_ISSUER,
+        audience: STATEFUL_RESOURCE,
+        signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
+    });
+    http:Response initialized = check serverAuthClient->post("/stateful", legacyRequest(REQUEST_INITIALIZE, {
+        protocolVersion: LATEST_LEGACY_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: {name: "test", version: "1"}
+    }), headers = legacyHeaders({[AUTHORIZATION_HEADER]: "Bearer " + anonymousToken}));
+    test:assertEquals(initialized.statusCode, 200);
+    test:assertFalse(initialized.hasHeader(SESSION_ID_HEADER));
+    json payload = check initialized.getJsonPayload();
+    json errorPayload = check payload.'error;
+    string errorMessage = check (check errorPayload.message).ensureType();
+    test:assertTrue(errorMessage.includes("neither a subject nor a client"));
+}
+
+@test:Config {}
 function testPrincipalsDoNotCollide() {
-    AuthContext user = {subject: "x", clientId: (), issuer: SERVER_AUTH_ISSUER, scopes: [], claims: {}, token: ""};
-    AuthContext clientCaller = {subject: (), clientId: "x", issuer: SERVER_AUTH_ISSUER, scopes: [], claims: {}, token: ""};
+    string empty = "";
+    AuthContext user = {subject: "x", clientId: (), issuer: PROTECTED_ISSUER, scopes: [], claims: {}, token: empty};
+    AuthContext clientCaller = {subject: (), clientId: "x", issuer: PROTECTED_ISSUER, scopes: [], claims: {}, token: empty};
     test:assertNotEquals(principalOf(user), principalOf(clientCaller));
 }
 
@@ -660,18 +874,18 @@ function testUsernameIsNotTakenAsTheSubject() returns error? {
 function testSessionIsBoundToItsClient() returns error? {
     // The same user signed in through two clients: the second client cannot use the first one's session.
     string desktopToken = check jwt:issue({
-        issuer: SERVER_AUTH_ISSUER,
+        issuer: PROTECTED_ISSUER,
         username: "alice",
-        audience: SERVER_AUTH_RESOURCE,
+        audience: PROTECTED_RESOURCE,
         customClaims: {scope: "mcp:tools", client_id: "desktop-app"},
-        signatureConfig: {algorithm: jwt:HS256, config: SERVER_AUTH_SECRET}
+        signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
     });
     string otherToken = check jwt:issue({
-        issuer: SERVER_AUTH_ISSUER,
+        issuer: PROTECTED_ISSUER,
         username: "alice",
-        audience: SERVER_AUTH_RESOURCE,
+        audience: PROTECTED_RESOURCE,
         customClaims: {scope: "mcp:tools", client_id: "other-app"},
-        signatureConfig: {algorithm: jwt:HS256, config: SERVER_AUTH_SECRET}
+        signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
     });
     http:Response initialized = check serverAuthClient->post("/mcp", legacyRequest(REQUEST_INITIALIZE, {
         protocolVersion: LATEST_LEGACY_PROTOCOL_VERSION,
@@ -693,11 +907,11 @@ function testSessionIsBoundToItsClient() returns error? {
 @test:Config {}
 function testTokensFromEveryAuthorizationServerAreAccepted() returns error? {
     json metadata = check serverAuthClient->get("/.well-known/oauth-protected-resource/multi");
-    test:assertEquals(metadata.authorization_servers, [SERVER_AUTH_ISSUER, PARTNER_ISSUER]);
+    test:assertEquals(metadata.authorization_servers, [PROTECTED_ISSUER, PARTNER_ISSUER]);
 
     http:Response jwtCaller = check callProtectedTool("whoami",
             check serverAuthToken(audience = "http://localhost:3235/multi"), "/multi");
-    test:assertEquals(check textResult(jwtCaller), "alice@" + SERVER_AUTH_ISSUER);
+    test:assertEquals(check textResult(jwtCaller), "alice@" + PROTECTED_ISSUER);
 
     // Introspected tokens are checked against the partner's own audience, and are attributed to it.
     http:Response introspectedCaller = check callProtectedTool("whoami", "opaque-carol", "/multi");
@@ -720,7 +934,7 @@ function testTokensAreOnlySentToTheirIssuer() returns error? {
         username: "mallory",
         audience: "http://localhost:3235/multi",
         customClaims: {scope: "mcp:tools"},
-        signatureConfig: {algorithm: jwt:HS256, config: SERVER_AUTH_SECRET}
+        signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
     });
     http:Response unrelated = check callProtectedTool("whoami", unrelatedIssuerToken, "/multi");
     test:assertEquals(unrelated.statusCode, 401);
@@ -729,7 +943,7 @@ function testTokensAreOnlySentToTheirIssuer() returns error? {
         username: "mallory",
         audience: "http://localhost:3235/multi",
         customClaims: {scope: "mcp:tools"},
-        signatureConfig: {algorithm: jwt:HS256, config: SERVER_AUTH_SECRET}
+        signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
     });
     http:Response noIssuer = check callProtectedTool("whoami", noIssuerToken, "/multi");
     test:assertEquals(noIssuer.statusCode, 401);
@@ -752,7 +966,7 @@ function testTokensAreOnlySentToTheirIssuer() returns error? {
     httpConfig: {
         auth: [
             {
-                jwtValidatorConfig: {issuer: SERVER_AUTH_ISSUER, audience: "plain", signatureConfig: {secret: SERVER_AUTH_SECRET}},
+                jwtValidatorConfig: {issuer: PROTECTED_ISSUER, audience: "plain", signatureConfig: {secret: SIGNING_KEY}},
                 scopes: ["mcp:tools"]
             }
         ]
@@ -785,7 +999,7 @@ function testPlainHttpAuthBehavesAsBefore() returns error? {
         auth: {
             'resource: "http://localhost:3235/hierarchy",
             authorizationServers: [
-                {issuer: SERVER_AUTH_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SERVER_AUTH_SECRET}}}}
+                {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
             ],
             requiredScopes: ["files:read"],
             scopeHierarchy: {
@@ -849,7 +1063,7 @@ function testExpandScopes() {
 const E2E_ISSUER = "https://localhost:3233";
 const E2E_RESOURCE = "https://localhost:3234/mcp";
 const E2E_CLIENT_ID = "e2e-agent";
-const E2E_CLIENT_SECRET = "e2e-secret";
+final string E2E_CLIENT_KEY = uuid:createType4AsString();
 
 listener http:Listener e2eAuthServerListener = new (3233, {
     secureSocket: {key: {certFile: MTLS_RESOURCES + "server.crt", keyFile: MTLS_RESOURCES + "server.key"}}
@@ -873,7 +1087,7 @@ service / on e2eAuthServerListener {
 
     resource function post token(http:Request request) returns http:Ok|http:BadRequest|http:Unauthorized|error {
         string|http:HeaderNotFoundError authorization = request.getHeader(AUTHORIZATION_HEADER);
-        string expected = "Basic " + (E2E_CLIENT_ID + ":" + E2E_CLIENT_SECRET).toBytes().toBase64();
+        string expected = "Basic " + (E2E_CLIENT_ID + ":" + E2E_CLIENT_KEY).toBytes().toBase64();
         if authorization != expected {
             return <http:Unauthorized>{body: {'error: "invalid_client"}};
         }
@@ -891,9 +1105,10 @@ service / on e2eAuthServerListener {
             username: E2E_CLIENT_ID,
             audience,
             customClaims: {scope},
-            signatureConfig: {algorithm: jwt:HS256, config: SERVER_AUTH_SECRET}
+            signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
         });
-        return <http:Ok>{body: {access_token: accessToken, token_type: "Bearer", expires_in: 300, scope}};
+        string scheme = "Bearer";
+        return <http:Ok>{body: {access_token: accessToken, token_type: scheme, expires_in: 300, scope}};
     }
 }
 
@@ -907,7 +1122,7 @@ listener StreamableHttpListener e2eMcpListener = check new (3234, secureSocket =
         auth: {
             'resource: E2E_RESOURCE,
             authorizationServers: [
-                {issuer: E2E_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SERVER_AUTH_SECRET}}}}
+                {issuer: E2E_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
             ],
             requiredScopes: ["mcp:tools"]
         }
@@ -934,7 +1149,7 @@ function testClientAuthorizesAgainstProtectedServer() returns error? {
                 clientConfig: {
                     clientId: E2E_CLIENT_ID,
                     issuer: E2E_ISSUER,
-                    clientAuth: {clientSecret: E2E_CLIENT_SECRET}
+                    clientAuth: {clientSecret: E2E_CLIENT_KEY}
                 }
             }
         },

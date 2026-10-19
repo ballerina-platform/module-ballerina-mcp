@@ -72,8 +72,8 @@ isolated function requiresLegacySession(StreamableHttpService|StreamableHttpAdva
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
-// Runtime counterpart of the compiler diagnostic: a non-nilable `mcp:AuthContext` parameter can
-// only be bound when the service uses an `mcp:OAuthProtectedResourceConfig`.
+// Returns whether the service requires a non-nilable `mcp:AuthContext`.
+// Used during attachment to ensure the service is configured with `mcp:OAuthProtectedResourceConfig`.
 isolated function requiresAuthContext(StreamableHttpService|StreamableHttpAdvancedService mcpService)
         returns boolean = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
