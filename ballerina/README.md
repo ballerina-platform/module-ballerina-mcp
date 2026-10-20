@@ -213,6 +213,11 @@ same HTTP request values as basic tools (`http:Headers`, `http:Request`, `@http:
 `onSubscribe` binds them from the `subscriptions/listen` request, so a service whose tool list varies by caller can
 scope its notifications to that caller. `onCallTool` reads request metadata from `CallToolParams._meta`.
 
+While a subscription is open, the listener sends an SSE comment every 15 seconds, so idle timeouts do not close a
+quiet connection. When the client disconnects, the listener closes the stream `onSubscribe` returned within one
+such interval, and it may call `close()` while a `next()` call on that stream is still pending. `gracefulStop()`
+ends every open subscription with its final result, waiting at most 5 seconds; `immediateStop()` does not.
+
 `onListTools` may declare an `mcp:Cursor?` parameter to return its tools in pages. It receives the request's cursor,
 or `()` for the first page, and sets `nextCursor` on every page but the last. A basic service always returns all of
 its tools in one page.

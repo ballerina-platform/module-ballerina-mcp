@@ -78,8 +78,8 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
 
 isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpServiceConfiguration serviceConfig, ServerAuthenticator? authenticator = (),
-        readonly & AuthContext? authContext = ())
+        StreamableHttpServiceConfiguration serviceConfig, SubscriptionRegistry subscriptions,
+        ServerAuthenticator? authenticator = (), readonly & AuthContext? authContext = ())
         returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:InternalServerError|http:Response {
     string requestedVersion = getProtocolVersionFromHeaders(requestHeaders) ?: "";
     if serviceConfig.protocolMode == "legacy" || requiresLegacySession(mcpService) {
@@ -134,7 +134,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
             int errorCode = eventSource is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
             return createJsonRpcErrorResponse(errorCode, toSubscribeError(eventSource).message(), requestMessage.id);
         }
-        ServerSubscriptionStream streamIterator = new (eventSource, requestMessage.id, acceptedFilter);
+        ServerSubscriptionStream streamIterator = new (eventSource, requestMessage.id, acceptedFilter, subscriptions);
         stream<http:SseEvent, error?> responseStream = new (streamIterator);
         http:Response httpResponse = new;
         httpResponse.setSseEventStream(responseStream);

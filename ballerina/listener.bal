@@ -36,6 +36,7 @@ public isolated class StreamableHttpListener {
     // Each virtual host has one protected resource metadata service and a path-keyed registry.
     // A registry remains here for the lifetime of the listener after its metadata service is attached.
     private final map<ProtectedResourceMetadataRegistry> metadataRegistries = {};
+    private final SubscriptionRegistry subscriptions = new;
 
     # Initializes the Listener.
     #
@@ -71,7 +72,7 @@ public isolated class StreamableHttpListener {
         }
         ServerAuthenticator? authenticator = check createServerAuthenticator(mcpService, serviceConfig);
         http:HttpServiceConfig httpServiceConfig = toHttpServiceConfig(serviceConfig, authenticator);
-        final DispatcherService dispatcherService = getDispatcherService(httpServiceConfig, authenticator);
+        final DispatcherService dispatcherService = getDispatcherService(httpServiceConfig, authenticator, self.subscriptions);
         check addMcpServiceToDispatcher(dispatcherService, mcpService);
         lock {
             string? metadataHost = ();
@@ -161,9 +162,11 @@ public isolated class StreamableHttpListener {
     }
 
     # Gracefully stops the listener (completes active requests before shutting down).
+    # Open subscriptions end with their `complete` result first, waiting at most 5 seconds.
     #
     # + return - Error? if graceful stop fails.
     public isolated function gracefulStop() returns Error? {
+        self.subscriptions.stopAll(SUBSCRIPTION_SHUTDOWN_TIMEOUT);
         lock {
             error? result = self.httpListener.gracefulStop();
             if result is error {
@@ -173,6 +176,7 @@ public isolated class StreamableHttpListener {
     }
 
     # Immediately stops the listener (terminates all connections).
+    # Open subscriptions end without a `complete` result.
     #
     # + return - Error? if immediate stop fails.
     public isolated function immediateStop() returns Error? {
@@ -182,6 +186,8 @@ public isolated class StreamableHttpListener {
                 return error("Failed to immediately stop MCP listener: " + result.message());
             }
         }
+        // After the HTTP stop, so that no subscription ends its response cleanly first.
+        self.subscriptions.abortAll();
     }
 }
 

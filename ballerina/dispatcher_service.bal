@@ -22,7 +22,7 @@ isolated service class DispatcherService {
 }
 
 isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
-        ServerAuthenticator? serviceAuthenticator) returns DispatcherService {
+        ServerAuthenticator? serviceAuthenticator, SubscriptionRegistry subscriptionRegistry) returns DispatcherService {
     return @http:ServiceConfig {
         ...httpServiceConfig
     } isolated service object {
@@ -30,6 +30,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         // Principal that created each session, when the service uses an `mcp:OAuthProtectedResourceConfig`.
         private map<string> sessionOwners = {};
         private final ServerAuthenticator? authenticator = serviceAuthenticator;
+        private final SubscriptionRegistry subscriptions = subscriptionRegistry;
         private StreamableHttpServiceConfiguration? cachedServiceConfig = ();
 
         isolated resource function delete .(http:Headers headers)
@@ -149,7 +150,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                     return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), request.id);
                 }
                 var modernResponse = trap handleModernRequest(mcpService, request, httpRequest, headers, routeConfig,
-                        self.authenticator, authContext);
+                        self.subscriptions, self.authenticator, authContext);
                 if modernResponse is error {
                     return createJsonRpcErrorResponse(INTERNAL_ERROR, "Failed to process MCP request", request.id);
                 }
