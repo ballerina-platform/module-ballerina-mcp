@@ -94,8 +94,9 @@ serialization. For a modern request it also:
 - preserves the raw return value in `structuredContent`;
 - accepts object, scalar, array, and nil JSON roots.
 
-For a legacy request, the adapter preserves the older wire shape. Object-root structured content remains available
-where the legacy schema permits it; scalar and array structured values remain represented by the text content block.
+For a legacy request, basic tools keep the 1.x wire shape: `tools/list` advertises no `outputSchema`, and results
+carry only the text content block, without `structuredContent`. Results from an advanced service are kept within the
+legacy schema: an `outputSchema` or `structuredContent` whose root is not an object is removed.
 
 Use `@mcp:Tool` to override generated metadata:
 
@@ -506,7 +507,8 @@ touching the cache. Set `resultCache = ()` in the client configuration to disabl
 
 ## Migrating from 1.x
 
-Version 2.0 removes deprecated transport-neutral aliases and gives Streamable HTTP concepts explicit names.
+Version 2.0 removes the transport-neutral listener, service types and annotation, and gives Streamable HTTP concepts
+explicit names.
 
 | 1.x API | 2.0 API |
 | --- | --- |
@@ -521,13 +523,20 @@ Version 2.0 removes deprecated transport-neutral aliases and gives Streamable HT
 | `http:ClientConfiguration` fields at the top level of the client configuration | The same fields under `httpConfig`, an `mcp:HttpClientConfig` |
 | An `http:HttpServiceConfig` value for `httpConfig` | `mcp:HttpServiceConfig`: the same fields, with `auth` also accepting `mcp:OAuthProtectedResourceConfig` |
 | `initialize()` | `connect()` or `initializeLegacy()` |
-| `callToolWithResult()` | `callToolOnce()` |
 | `subscribeToServerMessages()` | `listen()` |
 
 1.x did not validate `Origin`. A 2.0 service rejects browser requests from origins that are not listed in
 `httpConfig.cors.allowOrigins`, which is empty by default.
 
-The client no longer connects implicitly. Call `connect()` before operations that depend on negotiated server state.
+The client must now call `connect()`, or `initializeLegacy()`, before other operations; 1.x did not enforce
+`initialize()`.
+
+A legacy client keeps receiving the legacy wire shapes from a 2.0 server. The text content of a tool that returns a
+structured value is now its JSON serialization.
+
+The `2025-11-25` task fields are removed: `CallToolParams.task`, `ToolDefinition.execution` and the `tasks` client and
+server capabilities. A client still connects to a server that advertises tasks.
+
 The public error hierarchy is `mcp:Error`, `mcp:ClientError`, `mcp:TransportError`, `mcp:ProtocolError`,
 `mcp:ToolCallError`, `mcp:StreamError`, and `mcp:ServerError`; transport and decoder implementation errors are
 internal.
