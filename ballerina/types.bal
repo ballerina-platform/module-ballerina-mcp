@@ -704,8 +704,8 @@ public type StreamableHttpConfiguration record {|
 # encrypted: clients can read it, so it must not hold anything they should not see.
 public type RequestStateConfig record {|
     # Signing secrets, each at least 32 bytes. The first signs and all verify, so a key can be rotated
-    # by putting its replacement first. Without keys, a random key is generated when the service is
-    # attached, so replicas that share continuations must configure the same keys.
+    # by putting its replacement first. Without keys, each service generates a random key of its own when
+    # it is attached, so replicas that share continuations must configure the same keys.
     string[] keys = [];
     # Seconds a request state stays valid, renewed on every round. Must be positive.
     decimal ttl = 600;
