@@ -38,9 +38,6 @@ type SseEventStreamError distinct StreamError;
 # Error for JSON-RPC message transformation failures during streaming.
 type JsonRpcMessageTransformationError distinct StreamError;
 
-# Error when required data is missing from an SSE event.
-type MissingSseDataError distinct JsonRpcMessageTransformationError;
-
 # Error for failures converting JSON to JsonRpcMessage.
 type TypeConversionError distinct JsonRpcMessageTransformationError;
 

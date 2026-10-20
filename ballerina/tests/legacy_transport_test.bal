@@ -132,8 +132,8 @@ function testLegacyEventStreamSurfacesTransformationErrors() returns error? {
 
     StreamableHttpClient missingData = check legacyMockClient("sseMissingData");
     stream<JsonRpcMessage, StreamError?> missingDataEvents = check missingData->listen();
-    var missingDataItem = missingDataEvents.next();
-    test:assertTrue(missingDataItem is MissingSseDataError);
+    // An event without data is not dispatched, so the stream just ends.
+    test:assertEquals(check missingDataEvents.next(), ());
     check missingDataEvents.close();
 
     StreamableHttpClient wellFormed = check legacyMockClient("ok");

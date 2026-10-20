@@ -129,6 +129,15 @@ isolated function mockSse(string[] payloads) returns http:Response {
     return sseResponse;
 }
 
+// Writes the SSE body verbatim, so comment lines reach the client as sent.
+isolated function mockRawSse(string body) returns http:Response {
+    http:Response sseResponse = new;
+    sseResponse.setTextPayload(body, CONTENT_TYPE_SSE);
+    return sseResponse;
+}
+
+const SSE_KEEP_ALIVE = ": keep-alive\n\n";
+
 isolated function mockAckEvent(RequestId subscriptionId, json acceptedFilter) returns string =>
     string `{"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":` +
         string `{"_meta":{"${SUBSCRIPTION_ID_META_KEY}":${subscriptionId.toString()}},` +
@@ -247,6 +256,12 @@ service /mock on new http:Listener(3210) {
 
         if method == "subscriptions/listen" {
             match scenario {
+                "sseKeepAlive" => {
+                    return mockRawSse(SSE_KEEP_ALIVE + "data: " + mockAckEvent(requestId, {"toolsListChanged": true}) +
+                        "\n\n" + SSE_KEEP_ALIVE + "data: " +
+                        mockNotificationEvent("notifications/tools/list_changed", requestId) + "\n\n" +
+                        SSE_KEEP_ALIVE + "data: " + mockCompletionEvent(requestId) + "\n\n");
+                }
                 "subNoAck" => {
                     return mockSse([mockNotificationEvent("notifications/tools/list_changed", requestId)]);
                 }
@@ -441,6 +456,17 @@ service /mock on new http:Listener(3210) {
                 "legacyWrongResult" => {
                     return mockJson({"jsonrpc": JSONRPC_VERSION, "id": requestId, "result": {"tools": []}});
                 }
+                "ssePriming" => {
+                    // A 2025-11-25 server primes the stream with an id and empty data before the result.
+                    return mockRawSse("id: prime-0\n\n" + "id: prime-1\ndata:\n\n" + string `data: {"jsonrpc":"2.0",` +
+                        string `"id":${requestId.toString()},"result":{"resultType":"complete",` +
+                        string `"content":[{"type":"text","text":"after priming"}]}}` + "\n\n");
+                }
+                "sseKeepAlive" => {
+                    return mockRawSse(SSE_KEEP_ALIVE + SSE_KEEP_ALIVE + string `data: {"jsonrpc":"2.0",` +
+                        string `"id":${requestId.toString()},"result":{"resultType":"complete",` +
+                        string `"content":[{"type":"text","text":"after keep-alive"}]}}` + "\n\n");
+                }
                 "legacyTasks" => {
                     return mockJson({
                         "jsonrpc": JSONRPC_VERSION,
@@ -499,6 +525,10 @@ service /mock on new http:Listener(3210) {
     resource function get [string scenario]() returns http:Response {
         if scenario == "sseMalformedStream" {
             return mockSse(["{not-json"]);
+        }
+        if scenario == "sseKeepAlive" {
+            string notification = string `data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}` + "\n\n";
+            return mockRawSse(SSE_KEEP_ALIVE + notification + SSE_KEEP_ALIVE + notification + SSE_KEEP_ALIVE);
         }
         if scenario == "sseMissingData" {
             MockEventOnlyIterator iterator = new;
