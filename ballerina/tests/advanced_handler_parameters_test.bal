@@ -103,7 +103,7 @@ service StreamableHttpAdvancedService /paginated on cachingListener {
         if cursor == "page-2" {
             return {tools: [{name: "beta", inputSchema: {'type: "object"}}]};
         }
-        return error ParameterBindingError("Unknown cursor");
+        return error InvalidParamsError("Unknown cursor");
     }
 
     remote isolated function onCallTool(CallToolParams params) returns CallToolResult =>
@@ -132,7 +132,6 @@ function testPaginatingServiceReturnsPagesOnBothProtocols() returns error? {
         test:assertEquals(toolNames(secondPage), ["beta"], protocolMode);
         test:assertEquals(secondPage.nextCursor, (), protocolMode);
 
-        // A tool on a later page can be called.
         CallToolResult called = check pagedClient->callTool({name: "beta"});
         test:assertEquals(called.content, [{'type: "text", text: "called beta"}], protocolMode);
         check pagedClient->close();
@@ -167,4 +166,31 @@ function testClientCachesEachPageAndDropsAllOnRejectedCursor() returns error? {
     test:assertEquals(paginatedListingCount("first"), firstListings + 2, "a rejected cursor must drop the first page");
     test:assertEquals(paginatedListingCount("page-2"), secondListings + 2, "a rejected cursor must drop every page");
     check pagedClient->close();
+}
+
+isolated function assertInvalidParams(ClientError failure, string expectedMessage) {
+    var rpcError = failure.detail()["rpcError"];
+    if rpcError is JsonRpcError {
+        test:assertEquals(rpcError.'error.code, INVALID_PARAMS);
+        test:assertEquals(rpcError.'error.message, expectedMessage);
+        return;
+    }
+    // A legacy client reports the JSON-RPC error in its message.
+    test:assertTrue(failure.message().includes(string `"code":${INVALID_PARAMS}`), failure.message());
+    test:assertTrue(failure.message().includes(string `"message":"${expectedMessage}"`), failure.message());
+}
+
+@test:Config {}
+function testRejectedCursorIsInvalidParamsOnBothProtocols() returns error? {
+    ProtocolMode[] protocolModes = ["modern", "legacy"];
+    foreach ProtocolMode protocolMode in protocolModes {
+        StreamableHttpClient pagedClient = check new ("http://localhost:3222/paginated", protocolMode = protocolMode);
+        _ = check pagedClient->connect();
+        ListToolsResult|ClientError rejected = pagedClient->listTools(cursor = "stale");
+        if rejected !is ClientError {
+            test:assertFail("a rejected cursor must fail the listing");
+        }
+        assertInvalidParams(rejected, "Unknown cursor");
+        check pagedClient->close();
+    }
 }

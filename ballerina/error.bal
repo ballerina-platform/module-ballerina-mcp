@@ -86,9 +86,13 @@ public type ServerError distinct Error;
 # Custom error type for dispatcher service operations.
 type DispatcherError distinct ServerError;
 
+# Error an advanced service method returns to reject the request's parameters, such as an
+# unknown cursor. The server answers with a JSON-RPC `INVALID_PARAMS` error carrying its message.
+public type InvalidParamsError distinct ServerError;
+
 # Error for failures while binding tool parameters from the incoming request,
 # such as missing or invalid header values.
-type ParameterBindingError distinct ServerError;
+type ParameterBindingError distinct InvalidParamsError;
 
 # Details of an `InsufficientScopeError`.
 #

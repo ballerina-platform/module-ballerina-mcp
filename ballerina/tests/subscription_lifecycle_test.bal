@@ -86,6 +86,14 @@ isolated class ControlledNotificationSource {
     }
 }
 
+// Emits notifications the subscription filter drops, more often than the test keep-alive interval.
+isolated class DroppedNotificationSource {
+    public isolated function next() returns record {|JsonRpcNotification value;|}|error? {
+        runtime:sleep(0.05);
+        return {value: {jsonrpc: JSONRPC_VERSION, method: "notifications/prompts/list_changed"}};
+    }
+}
+
 isolated function openProbeSubscription(string probe, boolean ignoresClose)
         returns stream<JsonRpcNotification, error?> {
     ControlledNotificationSource eventSource = new (ignoresClose);
@@ -103,7 +111,7 @@ service StreamableHttpAdvancedService /lifecycle on new StreamableHttpListener(3
 
     remote isolated function onSubscribe(@http:Header {name: PROBE_HEADER} string probe,
             SubscriptionFilter notifications) returns stream<JsonRpcNotification, error?> =>
-        openProbeSubscription(probe, false);
+        probe == "droppedItems" ? new (new DroppedNotificationSource()) : openProbeSubscription(probe, false);
 }
 
 isolated function newLifecycleService(boolean ignoresClose) returns StreamableHttpAdvancedService =>
@@ -169,6 +177,18 @@ function testIdleSubscriptionReceivesKeepAliveComments() returns error? {
     }
     decimal elapsed = time:utcDiffSeconds(time:utcNow(), startedAt);
     test:assertTrue(elapsed >= 0.6d && elapsed < 10d, elapsed.toString());
+    check events.close();
+}
+
+@test:Config {before: lowerKeepAliveInterval, after: restoreKeepAliveInterval}
+function testDroppedItemsDoNotDelayKeepAlives() returns error? {
+    stream<http:SseEvent, error?> events = check rawListen(LIFECYCLE_URL, "/lifecycle", "droppedItems");
+    _ = check events.next();
+    time:Utc startedAt = time:utcNow();
+    record {|http:SseEvent value;|}? keepAlive = check events.next();
+    decimal elapsed = time:utcDiffSeconds(time:utcNow(), startedAt);
+    test:assertTrue(keepAlive?.value?.comment is string, keepAlive.toString());
+    test:assertTrue(elapsed < 2d, elapsed.toString());
     check events.close();
 }
 

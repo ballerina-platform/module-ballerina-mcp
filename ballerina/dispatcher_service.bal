@@ -345,19 +345,20 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }
             }
 
-            anydata cursorValue = (request.params ?: {})["cursor"];
-            if cursorValue !is Cursor? {
-                return createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid cursor", request.id);
+            Cursor?|http:Ok cursor = requestCursor(request);
+            if cursor is http:Ok {
+                return cursor;
             }
-            ListToolsResult|error listToolsResult = self.executeOnListTools(cursorValue, headers, httpRequest,
+            ListToolsResult|error listToolsResult = self.executeOnListTools(cursor, headers, httpRequest,
                     serviceConfig.httpConfig.treatNilableAsOptional, authContext);
             if listToolsResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, listToolsResult);
             }
+            if listToolsResult is InvalidParamsError {
+                return createJsonRpcErrorResponse(INVALID_PARAMS, listToolsResult.message(), request.id);
+            }
             if listToolsResult is error {
-                // Parameter binding failures are caller errors, reported as invalid params
-                int errorCode = listToolsResult is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
-                return createJsonRpcErrorResponse(errorCode,
+                return createJsonRpcErrorResponse(INTERNAL_ERROR,
                         string `Failed to list tools: ${listToolsResult.message()}`, request.id);
             }
 
@@ -430,10 +431,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if callToolResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, callToolResult);
             }
+            if callToolResult is InvalidParamsError {
+                return createJsonRpcErrorResponse(INVALID_PARAMS, callToolResult.message(), request.id);
+            }
             if callToolResult is error {
-                // Parameter binding failures are caller errors, reported as invalid params
-                int errorCode = callToolResult is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
-                return createJsonRpcErrorResponse(errorCode,
+                return createJsonRpcErrorResponse(INTERNAL_ERROR,
                         string `Failed to call tool '${params.name}': ${callToolResult.message()}`, request.id);
             }
 

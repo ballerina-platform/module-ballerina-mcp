@@ -203,11 +203,11 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         }
 
         if (isCallTool && primaryParamCount != 1) {
-            report(context, CompilationDiagnostic.ADVANCED_ON_CALL_TOOL_PARAMS, location, methodName,
+            report(context, CompilationDiagnostic.ADVANCED_METHOD_PARAMS, location, methodName,
                     CALL_TOOL_PARAMS_DISPLAY);
         }
         if (isSubscribe && primaryParamCount != 1) {
-            report(context, CompilationDiagnostic.ADVANCED_ON_CALL_TOOL_PARAMS, location, methodName,
+            report(context, CompilationDiagnostic.ADVANCED_METHOD_PARAMS, location, methodName,
                     SUBSCRIPTION_FILTER_DISPLAY);
         }
 

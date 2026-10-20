@@ -122,7 +122,7 @@ public class CompilerPluginTest {
     public void testSessionParamStatelessViaTransportConfig() {
         DiagnosticResult diagnosticResult = compile("sample_package_7");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "is not allowed when sessionMode is STATELESS", MCP_104);
+        assertError(diagnosticResult, 0, "is not allowed when sessionMode is 'STATELESS'", MCP_104);
     }
 
     @Test
@@ -191,6 +191,7 @@ public class CompilerPluginTest {
         DiagnosticResult diagnosticResult = compile("sample_package_16");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
         assertError(diagnosticResult, 0, "Remote method 'doSomething' is not supported", MCP_113);
+        assertError(diagnosticResult, 0, "Only 'onListTools', 'onCallTool' and 'onSubscribe' are allowed", MCP_113);
     }
 
     @Test
@@ -277,12 +278,12 @@ public class CompilerPluginTest {
     public void testMcpArgumentHeaderDiagnostics() {
         DiagnosticResult invalidType = compile("sample_package_27");
         Assert.assertEquals(errorCount(invalidType), 1L);
-        assertError(invalidType, 0, "cannot use @mcp:Argument", "MCP_115");
+        assertError(invalidType, 0, "cannot use '@mcp:Argument'", "MCP_115");
 
         DiagnosticResult numberTypes = compile("argument_number_headers");
         Assert.assertEquals(errorCount(numberTypes), 2L, numberTypes.errors().toString());
-        assertError(numberTypes, 0, "cannot use @mcp:Argument", "MCP_115");
-        assertError(numberTypes, 1, "cannot use @mcp:Argument", "MCP_115");
+        assertError(numberTypes, 0, "cannot use '@mcp:Argument'", "MCP_115");
+        assertError(numberTypes, 1, "cannot use '@mcp:Argument'", "MCP_115");
 
         DiagnosticResult invalidName = compile("sample_package_28");
         Assert.assertEquals(errorCount(invalidName), 1L);
@@ -294,11 +295,11 @@ public class CompilerPluginTest {
 
         DiagnosticResult explicitSchema = compile("sample_package_30");
         Assert.assertEquals(errorCount(explicitSchema), 1L);
-        assertError(explicitSchema, 0, "cannot combine @mcp:Argument", "MCP_118");
+        assertError(explicitSchema, 0, "cannot combine '@mcp:Argument'", "MCP_118");
 
         DiagnosticResult conflictingBinding = compile("sample_package_31");
         Assert.assertEquals(errorCount(conflictingBinding), 1L);
-        assertError(conflictingBinding, 0, "cannot use @mcp:Argument", "MCP_115");
+        assertError(conflictingBinding, 0, "cannot use '@mcp:Argument'", "MCP_115");
     }
 
     @Test

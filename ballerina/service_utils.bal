@@ -155,6 +155,23 @@ isolated function toToolExecutionError(error cause, string toolName) returns Cal
     };
 }
 
+# Reads the optional cursor of a `tools/list` request.
+#
+# + request - The `tools/list` request
+# + return - The cursor, or an `INVALID_PARAMS` response if it is not a string
+isolated function requestCursor(JsonRpcRequest request) returns Cursor?|http:Ok {
+    anydata cursorValue = (request.params ?: {})["cursor"];
+    return cursorValue is Cursor? ? cursorValue : createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid cursor", request.id);
+}
+
+# Returns the JSON-RPC error code for a failed handler or binding: `INVALID_PARAMS` when the
+# request's parameters were rejected, `INTERNAL_ERROR` otherwise.
+#
+# + failure - The failure to report
+# + return - The JSON-RPC error code
+isolated function handlerErrorCode(error failure) returns int =>
+    failure is InvalidParamsError ? INVALID_PARAMS : INTERNAL_ERROR;
+
 # Reports a failed advanced service invocation as a server error, logging the detail. Advanced
 # services own their tool dispatch, so a failure there is a server error rather than a tool failure.
 #

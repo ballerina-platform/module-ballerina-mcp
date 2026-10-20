@@ -17,7 +17,7 @@ Set `protocolMode` on the client or in `@mcp:StreamableHttpServiceConfig`.
 
 | Mode | Client behavior | Server behavior |
 | --- | --- | --- |
-| `"auto"` | Try modern discovery, then fall back to the legacy initialize handshake only when the response indicates an older server | Accept modern requests and legacy initialize-based requests |
+| `"auto"` | Try modern discovery, then fall back to the legacy initialize handshake only when the response indicates an older server or lists only legacy versions; return an error when it lists no supported version | Accept modern requests and legacy initialize-based requests |
 | `"modern"` | Require MCP `2026-07-28` | Accept modern requests only |
 | `"legacy"` | Use the initialize handshake | Accept initialize-based requests only |
 
@@ -142,8 +142,10 @@ remote isolated function weather(
 
 This produces a `region` property containing `"x-mcp-header": "Region"`. `@mcp:Argument` applies to a non-nilable
 `string`, `int` or `boolean` argument. Header names are compared case-insensitively, and the client rejects a call whose
-`int` argument header is outside ±(2<sup>53</sup>−1) with a `ToolCallError`. Use `@http:Header` when a value comes
-only from an HTTP header and must not be part of the MCP tool arguments.
+`int` argument header is outside ±(2<sup>53</sup>−1) with a `ToolCallError`. Only `string`, `integer` and `boolean`
+schema properties may carry `x-mcp-header`, so the client leaves out of `listTools()` any tool whose header
+declarations are invalid, such as one on a `number` property. Use `@http:Header` when a value comes only from an HTTP
+header and must not be part of the MCP tool arguments.
 
 ## Sessions
 
@@ -214,21 +216,28 @@ same HTTP request values as basic tools (`http:Headers`, `http:Request`, `@http:
 `onSubscribe` binds them from the `subscriptions/listen` request, so a service whose tool list varies by caller can
 scope its notifications to that caller. `onCallTool` reads request metadata from `CallToolParams._meta`.
 
-While a subscription is open, the listener sends an SSE comment every 15 seconds, so idle timeouts do not close a
-quiet connection. When the client disconnects, the listener closes the stream `onSubscribe` returned within one
+A handler returns an `mcp:InvalidParamsError` to reject the request's parameters, such as an unknown cursor or a
+missing argument. The service answers with a JSON-RPC `INVALID_PARAMS` error carrying the error's message, on both
+protocols. Any other `mcp:ServerError` is answered with `INTERNAL_ERROR` and its message.
+
+While a subscription is open, the listener sends an SSE comment after every 15 seconds without other output, so idle
+timeouts do not close a quiet connection. When the client disconnects, the listener closes the stream `onSubscribe` returned within one
 such interval, and it may call `close()` while a `next()` call on that stream is still pending. `gracefulStop()`
 ends every open subscription with its final result, waiting at most 5 seconds; `immediateStop()` does not.
 
 `onListTools` may declare an `mcp:Cursor?` parameter to return its tools in pages. It receives the request's cursor,
 or `()` for the first page, and sets `nextCursor` on every page but the last. A basic service always returns all of
-its tools in one page.
+its tools in one page. A modern `tools/call` reads at most 100 pages to find the called tool.
 
 ```ballerina
 remote isolated function onListTools(mcp:Cursor? cursor) returns mcp:ListToolsResult|mcp:ServerError {
     if cursor is () {
         return {tools: firstPage, nextCursor: "page-2"};
     }
-    return {tools: secondPage};
+    if cursor == "page-2" {
+        return {tools: secondPage};
+    }
+    return error mcp:InvalidParamsError("Unknown cursor");
 }
 ```
 
@@ -538,5 +547,5 @@ The `2025-11-25` task fields are removed: `CallToolParams.task`, `ToolDefinition
 server capabilities. A client still connects to a server that advertises tasks.
 
 The public error hierarchy is `mcp:Error`, `mcp:ClientError`, `mcp:TransportError`, `mcp:ProtocolError`,
-`mcp:ToolCallError`, `mcp:StreamError`, and `mcp:ServerError`; transport and decoder implementation errors are
-internal.
+`mcp:ToolCallError`, `mcp:StreamError`, and `mcp:ServerError` with `mcp:InvalidParamsError`; transport and decoder
+implementation errors are internal.

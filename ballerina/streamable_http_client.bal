@@ -155,6 +155,9 @@ public distinct isolated client class StreamableHttpClient {
                 if self.protocolMode == "modern" {
                     return error ProtocolVersionError("Server does not support the modern protocol version");
                 }
+                if !discovered.supportedVersions.some(isLegacyProtocolVersion) {
+                    return error ProtocolVersionError("Server lists no supported protocol version");
+                }
             } else if self.protocolMode == "modern" || !shouldUseLegacy(discovered) {
                 return discovered;
             }
@@ -388,7 +391,7 @@ public distinct isolated client class StreamableHttpClient {
                 params: {
                     "notifications": notifications.cloneReadOnly(),
                     _meta: {
-                        [PROTOCOL_META_KEY]: self.negotiatedProtocolVersion ?: LATEST_PROTOCOL_VERSION,
+                        [PROTOCOL_META_KEY]: self.metaProtocolVersion(),
                         [CLIENT_INFO_META_KEY]: self.clientInfo.cloneReadOnly(),
                         [CAPABILITIES_META_KEY]: self.clientCapabilities.cloneReadOnly()
                     }
@@ -469,7 +472,7 @@ public distinct isolated client class StreamableHttpClient {
             if nextCursor is () {
                 break;
             }
-            if visitedCursors.hasKey(nextCursor) || visitedCursors.length() >= 1000 {
+            if visitedCursors.hasKey(nextCursor) || visitedCursors.length() >= MAX_TOOL_LIST_PAGES - 1 {
                 return error ToolCallError("Tool pagination repeated a cursor or exceeded the page limit");
             }
             visitedCursors[nextCursor] = true;
@@ -559,6 +562,14 @@ public distinct isolated client class StreamableHttpClient {
         return discovery;
     }
 
+    // Discovery runs before a version is negotiated, so it offers the newest one.
+    private isolated function metaProtocolVersion() returns string {
+        lock {
+            string? negotiatedVersion = self.negotiatedProtocolVersion;
+            return self.modernSelected && negotiatedVersion is string ? negotiatedVersion : LATEST_PROTOCOL_VERSION;
+        }
+    }
+
     private isolated function sendModernRequest(string methodName, RequestParams requestParams,
             map<string|string[]> headers, map<string> parameterHeaders = {}, boolean requireResultType = true)
             returns Result|ClientError {
@@ -567,10 +578,7 @@ public distinct isolated client class StreamableHttpClient {
             self.requestId += 1;
             RequestParams wireParams = {...requestParams.cloneReadOnly()};
             RequestMeta requestMeta = {...(wireParams._meta ?: {})};
-            // Discovery runs before a version is negotiated, so it offers the newest one.
-            string? negotiatedVersion = self.negotiatedProtocolVersion;
-            requestMeta[PROTOCOL_META_KEY] = self.modernSelected && negotiatedVersion is string
-                ? negotiatedVersion : LATEST_PROTOCOL_VERSION;
+            requestMeta[PROTOCOL_META_KEY] = self.metaProtocolVersion();
             requestMeta[CLIENT_INFO_META_KEY] = self.clientInfo;
             requestMeta[CAPABILITIES_META_KEY] = self.clientCapabilities;
             wireParams._meta = requestMeta;

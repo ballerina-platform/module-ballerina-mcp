@@ -22,7 +22,6 @@ import io.ballerina.runtime.api.creators.TypeCreator;
 import io.ballerina.runtime.api.creators.ValueCreator;
 import io.ballerina.runtime.api.types.PredefinedTypes;
 import io.ballerina.runtime.api.values.BArray;
-import io.ballerina.runtime.api.values.BDecimal;
 import io.ballerina.runtime.api.values.BMap;
 import io.ballerina.runtime.api.values.BString;
 
@@ -117,9 +116,9 @@ public final class ProtocolHeaders {
                     throw new IllegalArgumentException("Duplicate x-mcp-header name: " + name);
                 }
                 String type = String.valueOf(get(schema, "type"));
-                if (!Set.of("string", "integer", "number", "boolean").contains(type)) {
+                if (!Set.of("string", "integer", "boolean").contains(type)) {
                     throw new IllegalArgumentException(
-                            "x-mcp-header requires string, integer, number or boolean type");
+                            "x-mcp-header requires string, integer or boolean type");
                 }
                 if (instance != null) {
                     boolean valid = switch (type) {
@@ -127,7 +126,6 @@ public final class ProtocolHeaders {
                         case "boolean" -> instance instanceof Boolean;
                         case "integer" -> instance instanceof Long number
                                 && number >= -MAX_INTEGER && number <= MAX_INTEGER;
-                        case "number" -> instance instanceof Double || instance instanceof BDecimal;
                         default -> false;
                     };
                     if (!valid) {

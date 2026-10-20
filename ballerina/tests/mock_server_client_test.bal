@@ -177,6 +177,9 @@ service /mock on new http:Listener(3210) {
                 "mixedVersions" => {
                     return mockDiscoverResult(requestId, ["2099-01-01", LATEST_LEGACY_PROTOCOL_VERSION, "2026-07-28"]);
                 }
+                "unknownVersionsOnly" => {
+                    return mockDiscoverResult(requestId, ["2099-01-01"]);
+                }
                 "nonJson" => {
                     http:Response textResponse = new;
                     textResponse.setTextPayload("not json at all");
@@ -395,6 +398,18 @@ service /mock on new http:Listener(3210) {
                         }
                     });
                 }
+                "numberHeaderTool" => {
+                    return mockToolListResult(requestId, [
+                        {
+                            "name": "ratio",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"ratio": {"type": "number", "x-mcp-header": "Ratio"}}
+                            }
+                        },
+                        {"name": "plain", "inputSchema": {"type": "object"}}
+                    ]);
+                }
                 "intHeaderTool" => {
                     return mockToolListResult(requestId, [
                         {
@@ -600,6 +615,14 @@ function testAutoClientFallsBackWhenDiscoveryListsNoModernVersion() returns erro
     check mockClient->close();
 }
 
+@test:Config {}
+function testAutoClientRejectsDiscoveryWithoutAKnownVersion() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("unknownVersionsOnly"), protocolMode = "auto");
+    var connectResult = mockClient->connect();
+    test:assertTrue(connectResult is ProtocolVersionError);
+    test:assertEquals(mockCallCount("unknownVersionsOnly:initialize"), 0);
+}
+
 // resultType, ttlMs and cacheScope are required on the wire, but a discovery result that lists a modern
 // version still identifies a modern server, so auto mode must not fall back to initialize.
 @test:Config {}
@@ -710,6 +733,14 @@ function testModernClientToolLookupAcrossPages() returns error? {
     _ = check unmirrorable->connect();
     ListToolsResult filteredTools = check unmirrorable->listTools();
     test:assertEquals(filteredTools.tools, []);
+}
+
+@test:Config {}
+function testModernClientLeavesOutToolsWithNumberArgumentHeaders() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("numberHeaderTool"), protocolMode = "modern");
+    _ = check mockClient->connect();
+    ListToolsResult toolList = check mockClient->listTools();
+    test:assertEquals(toolList.tools.map(toolInfo => toolInfo.name), ["plain"]);
 }
 
 @test:Config {}

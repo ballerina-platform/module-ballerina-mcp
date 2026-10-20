@@ -147,9 +147,8 @@ isolated class StreamableHttpClientTransport {
             clientConfig.auth = authConfig;
         }
 
-        // Redirects stay disabled with MCP authorization (`StreamableHttpClient` rejects
-        // enabling them): the token is attached here rather than by the HTTP client, so it is
-        // not covered by the `allowAuthHeaders` guard, and a redirect could hide the challenge.
+        // Redirects stay off with MCP authorization: the token is attached here, outside the
+        // `allowAuthHeaders` guard, so a redirect could leak it or hide the challenge.
         if oauth is () {
             clientConfig.followRedirects = clientConfig.followRedirects ?: {enabled: true};
         }

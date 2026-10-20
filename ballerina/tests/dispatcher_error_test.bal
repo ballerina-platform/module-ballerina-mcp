@@ -148,6 +148,20 @@ service StreamableHttpAdvancedService /failSubscribe on dispatcherErrorListener 
             returns stream<JsonRpcNotification, error?>|ServerError => error ServerError("subscriptions are down");
 }
 
+@StreamableHttpServiceConfig {info: {name: "reject-params", version: "1"}, sessionMode: STATELESS}
+service StreamableHttpAdvancedService /rejectParams on dispatcherErrorListener {
+    remote isolated function onListTools() returns ListToolsResult => {
+        tools: [{name: "forecast", inputSchema: {'type: "object"}}]
+    };
+
+    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InvalidParamsError =>
+        error InvalidParamsError("city is required");
+
+    remote isolated function onSubscribe(SubscriptionFilter notifications)
+            returns stream<JsonRpcNotification, error?>|InvalidParamsError =>
+        error InvalidParamsError("unknown notification source");
+}
+
 @StreamableHttpServiceConfig {
     info: {name: "legacy-only", version: "1"},
     protocolMode: "legacy"
@@ -186,6 +200,21 @@ service StreamableHttpService /panicTool on dispatcherErrorListener {
     }
 }
 
+isolated int endlessListings = 0;
+
+// Always offers another page, each with a new cursor.
+@StreamableHttpServiceConfig {info: {name: "endless-pages", version: "1"}}
+service StreamableHttpAdvancedService /endlessPages on dispatcherErrorListener {
+    remote isolated function onListTools(Cursor? cursor) returns ListToolsResult {
+        lock {
+            endlessListings += 1;
+            return {tools: [], nextCursor: endlessListings.toString()};
+        }
+    }
+
+    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+}
+
 final http:Client dispatcherErrorClient = check new ("http://localhost:3211");
 
 isolated function dispatcherPost(string servicePath, string methodName, RequestParams requestParams = {},
@@ -218,6 +247,16 @@ isolated function assertJsonRpcError(http:Response response, int expectedStatus,
     test:assertEquals(errorBody.'error.code, expectedCode);
     test:assertTrue(errorBody.'error.message.includes(expectedMessagePart),
             string `unexpected error message '${errorBody.'error.message}'`);
+}
+
+@test:Config {}
+function testToolLookupStopsAfterAPageLimit() returns error? {
+    http:Response response = check dispatcherPost("/endlessPages", REQUEST_CALL_TOOL, {"name": "missing"},
+            {[NAME_HEADER]: "missing"});
+    check assertJsonRpcError(response, 200, INVALID_PARAMS, "Unknown tool name");
+    lock {
+        test:assertTrue(endlessListings > 1 && endlessListings <= 100, endlessListings.toString());
+    }
 }
 
 @test:Config {}
@@ -313,6 +352,24 @@ function testDispatcherReportsToolCallFailures() returns error? {
     test:assertEquals(panicTool.statusCode, 200);
     WireResponse panicBody = check (check panicTool.getJsonPayload()).cloneWithType();
     test:assertEquals(panicBody.result["isError"], true);
+}
+
+@test:Config {}
+function testHandlersRejectParamsWithTheirOwnMessage() returns error? {
+    http:Response modernCall = check dispatcherPost("/rejectParams", REQUEST_CALL_TOOL, {"name": "forecast"},
+            {[NAME_HEADER]: "forecast"});
+    check assertJsonRpcError(modernCall, 200, INVALID_PARAMS, "city is required");
+    JsonRpcError modernError = check (check modernCall.getJsonPayload()).cloneWithType();
+    test:assertEquals(modernError.'error.message, "city is required");
+
+    http:Response listen = check dispatcherPost("/rejectParams", "subscriptions/listen",
+            {"notifications": {"toolsListChanged": true}});
+    check assertJsonRpcError(listen, 200, INVALID_PARAMS, "unknown notification source");
+
+    http:Response legacyCall = check legacyToolPost("/rejectParams", REQUEST_CALL_TOOL, {"name": "forecast"});
+    check assertJsonRpcError(legacyCall, 200, INVALID_PARAMS, "city is required");
+    JsonRpcError legacyError = check (check legacyCall.getJsonPayload()).cloneWithType();
+    test:assertEquals(legacyError.'error.message, "city is required");
 }
 
 @test:Config {}

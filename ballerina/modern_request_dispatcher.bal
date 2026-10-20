@@ -131,8 +131,8 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
             return insufficientScopeFor(authenticator, eventSource);
         }
         if eventSource is error {
-            int errorCode = eventSource is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
-            return createJsonRpcErrorResponse(errorCode, toSubscribeError(eventSource).message(), requestMessage.id);
+            return createJsonRpcErrorResponse(handlerErrorCode(eventSource), toSubscribeError(eventSource).message(),
+                    requestMessage.id);
         }
         ServerSubscriptionStream streamIterator = new (eventSource, requestMessage.id, acceptedFilter, subscriptions);
         stream<http:SseEvent, error?> responseStream = new (streamIterator);
@@ -144,15 +144,11 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if requestMessage.method != REQUEST_LIST_TOOLS && requestMessage.method != REQUEST_CALL_TOOL {
         return <http:NotFound>{body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", requestMessage.id)};
     }
-    Cursor? cursor = ();
-    if requestMessage.method == REQUEST_LIST_TOOLS {
-        anydata cursorValue = (requestMessage.params ?: {})["cursor"];
-        if cursorValue !is Cursor? {
-            return createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid cursor", requestMessage.id);
-        }
-        cursor = cursorValue;
+    Cursor?|http:Ok cursor = requestMessage.method == REQUEST_LIST_TOOLS ? requestCursor(requestMessage) : ();
+    if cursor is http:Ok {
+        return cursor;
     }
-    ListToolsResult|error toolList = listCheckedProtocolTools(mcpService, httpRequest, requestHeaders,
+    ListToolsResult|error toolList = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
             serviceConfig, authContext, cursor);
     if toolList is error {
         return listingFailureResponse(toolList, authenticator, requestMessage.id);
@@ -177,9 +173,10 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     ToolDefinition? selectedTool = findTool(toolList, callParams.name);
     map<boolean> visitedCursors = {};
     Cursor? nextCursor = toolList.nextCursor;
-    while selectedTool is () && nextCursor is Cursor && !visitedCursors.hasKey(nextCursor) {
+    while selectedTool is () && nextCursor is Cursor && !visitedCursors.hasKey(nextCursor) &&
+            visitedCursors.length() < MAX_TOOL_LIST_PAGES - 1 {
         visitedCursors[nextCursor] = true;
-        ListToolsResult|error page = listCheckedProtocolTools(mcpService, httpRequest, requestHeaders,
+        ListToolsResult|error page = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
                 serviceConfig, authContext, nextCursor);
         if page is error {
             return listingFailureResponse(page, authenticator, requestMessage.id);
@@ -205,13 +202,9 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if callResult is InsufficientScopeError {
         return insufficientScopeFor(authenticator, callResult);
     }
-    if callResult is ParameterBindingError {
-        return createJsonRpcErrorResponse(INVALID_PARAMS,
-                string `Failed to call tool '${callParams.name}': ${callResult.message()}`, requestMessage.id);
-    }
     if callResult is error {
-        return createJsonRpcErrorResponse(INTERNAL_ERROR, toServerError(callResult, callParams.name).message(),
-                requestMessage.id);
+        return createJsonRpcErrorResponse(handlerErrorCode(callResult),
+                toServerError(callResult, callParams.name).message(), requestMessage.id);
     }
     if callResult is InputRequiredResult {
         Error? inputError = validateInputRequired(callResult, requestMeta.io\.modelcontextprotocol\/clientCapabilities);
@@ -245,8 +238,8 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     return modernResult(callResult, serviceConfig.info, requestMessage.id);
 }
 
-# Lists one page of a service's tools for a modern request.
-isolated function listCheckedProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
+# Lists one page of a service's tools for a modern request, rejecting invalid header declarations.
+isolated function listValidatedToolPage(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig,
         readonly & AuthContext? authContext, Cursor? cursor) returns ListToolsResult|error {
     ListToolsResult toolList = check listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig,
@@ -273,8 +266,7 @@ isolated function listingFailureResponse(error failure, ServerAuthenticator? aut
     if failure is InsufficientScopeError {
         return insufficientScopeFor(authenticator, failure);
     }
-    int errorCode = failure is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
-    return createJsonRpcErrorResponse(errorCode, failure.message(), requestId);
+    return createJsonRpcErrorResponse(handlerErrorCode(failure), failure.message(), requestId);
 }
 
 isolated function findTool(ListToolsResult toolList, string toolName) returns ToolDefinition? {

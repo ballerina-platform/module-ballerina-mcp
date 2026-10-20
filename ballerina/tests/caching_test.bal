@@ -398,9 +398,8 @@ function testCloseClearsCachedResults() returns error? {
     test:assertEquals(cacheMockHitCount("private", "close"), 2);
 }
 
-// The protected `oauth` scenario: a request without a token is challenged, and in the
-// `stepUp` test a tools/call made with the first token needs more scope. Each test's
-// metadata document is named by its test id.
+// The `oauth` scenario challenges token-less requests; its `stepUp` test needs more scope for tools/call.
+// Each test's metadata document is named by its test id.
 const CACHE_OAUTH_PRM_URL = "https://mcp.example.com/.well-known/oauth-protected-resource/cache";
 
 isolated function cacheMockChallenge(http:Request request, string methodName, string testId) returns http:Response? {

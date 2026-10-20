@@ -17,6 +17,7 @@
 import ballerina/http;
 import ballerina/jballerina.java;
 import ballerina/lang.runtime;
+import ballerina/time;
 
 // Seconds between SSE comment keep-alives on an idle subscription.
 const decimal SUBSCRIPTION_KEEP_ALIVE_INTERVAL = 15;
@@ -170,12 +171,16 @@ isolated class ServerSubscriptionStream {
                 return {value: {data: acknowledgement.toJsonString()}};
             }
         }
+        // Dropped items write nothing, so they must not push the next keep-alive back.
+        decimal keepAliveDue = time:monotonicNow() + self.keepAliveInterval;
         while true {
             if self.isStopping() {
                 self.closeSubscriptionSourceLater();
                 return self.complete();
             }
-            var sourceItem = check self.pollSubscriptionSource(self.keepAliveInterval);
+            decimal untilKeepAlive = keepAliveDue - time:monotonicNow();
+            record {|JsonRpcNotification value;|}|SOURCE_IDLE? sourceItem = untilKeepAlive > 0d
+                ? check self.pollSubscriptionSource(untilKeepAlive) : SOURCE_IDLE;
             if sourceItem is SOURCE_IDLE {
                 if self.isFinished() {
                     return;
@@ -219,7 +224,6 @@ isolated class ServerSubscriptionStream {
         self.wakeSubscriptionSource();
     }
 
-    // Ends the subscription without `complete`.
     isolated function abort() {
         lock {
             self.finished = true;
