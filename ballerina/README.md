@@ -415,8 +415,9 @@ service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9090) {
   not the length of a whole flow.
 
 Services that share `keys` accept each other's request state for the same tool, arguments and caller, so give
-unrelated services their own keys. Without `keys`, the service generates a random key when it is attached. Its state does not survive a restart and is
-not accepted by other replicas, so deployments with more than one replica must configure the same `keys` on each.
+unrelated services their own keys. Without `keys`, the service generates a random key when it is attached. Its
+state does not survive a restart and is not accepted by other replicas, so deployments with more than one replica
+must configure the same `keys` on each.
 Invalid keys or a non-positive `ttl` fail when the service is attached.
 
 ## Server authorization
