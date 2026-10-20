@@ -198,9 +198,10 @@ public class CompilerPluginTest {
     @Test
     public void testAdvancedUnknownRemoteMethod() {
         DiagnosticResult diagnosticResult = compile("sample_package_16");
-        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        Assert.assertEquals(errorCount(diagnosticResult), 2);
         assertError(diagnosticResult, 0, "Remote method 'doSomething' is not supported", MCP_113);
-        assertError(diagnosticResult, 0, "Only 'onListTools', 'onCallTool' and 'onSubscribe' are allowed", MCP_113);
+        assertError(diagnosticResult, 0, "Only 'onListTools' and 'onCallTool' are allowed", MCP_113);
+        assertError(diagnosticResult, 1, "Remote method 'onSubscribe' is not supported", MCP_113);
     }
 
     @Test
@@ -256,7 +257,7 @@ public class CompilerPluginTest {
     }
 
     @Test
-    public void testModernResultsAndSubscriptionOnExistingAdvancedService() {
+    public void testModernResultsOnExistingAdvancedService() {
         DiagnosticResult result = compile("sample_package_25");
         Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
     }
@@ -270,11 +271,8 @@ public class CompilerPluginTest {
     @Test
     public void testAdvancedHandlerUnsupportedParameters() {
         DiagnosticResult result = compile("advanced_handler_unsupported_parameters");
-        Assert.assertEquals(errorCount(result), 3L, result.diagnostics().toString());
-        assertError(result, 0, "Parameter 'session' in function 'onSubscribe' has an unsupported type", MCP_102);
-        assertError(result, 1, "'onSubscribe'", MCP_111);
-        assertError(result, 1, "must declare exactly one parameter of type mcp:SubscriptionFilter", MCP_111);
-        assertError(result, 2, "Parameter 'cursor' in function 'onListTools' has an unsupported type", MCP_102);
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "Parameter 'cursor' in function 'onListTools' has an unsupported type", MCP_102);
     }
 
     @Test

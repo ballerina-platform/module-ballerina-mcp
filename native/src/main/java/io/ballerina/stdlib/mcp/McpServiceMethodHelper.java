@@ -103,8 +103,6 @@ public final class McpServiceMethodHelper {
     // Advanced service remote method names
     private static final String ON_CALL_TOOL_METHOD = "onCallTool";
     private static final String ON_LIST_TOOLS_METHOD = "onListTools";
-    private static final String ON_SUBSCRIBE_METHOD = "onSubscribe";
-    private static final String SUBSCRIPTION_FILTER_TYPE_NAME = "SubscriptionFilter";
 
     // HTTP Headers-related constants
     private static final String HTTP_PACKAGE_NAME = "http";
@@ -121,39 +119,6 @@ public final class McpServiceMethodHelper {
     private static final String ORG_SEPARATOR = "/";
 
     private McpServiceMethodHelper() {}
-
-    /**
-     * Invoke the 'onSubscribe' remote method of a Streamable HTTP advanced service, binding the
-     * SubscriptionFilter and the HTTP request values of the 'subscriptions/listen' request.
-     *
-     * @param env                    The Ballerina runtime environment.
-     * @param mcpService             The MCP service object.
-     * @param notifications          The accepted subscription filter.
-     * @param headers                The HTTP headers of the request.
-     * @param request                The HTTP request.
-     * @param headerValues           Header values keyed by lower-cased name, for '@http:Header' binding.
-     * @param treatNilableAsOptional Whether a missing header binds a nilable '@http:Header' param to nil.
-     * @param authContext            The authenticated caller (or null without an mcp:OAuthProtectedResourceConfig).
-     * @return                       Result of remote method invocation, or a binding error.
-     */
-    public static Object invokeOnSubscribe(Environment env, BObject mcpService, BMap<?, ?> notifications,
-                                           BObject headers, BObject request, BMap<?, ?> headerValues,
-                                           boolean treatNilableAsOptional, Object authContext) {
-        Optional<RemoteMethodType> method = getRemoteMethod(mcpService, ON_SUBSCRIBE_METHOD);
-        if (method.isEmpty()) {
-            return ModuleUtils.createServerError("Remote method '" + ON_SUBSCRIBE_METHOD + "' not found");
-        }
-        Object argsOrError = buildAdvancedArgs(method.get(), notifications, null, null, headers, request,
-                headerValues, treatNilableAsOptional, authContext);
-        if (argsOrError instanceof BError) {
-            return argsOrError;
-        }
-        return env.getRuntime().callMethod(mcpService, ON_SUBSCRIBE_METHOD, null, (Object[]) argsOrError);
-    }
-
-    public static boolean hasSubscriptionHandler(BObject mcpService) {
-        return getRemoteMethod(mcpService, ON_SUBSCRIBE_METHOD).isPresent();
-    }
 
     /** Returns whether a service has a session parameter that cannot receive nil. */
     public static boolean requiresLegacySession(BObject mcpService) {
@@ -417,8 +382,7 @@ public final class McpServiceMethodHelper {
 
     /**
      * Builds the argument array for an advanced service remote method by inspecting its declared parameters
-     * and injecting the matching value. 'methodParams' is the method's own parameter: the CallToolParams of
-     * 'onCallTool' or the SubscriptionFilter of 'onSubscribe'.
+     * and injecting the matching value. 'methodParams' is the CallToolParams of 'onCallTool'.
      */
     private static Object buildAdvancedArgs(RemoteMethodType method, Object methodParams, Object session,
                                             Object cursor, Object headers, Object request, BMap<?, ?> headerValues,
@@ -429,7 +393,7 @@ public final class McpServiceMethodHelper {
             Parameter param = params.get(i);
             BMap<?, ?> headerAnnotation = getHeaderAnnotation(method, param.name);
 
-            if (isCallToolParamsParameter(param) || isMcpType(param.type, SUBSCRIPTION_FILTER_TYPE_NAME)) {
+            if (isCallToolParamsParameter(param)) {
                 args[i] = methodParams;
             } else if (isSessionParameter(param)) {
                 args[i] = session;

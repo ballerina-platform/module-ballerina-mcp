@@ -11,9 +11,9 @@ This module provides APIs for building MCP (Model Context Protocol) clients and 
 ## MCP 2026-07-28
 
 Version 2.0.0 adds automatic modern/legacy protocol selection, modern discovery, per-request metadata and headers,
-automatic output schemas and raw structured results for regular services, modern tool-result APIs, bounded
-input-required continuations, and POST-based subscriptions. Existing session-dependent services remain on the legacy
-path in auto mode. See the [protocol compatibility and migration guide](ballerina/README.md#migrating-from-1x).
+automatic output schemas and raw structured results for regular services, modern tool-result APIs, and bounded
+input-required continuations. Existing session-dependent services remain on the legacy path in auto mode. Change
+notification subscriptions are not part of 2.0; proper support is planned for a later release. See the [protocol compatibility and migration guide](ballerina/README.md#migrating-from-1x).
 General JSON Schema evaluation is deferred until Ballerina language support is available; existing type binding remains.
 
 ### Interoperability checks

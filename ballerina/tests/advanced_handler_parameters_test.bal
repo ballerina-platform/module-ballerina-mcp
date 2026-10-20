@@ -14,78 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/http;
 import ballerina/test;
-
-const SUBSCRIBE_CONTEXT_RESOURCE = "http://localhost:3235/subscribeContext";
-
-@StreamableHttpServiceConfig {
-    info: {name: "subscribe-context", version: "1"},
-    httpConfig: {
-        auth: {
-            'resource: SUBSCRIBE_CONTEXT_RESOURCE,
-            authorizationServers: [
-                {issuer: PROTECTED_ISSUER, validator: {jwtValidatorConfig: {signatureConfig: {secret: SIGNING_KEY}}}}
-            ]
-        }
-    }
-}
-service StreamableHttpAdvancedService /subscribeContext on serverAuthListener {
-    remote isolated function onListTools() returns ListToolsResult => {tools: []};
-
-    remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
-
-    remote isolated function onSubscribe(AuthContext auth, @http:Header {name: "X-Tenant"} string tenant,
-            SubscriptionFilter notifications) returns stream<JsonRpcNotification, error?> {
-        JsonRpcNotification[] events = [
-            {
-                jsonrpc: JSONRPC_VERSION,
-                method: "notifications/tools/list_changed",
-                params: {"subject": auth.subject, "tenant": tenant}
-            }
-        ];
-        return events.toStream();
-    }
-}
-
-isolated function listenWithContext(string? tenant) returns http:Response|error {
-    map<string|string[]> requestHeaders = {
-        [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
-        [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
-        [METHOD_HEADER]: "subscriptions/listen",
-        [AUTHORIZATION_HEADER]: "Bearer " + check serverAuthToken(audience = SUBSCRIBE_CONTEXT_RESOURCE)
-    };
-    if tenant is string {
-        requestHeaders["X-Tenant"] = tenant;
-    }
-    JsonRpcRequest listenRequest = {
-        jsonrpc: JSONRPC_VERSION,
-        id: 11,
-        method: "subscriptions/listen",
-        params: {
-            _meta: {[PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}},
-            "notifications": {toolsListChanged: true}
-        }
-    };
-    return serverAuthClient->post("/subscribeContext", listenRequest, headers = requestHeaders);
-}
-
-@test:Config {}
-function testOnSubscribeBindsListenRequestValues() returns error? {
-    http:Response response = check listenWithContext("acme");
-    test:assertEquals(response.statusCode, 200);
-    string events = check response.getTextPayload();
-    test:assertTrue(events.includes("\"subject\":\"alice\""), events);
-    test:assertTrue(events.includes("\"tenant\":\"acme\""), events);
-}
-
-@test:Config {}
-function testOnSubscribeUnboundHeaderIsInvalidParams() returns error? {
-    http:Response response = check listenWithContext(());
-    json payload = check response.getJsonPayload();
-    test:assertEquals(check payload.'error.code, INVALID_PARAMS, payload.toJsonString());
-}
 
 isolated map<int> paginatedListings = {};
 

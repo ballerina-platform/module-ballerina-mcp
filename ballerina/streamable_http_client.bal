@@ -389,7 +389,6 @@ public distinct isolated client class StreamableHttpClient {
     # + return - A `ClientError` if closure fails, or `()` on success.
     isolated remote function close() returns ClientError? {
         lock {
-            StreamError? subscriptionError = self.transport.closeSubscriptions();
             StreamableHttpTransportError? terminationError = self.transport.terminateSession();
             // Local state is reset even when the server could not be told, so the client can connect again.
             self.serverCapabilities = ();
@@ -403,38 +402,7 @@ public distinct isolated client class StreamableHttpClient {
                 return error ClientError(string `Failed to disconnect from server: ${terminationError.message()}`,
                         terminationError);
             }
-            return subscriptionError;
         }
-    }
-
-    # Opens a notification stream. Modern peers use subscriptions/listen; legacy peers use the GET event stream.
-    # + notifications - Requested notification types
-    # + headers - Additional request headers
-    # + return - Notification stream, or a client error; close the stream to cancel it
-    isolated remote function listen(SubscriptionFilter notifications = {toolsListChanged: true},
-            map<string|string[]> headers = {}) returns stream<JsonRpcMessage, StreamError?>|ClientError {
-        check self.ensureConnected();
-        if !self.isModern() {
-            return self.transport.establishEventStream();
-        }
-        JsonRpcRequest requestMessage;
-        lock {
-            self.requestId += 1;
-            requestMessage = {
-                jsonrpc: JSONRPC_VERSION,
-                id: self.requestId,
-                method: "subscriptions/listen",
-                params: {
-                    "notifications": notifications.cloneReadOnly(),
-                    _meta: {
-                        [PROTOCOL_META_KEY]: self.metaProtocolVersion(),
-                        [CLIENT_INFO_META_KEY]: self.clientInfo.cloneReadOnly(),
-                        [CAPABILITIES_META_KEY]: self.clientCapabilities.cloneReadOnly()
-                    }
-                }
-            };
-        }
-        return self.transport.openProtocolSubscription(requestMessage, notifications, headers);
     }
 
     # Retrieves discovery information without a legacy initialize request.

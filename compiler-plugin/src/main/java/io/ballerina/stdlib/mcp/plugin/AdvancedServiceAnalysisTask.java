@@ -44,29 +44,24 @@ import java.util.Optional;
  * Analysis task that validates the remote methods of an {@code mcp:StreamableHttpAdvancedService}.
  *
  * <p>The service type is an empty marker, so this task enforces the contract the type used to pin: the service
- * must declare {@code onListTools} and {@code onCallTool} remote methods, and may declare {@code onSubscribe}. Each
- * method binds the HTTP request values (AuthContext, http:Headers, http:Request, and {@code @http:Header}
- * parameters) next to its own parameter: CallToolParams and HttpSession for {@code onCallTool}, an optional Cursor
- * for {@code onListTools}, and a SubscriptionFilter for {@code onSubscribe}.</p>
+ * must declare {@code onListTools} and {@code onCallTool} remote methods. Each method binds the HTTP request values
+ * (AuthContext, http:Headers, http:Request, and {@code @http:Header} parameters) next to its own parameter:
+ * CallToolParams and HttpSession for {@code onCallTool}, and an optional Cursor for {@code onListTools}.</p>
  */
 public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
 
     private static final String ON_CALL_TOOL = "onCallTool";
     private static final String ON_LIST_TOOLS = "onListTools";
-    private static final String ON_SUBSCRIBE = "onSubscribe";
     private static final String HTTP_HEADERS_DISPLAY = "http:Headers";
     private static final String HTTP_REQUEST_DISPLAY = "http:Request";
     private static final String SESSION_DISPLAY = "mcp:HttpSession";
     private static final String AUTH_CONTEXT_DISPLAY = "mcp:AuthContext";
     private static final String CURSOR_DISPLAY = "mcp:Cursor";
     private static final String CALL_TOOL_PARAMS_DISPLAY = "mcp:CallToolParams";
-    private static final String SUBSCRIPTION_FILTER_DISPLAY = "mcp:SubscriptionFilter";
     private static final String CALL_TOOL_RESULT_DISPLAY =
             "mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError";
     private static final String LIST_TOOLS_RESULT_DISPLAY =
             "mcp:ListToolsResult|mcp:ServerError";
-    private static final String SUBSCRIPTION_RESULT_DISPLAY =
-            "stream<mcp:JsonRpcNotification, error?>|mcp:ServerError";
 
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
@@ -82,7 +77,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         Location serviceLocation = serviceNode.location();
         FunctionDefinitionNode onCallTool = null;
         FunctionDefinitionNode onListTools = null;
-        FunctionDefinitionNode onSubscribe = null;
 
         // Locate the known remote methods; any other remote method is unsupported.
         for (Node member : serviceNode.members()) {
@@ -94,8 +88,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
                 onCallTool = functionNode;
             } else if (ON_LIST_TOOLS.equals(methodName)) {
                 onListTools = functionNode;
-            } else if (ON_SUBSCRIBE.equals(methodName)) {
-                onSubscribe = functionNode;
             } else {
                 report(context, CompilationDiagnostic.ADVANCED_UNKNOWN_REMOTE_METHOD,
                         functionNode.location(), methodName);
@@ -112,9 +104,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
             report(context, CompilationDiagnostic.ADVANCED_SERVICE_MISSING_METHOD, serviceLocation, ON_LIST_TOOLS);
         } else {
             validateMethod(context, onListTools, ON_LIST_TOOLS);
-        }
-        if (onSubscribe != null) {
-            validateMethod(context, onSubscribe, ON_SUBSCRIBE);
         }
     }
 
@@ -140,7 +129,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         Location location = functionNode.location();
         boolean isCallTool = ON_CALL_TOOL.equals(methodName);
         boolean isListTools = ON_LIST_TOOLS.equals(methodName);
-        boolean isSubscribe = ON_SUBSCRIBE.equals(methodName);
 
         int primaryParamCount = 0;
         boolean hasHeaders = false;
@@ -179,8 +167,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
                 hasAuthContext = true;
             } else if (isCallTool && Utils.isCallToolParamsType(type)) {
                 primaryParamCount++;
-            } else if (isSubscribe && typeMatches(type, Utils.SUBSCRIPTION_FILTER_TYPE_NAME)) {
-                primaryParamCount++;
             } else if (isCallTool && isSessionParam(type)) {
                 if (hasSession) {
                     report(context, CompilationDiagnostic.DUPLICATE_PARAMETER, paramLocation,
@@ -195,7 +181,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
                 hasCursor = true;
             } else {
                 String supportedTypes = isCallTool ? Utils.ADVANCED_SUPPORTED_PARAM_TYPES
-                        : isSubscribe ? Utils.ADVANCED_SUBSCRIBE_SUPPORTED_PARAM_TYPES
                         : Utils.ADVANCED_LIST_TOOLS_SUPPORTED_PARAM_TYPES;
                 report(context, CompilationDiagnostic.INVALID_PARAMETER_TYPE, paramLocation,
                         methodName, paramName, supportedTypes);
@@ -206,21 +191,7 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
             report(context, CompilationDiagnostic.ADVANCED_METHOD_PARAMS, location, methodName,
                     CALL_TOOL_PARAMS_DISPLAY);
         }
-        if (isSubscribe && primaryParamCount != 1) {
-            report(context, CompilationDiagnostic.ADVANCED_METHOD_PARAMS, location, methodName,
-                    SUBSCRIPTION_FILTER_DISPLAY);
-        }
 
-        if (isSubscribe) {
-            boolean validReturn = functionType.returnTypeDescriptor()
-                    .map(type -> containsStream(type) && type.signature().contains("JsonRpcNotification"))
-                    .orElse(false);
-            if (!validReturn) {
-                report(context, CompilationDiagnostic.ADVANCED_INVALID_RETURN_TYPE, location,
-                        methodName, SUBSCRIPTION_RESULT_DISPLAY);
-            }
-            return;
-        }
         String expectedDisplay = isCallTool ? CALL_TOOL_RESULT_DISPLAY : LIST_TOOLS_RESULT_DISPLAY;
         boolean validResult = isCallTool
                 ? returnTypeContainsAny(functionType, Utils.CALL_TOOL_RESULT_TYPE_NAME,
@@ -229,20 +200,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         if (!validResult) {
             report(context, CompilationDiagnostic.ADVANCED_INVALID_RETURN_TYPE, location, methodName, expectedDisplay);
         }
-    }
-
-    private static boolean containsStream(TypeSymbol type) {
-        if (type.typeKind() == TypeDescKind.STREAM) {
-            return true;
-        }
-        if (type.typeKind() == TypeDescKind.UNION) {
-            return ((UnionTypeSymbol) type).memberTypeDescriptors().stream()
-                    .anyMatch(AdvancedServiceAnalysisTask::containsStream);
-        }
-        if (type.typeKind() == TypeDescKind.TYPE_REFERENCE) {
-            return containsStream(((TypeReferenceTypeSymbol) type).typeDescriptor());
-        }
-        return false;
     }
 
     private static boolean returnTypeContainsAny(FunctionTypeSymbol functionType, String... typeNames) {

@@ -340,20 +340,12 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
 ```
 
 `onListTools` and `onCallTool` are required. `onCallTool` may return `InputRequiredResult` for a modern
-continuation. An optional `onSubscribe(mcp:SubscriptionFilter)` method may return
-`stream<mcp:JsonRpcNotification, error?>|mcp:ServerError` for change notifications. All three handlers can bind the
-same HTTP request values as basic tools (`http:Headers`, `http:Request`, `@http:Header` and `mcp:AuthContext`);
-`onSubscribe` binds them from the `subscriptions/listen` request, so a service whose tool list varies by caller can
-scope its notifications to that caller. `onCallTool` reads request metadata from `CallToolParams._meta`.
+continuation. Both handlers can bind the same HTTP request values as basic tools (`http:Headers`, `http:Request`,
+`@http:Header` and `mcp:AuthContext`). `onCallTool` reads request metadata from `CallToolParams._meta`.
 
 A handler returns an `mcp:InvalidParamsError` to reject the request's parameters, such as an unknown cursor or a
 missing argument. The service answers with a JSON-RPC `INVALID_PARAMS` error carrying the error's message, on both
 protocols. Any other `mcp:ServerError` is answered with `INTERNAL_ERROR` and its message.
-
-While a subscription is open, the listener sends an SSE comment after every 15 seconds without other output, so idle
-timeouts do not close a quiet connection. When the client disconnects, the listener closes the stream `onSubscribe` returned within one
-such interval, and it may call `close()` while a `next()` call on that stream is still pending. `gracefulStop()`
-ends every open subscription with its final result, waiting at most 5 seconds; `immediateStop()` does not.
 
 `onListTools` may declare an `mcp:Cursor?` parameter to return its tools in pages. It receives the request's cursor,
 or `()` for the first page, and sets `nextCursor` on every page but the last. A basic service always returns all of
@@ -558,7 +550,7 @@ not available.
 ## Client
 
 Creating a client configures its transport. `connect()` performs protocol selection and is required before
-`listTools()`, `callTool()`, or `listen()`.
+`listTools()` or `callTool()`.
 
 ```ballerina
 import ballerina/io;
@@ -708,7 +700,6 @@ The lower-level lifecycle methods are available for applications that manage dis
 - `discover()` fetches modern discovery data without connecting the client.
 - `adoptDiscovery()` connects from a previously obtained `DiscoverResult`.
 - `initializeLegacy()` explicitly performs the older initialize handshake.
-- `listen()` opens modern subscriptions or the legacy GET event stream according to the negotiated connection.
 
 ## Caching
 
@@ -739,7 +730,6 @@ cache and represents a single authorization context: configure credentials throu
 separate client for each user rather than passing different credentials as per-call headers. A call that passes its own
 `Authorization` header bypasses the cache. Cached results are dropped when:
 
-- the application reads `notifications/tools/list_changed` from `listen()`,
 - the server rejects a cursor with `INVALID_PARAMS` (all pages are dropped),
 - a call fails with `HEADER_MISMATCH`,
 - a `401` or `insufficient_scope` challenge yields a different token, since a step-up can change the tool list, or
@@ -768,13 +758,17 @@ explicit names.
 | `http:ClientConfiguration` fields at the top level of the client configuration | The same fields under `httpConfig`, an `mcp:HttpClientConfig` |
 | An `http:HttpServiceConfig` value for `httpConfig` | `mcp:HttpServiceConfig`: the same fields, with `auth` also accepting `mcp:OAuthProtectedResourceConfig` |
 | `initialize()` | `connect()` or `initializeLegacy()` |
-| `subscribeToServerMessages()` | `listen()` |
+| `subscribeToServerMessages()` | Removed |
 
 1.x did not validate `Origin`. A 2.0 service rejects browser requests from origins that are not listed in
 `httpConfig.cors.allowOrigins`, which is empty by default.
 
 The client must now call `connect()`, or `initializeLegacy()`, before other operations; 1.x did not enforce
 `initialize()`.
+
+2.0 does not support change notifications. `subscribeToServerMessages()` has no replacement, a modern service answers
+`subscriptions/listen` with `METHOD_NOT_FOUND`, and `tools.listChanged` is advertised as `false`. Proper support for
+change notification subscriptions is planned for a later release.
 
 A legacy client keeps receiving the legacy wire shapes from a 2.0 server. The text content of a tool that returns a
 structured value is now its JSON serialization.

@@ -62,9 +62,6 @@ type SessionOperationError distinct StreamableHttpTransportError;
 # Error for failures while parsing HTTP response content.
 type ResponseParsingError distinct StreamableHttpTransportError & ProtocolError;
 
-# Error for failures during SSE stream establishment.
-type SseStreamEstablishmentError distinct StreamableHttpTransportError;
-
 # Error for operations attempted before transport initialization.
 type UninitializedTransportError distinct ClientError;
 

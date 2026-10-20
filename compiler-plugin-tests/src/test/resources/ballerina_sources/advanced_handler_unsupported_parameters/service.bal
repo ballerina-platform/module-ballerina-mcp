@@ -14,46 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/http;
 import ballerina/mcp;
-
-@mcp:StreamableHttpServiceConfig {
-    info: {name: "subscribe-extra-parameter", version: "1.0.0"}
-}
-service mcp:StreamableHttpAdvancedService /extra on new mcp:StreamableHttpListener(9343) {
-    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
-        return {tools: []};
-    }
-
-    remote isolated function onCallTool(mcp:CallToolParams params)
-            returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
-        return {resultType: "complete", content: []};
-    }
-
-    remote isolated function onSubscribe(mcp:SubscriptionFilter notifications, mcp:HttpSession? session)
-            returns stream<mcp:JsonRpcNotification, error?>|mcp:ServerError {
-        return new stream<mcp:JsonRpcNotification, error?>();
-    }
-}
-
-@mcp:StreamableHttpServiceConfig {
-    info: {name: "subscribe-without-filter", version: "1.0.0"}
-}
-service mcp:StreamableHttpAdvancedService /noFilter on new mcp:StreamableHttpListener(9344) {
-    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
-        return {tools: []};
-    }
-
-    remote isolated function onCallTool(mcp:CallToolParams params)
-            returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
-        return {resultType: "complete", content: []};
-    }
-
-    remote isolated function onSubscribe(http:Headers headers)
-            returns stream<mcp:JsonRpcNotification, error?>|mcp:ServerError {
-        return new stream<mcp:JsonRpcNotification, error?>();
-    }
-}
 
 // The first page is listed without a cursor, so the cursor must be nilable.
 @mcp:StreamableHttpServiceConfig {

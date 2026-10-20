@@ -17,25 +17,20 @@
 import ballerina/http;
 import ballerina/mcp;
 
-// onSubscribe binds the same HTTP request values as onListTools, and onListTools may declare a cursor.
+// onListTools binds HTTP request values and may declare a cursor.
 @mcp:StreamableHttpServiceConfig {
     info: {name: "advanced-handler-http-parameters", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9341) {
     remote isolated function onListTools(mcp:Cursor? cursor, mcp:AuthContext? auth,
-            @http:Header {name: "X-Tenant"} string? tenant) returns mcp:ListToolsResult|mcp:ServerError {
+            @http:Header {name: "X-Tenant"} string? tenant, http:Headers headers, http:Request request)
+            returns mcp:ListToolsResult|mcp:ServerError {
         return {tools: []};
     }
 
     remote isolated function onCallTool(mcp:CallToolParams params)
             returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
         return {resultType: "complete", content: []};
-    }
-
-    remote isolated function onSubscribe(mcp:AuthContext? auth, @http:Header {name: "X-Tenant"} string tenant,
-            mcp:SubscriptionFilter notifications, http:Headers headers, http:Request request)
-            returns stream<mcp:JsonRpcNotification, error?>|mcp:ServerError {
-        return new stream<mcp:JsonRpcNotification, error?>();
     }
 }
 

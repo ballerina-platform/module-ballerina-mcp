@@ -64,12 +64,6 @@ function testLegacyTransportReportsUnreachableServers() returns error? {
         test:assertTrue(listResult.message().includes("Failed to send message to server"));
     }
 
-    var listenResult = deadClient->listen();
-    test:assertTrue(listenResult is SseStreamEstablishmentError);
-    if listenResult is SseStreamEstablishmentError {
-        test:assertTrue(listenResult.message().includes("Failed to establish SSE connection"));
-    }
-
     ClientError? closeError = deadClient->close();
     test:assertTrue(closeError is ClientError);
     if closeError is ClientError {
@@ -123,26 +117,15 @@ function testLegacyHandshakeValidatesTheInitializeResult() returns error? {
 }
 
 @test:Config {}
-function testLegacyEventStreamSurfacesTransformationErrors() returns error? {
+function testLegacySseResponseSurfacesTransformationErrors() returns error? {
     StreamableHttpClient malformedStream = check legacyMockClient("sseMalformedStream");
-    stream<JsonRpcMessage, StreamError?> malformedEvents = check malformedStream->listen();
-    var malformedItem = malformedEvents.next();
-    test:assertTrue(malformedItem is TypeConversionError);
-    check malformedEvents.close();
+    var malformedResult = malformedStream->listTools();
+    test:assertTrue(malformedResult is TypeConversionError);
 
     StreamableHttpClient missingData = check legacyMockClient("sseMissingData");
-    stream<JsonRpcMessage, StreamError?> missingDataEvents = check missingData->listen();
-    // An event without data is not dispatched, so the stream just ends.
-    test:assertEquals(check missingDataEvents.next(), ());
-    check missingDataEvents.close();
-
-    StreamableHttpClient wellFormed = check legacyMockClient("ok");
-    stream<JsonRpcMessage, StreamError?> events = check wellFormed->listen();
-    var notification = check events.next();
-    test:assertTrue(notification is record {|JsonRpcMessage value;|});
-    // The transformer reports the end of the SSE stream as a completed iteration.
-    test:assertEquals(check events.next(), ());
-    check events.close();
+    // An event without data is not dispatched, so the stream ends without a result.
+    var missingDataResult = missingData->listTools();
+    test:assertTrue(missingDataResult is InvalidMessageTypeError);
 }
 
 @test:Config {}

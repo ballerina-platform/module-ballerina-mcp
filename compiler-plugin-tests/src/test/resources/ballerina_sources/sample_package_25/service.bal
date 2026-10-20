@@ -28,9 +28,4 @@ service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener
             returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
         return {resultType: "complete", content: []};
     }
-
-    remote isolated function onSubscribe(mcp:SubscriptionFilter notifications)
-            returns stream<mcp:JsonRpcNotification, error?>|mcp:ServerError {
-        return new stream<mcp:JsonRpcNotification, error?>();
-    }
 }
