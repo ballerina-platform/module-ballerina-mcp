@@ -19,7 +19,7 @@ import ballerina/jballerina.java;
 # The input of one round of a basic service tool call: the input responses and request state the
 # client sent back on a continuation. Declare it as a tool parameter to have it injected. It is
 # empty on the first round and on legacy calls.
-public readonly class Context {
+public isolated readonly class Context {
     private final map<InputResponse> inputResponses;
     private final string? state;
 
