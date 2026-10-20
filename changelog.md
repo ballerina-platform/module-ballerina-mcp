@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Defaultable tool parameter cannot be omitted in a tools/call request](https://github.com/ballerina-platform/ballerina-library/issues/9143)
 - Client OAuth failures are returned as `mcp:AuthorizationError` with the underlying reason in the message, instead of a generic transport error.
 - A `server/discover` result without `resultType`, `ttlMs`, or `cacheScope` is treated as `complete`, `0`, and `private`, so the `auto` protocol mode no longer falls back to `initialize` for a modern server that omits them.
+- On the legacy protocol, the client ignores the `resultType`, `ttlMs`, and `cacheScope` result fields of MCP `2026-07-28`, so a server that sends them with values outside that schema no longer fails the request.
+
+### Removed
+- The non-standard `data` and `size` fields of `mcp:Icon`. `src` is now required, as in the MCP `2025-11-25` icon schema; put inline image data in `src` as a `data:` URI.
 
 ## [1.3.0] - 2026-09-07
 
