@@ -19,6 +19,8 @@
 package io.ballerina.stdlib.mcp.plugin;
 
 import io.ballerina.compiler.api.SemanticModel;
+import io.ballerina.compiler.api.symbols.FunctionSymbol;
+import io.ballerina.compiler.api.symbols.ParameterSymbol;
 import io.ballerina.compiler.api.symbols.RecordTypeSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
 import io.ballerina.compiler.api.symbols.SymbolKind;
@@ -37,6 +39,7 @@ import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -64,10 +67,12 @@ public class ElicitFormAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisCo
     public void perform(SyntaxNodeAnalysisContext context) {
         FunctionCallExpressionNode call = (FunctionCallExpressionNode) context.node();
         SemanticModel semanticModel = context.semanticModel();
-        if (!isElicitFormCall(semanticModel, call)) {
+        Optional<FunctionSymbol> elicitForm = getElicitFormFunction(semanticModel, call);
+        if (elicitForm.isEmpty()) {
             return;
         }
-        Optional<ExpressionNode> schemaArgument = getSchemaArgument(call.arguments());
+        Optional<ExpressionNode> schemaArgument = getSchemaArgument(call.arguments(),
+                getSchemaParameterPosition(elicitForm.get()));
         if (schemaArgument.isEmpty() || !isTypedesc(semanticModel, schemaArgument.get())) {
             return;
         }
@@ -90,18 +95,30 @@ public class ElicitFormAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisCo
         }
     }
 
-    private static boolean isElicitFormCall(SemanticModel semanticModel, FunctionCallExpressionNode call) {
+    private static Optional<FunctionSymbol> getElicitFormFunction(SemanticModel semanticModel,
+                                                                  FunctionCallExpressionNode call) {
         return semanticModel.symbol(call)
                 .filter(symbol -> symbol.kind() == SymbolKind.FUNCTION)
                 .filter(symbol -> ELICIT_FORM_FUNCTION_NAME.equals(symbol.getName().orElse(null)))
                 .filter(Utils::isMcpModuleSymbol)
-                .isPresent();
+                .map(FunctionSymbol.class::cast);
     }
 
-    private static Optional<ExpressionNode> getSchemaArgument(SeparatedNodeList<FunctionArgumentNode> arguments) {
+    private static int getSchemaParameterPosition(FunctionSymbol elicitForm) {
+        List<ParameterSymbol> parameters = elicitForm.typeDescriptor().params().orElse(List.of());
+        for (int position = 0; position < parameters.size(); position++) {
+            if (SCHEMA_PARAMETER_NAME.equals(parameters.get(position).getName().orElse(null))) {
+                return position;
+            }
+        }
+        return -1;
+    }
+
+    private static Optional<ExpressionNode> getSchemaArgument(SeparatedNodeList<FunctionArgumentNode> arguments,
+                                                              int schemaPosition) {
         for (int index = 0; index < arguments.size(); index++) {
             FunctionArgumentNode argument = arguments.get(index);
-            if (argument.kind() == POSITIONAL_ARG && index == 1) {
+            if (argument.kind() == POSITIONAL_ARG && index == schemaPosition) {
                 return Optional.of(((PositionalArgumentNode) argument).expression());
             }
             if (argument.kind() == NAMED_ARG && SCHEMA_PARAMETER_NAME.equals(
