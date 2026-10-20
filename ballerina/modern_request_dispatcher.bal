@@ -27,13 +27,11 @@ isolated function isModernRequest(JsonRpcRequest|JsonRpcNotification requestMess
         return true;
     }
     string? headerVersion = getProtocolVersionFromHeaders(requestHeaders);
-    foreach string legacyVersion in ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"] {
-        if legacyVersion == headerVersion {
-            return false;
-        }
-    }
-    return headerVersion is string;
+    return headerVersion is string && !isLegacyProtocolVersion(headerVersion);
 }
+
+isolated function advertisedProtocolVersions(StreamableHttpServiceConfiguration serviceConfig) returns string[] =>
+    serviceConfig.protocolMode == "modern" ? MODERN_PROTOCOL_VERSIONS : SUPPORTED_PROTOCOL_VERSIONS;
 
 isolated function unsupportedProtocolResponse(string requestedVersion, string[] supportedVersions, RequestId? requestId)
         returns http:BadRequest => {
@@ -51,7 +49,7 @@ isolated function unsupportedProtocolResponse(string requestedVersion, string[] 
 isolated function modernError(int errorCode, string errorMessage, RequestId requestId)
         returns http:BadRequest => {body: createJsonRpcError(errorCode, errorMessage, requestId)};
 
-isolated function modernCapabilities(StreamableHttpConfiguration serviceConfig, boolean supportsSubscriptions = false) returns ServerCapabilities {
+isolated function modernCapabilities(StreamableHttpServiceConfiguration serviceConfig, boolean supportsSubscriptions = false) returns ServerCapabilities {
     ServerCapabilities serverCapabilities = {...(serviceConfig.options?.capabilities ?: {})};
     // No runtime for these optional capabilities is installed by this module.
     foreach string capabilityName in ["tasks", "logging", "prompts", "resources", "completions"] {
@@ -65,7 +63,7 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
         CacheHint? cacheHint = ()) returns http:Ok {
     Result wireResult = {...resultValue};
     wireResult["resultType"] = wireResult["resultType"] ?: "complete";
-    ResultMetaObject resultMeta = {...(wireResult._meta ?: {})};
+    ResultMeta resultMeta = {...(wireResult._meta ?: {})};
     Implementation effectiveServerInfo = resultMeta.serverInfo ?: serverInfo;
     _ = resultMeta.removeIfHasKey("serverInfo");
     resultMeta[SERVER_INFO_META_KEY] = effectiveServerInfo;
@@ -80,27 +78,13 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
 
 isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpConfiguration serviceConfig, RequestStateSigner requestStateSigner,
+        StreamableHttpServiceConfiguration serviceConfig, SubscriptionRegistry subscriptions,
+        RequestStateSigner requestStateSigner,
         ServerAuthenticator? authenticator = (), readonly & AuthContext? authContext = ())
         returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:InternalServerError|http:Response {
-    string|http:HeaderNotFoundError originHeader = requestHeaders.getHeader("origin");
-    if originHeader is string {
-        boolean allowedOrigin = false;
-        foreach string allowedValue in serviceConfig.httpConfig.cors.allowOrigins {
-            if allowedValue == "*" || allowedValue == originHeader {
-                allowedOrigin = true;
-                break;
-            }
-        }
-        if !allowedOrigin {
-            return <http:Forbidden>{body: createJsonRpcError(INVALID_REQUEST, "Origin is not allowed", requestMessage.id)};
-        }
-    }
     string requestedVersion = getProtocolVersionFromHeaders(requestHeaders) ?: "";
     if serviceConfig.protocolMode == "legacy" || requiresLegacySession(mcpService) {
-        return unsupportedProtocolResponse(requestedVersion,
-                SUPPORTED_PROTOCOL_VERSIONS.filter(versionValue => versionValue != MODERN_PROTOCOL_VERSION),
-                requestMessage.id);
+        return unsupportedProtocolResponse(requestedVersion, LEGACY_PROTOCOL_VERSIONS, requestMessage.id);
     }
     ModernRequestMeta|error requestMeta = requestMessage.params?._meta.cloneWithType();
     if requestMeta is error {
@@ -111,9 +95,8 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
             requestedVersion == "" {
         return modernError(HEADER_MISMATCH, "MCP-Protocol-Version must match request metadata", requestMessage.id);
     }
-    if requestedVersion != MODERN_PROTOCOL_VERSION {
-        return unsupportedProtocolResponse(requestedVersion,
-                    serviceConfig.protocolMode == "modern" ? [MODERN_PROTOCOL_VERSION] : SUPPORTED_PROTOCOL_VERSIONS,
+    if !isModernProtocolVersion(requestedVersion) {
+        return unsupportedProtocolResponse(requestedVersion, advertisedProtocolVersions(serviceConfig),
                 requestMessage.id);
     }
     string|error methodHeader = requestHeaders.getHeader(METHOD_HEADER);
@@ -123,7 +106,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if requestMessage.method == "server/discover" {
         CacheHint discoverHint = serviceConfig.cacheHints.discover ?: {};
         DiscoverResult discoverResult = {
-            supportedVersions: serviceConfig.protocolMode == "modern" ? [MODERN_PROTOCOL_VERSION] : SUPPORTED_PROTOCOL_VERSIONS,
+            supportedVersions: advertisedProtocolVersions(serviceConfig),
             capabilities: modernCapabilities(serviceConfig,
                 mcpService is StreamableHttpAdvancedService && hasSubscriptionHandler(mcpService)),
             ttlMs: discoverHint.ttlMs ?: 0,
@@ -143,11 +126,16 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
             return createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid subscription filter", requestMessage.id);
         }
         SubscriptionFilter acceptedFilter = {toolsListChanged: requestedFilter.toolsListChanged};
-        var eventSource = trap invokeOnSubscribe(mcpService, acceptedFilter);
-        if eventSource is error {
-            return createJsonRpcErrorResponse(INTERNAL_ERROR, eventSource.message(), requestMessage.id);
+        var eventSource = trap invokeOnSubscribe(mcpService, acceptedFilter, requestHeaders, httpRequest,
+                extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional, authContext);
+        if eventSource is InsufficientScopeError {
+            return insufficientScopeFor(authenticator, eventSource);
         }
-        ServerSubscriptionStream streamIterator = new (eventSource, requestMessage.id, acceptedFilter);
+        if eventSource is error {
+            return createJsonRpcErrorResponse(handlerErrorCode(eventSource), toSubscribeError(eventSource).message(),
+                    requestMessage.id);
+        }
+        ServerSubscriptionStream streamIterator = new (eventSource, requestMessage.id, acceptedFilter, subscriptions);
         stream<http:SseEvent, error?> responseStream = new (streamIterator);
         http:Response httpResponse = new;
         httpResponse.setSseEventStream(responseStream);
@@ -157,24 +145,14 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if requestMessage.method != REQUEST_LIST_TOOLS && requestMessage.method != REQUEST_CALL_TOOL {
         return <http:NotFound>{body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", requestMessage.id)};
     }
-    ListToolsResult|error toolList = listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig,
-            authContext);
-    // The tool list also resolves `tools/call`, so a listing that needs more scope challenges both.
-    if toolList is InsufficientScopeError {
-        return insufficientScopeFor(authenticator, toolList);
+    Cursor?|http:Ok cursor = requestMessage.method == REQUEST_LIST_TOOLS ? requestCursor(requestMessage) : ();
+    if cursor is http:Ok {
+        return cursor;
     }
+    ListToolsResult|error toolList = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
+            serviceConfig, authContext, cursor);
     if toolList is error {
-        return createJsonRpcErrorResponse(INTERNAL_ERROR, toolList.message(), requestMessage.id);
-    }
-    foreach ToolDefinition toolInfo in toolList.tools {
-        _ = toolInfo.removeIfHasKey("execution");
-        var headerDefinition = toolParameterHeaders(toolInfo.inputSchema, {});
-        if headerDefinition is Error {
-            return createJsonRpcErrorResponse(INTERNAL_ERROR, headerDefinition.message(), requestMessage.id);
-        }
-    }
-    if toolList.ttlMs is int && toolList.ttlMs < 0 {
-        return createJsonRpcErrorResponse(INTERNAL_ERROR, "ttlMs must be non-negative", requestMessage.id);
+        return listingFailureResponse(toolList, authenticator, requestMessage.id);
     }
     if requestMessage.method == REQUEST_LIST_TOOLS {
         toolList.tools = toolList.tools.sort(key = isolated function(ToolDefinition toolInfo) returns string => toolInfo.name);
@@ -192,12 +170,20 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if decodedName is Error || decodedName != callParams.name {
         return modernError(HEADER_MISMATCH, "Mcp-Name must match the tool name", requestMessage.id);
     }
-    ToolDefinition? selectedTool = ();
-    foreach ToolDefinition toolInfo in toolList.tools {
-        if toolInfo.name == callParams.name {
-            selectedTool = toolInfo;
-            break;
+    // A paginating service may list the tool on a later page.
+    ToolDefinition? selectedTool = findTool(toolList, callParams.name);
+    map<boolean> visitedCursors = {};
+    Cursor? nextCursor = toolList.nextCursor;
+    while selectedTool is () && nextCursor is Cursor && !visitedCursors.hasKey(nextCursor) &&
+            visitedCursors.length() < MAX_TOOL_LIST_PAGES - 1 {
+        visitedCursors[nextCursor] = true;
+        ListToolsResult|error page = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
+                serviceConfig, authContext, nextCursor);
+        if page is error {
+            return listingFailureResponse(page, authenticator, requestMessage.id);
         }
+        selectedTool = findTool(page, callParams.name);
+        nextCursor = page.nextCursor;
     }
     if selectedTool is () {
         return createJsonRpcErrorResponse(INVALID_PARAMS, "Unknown tool name", requestMessage.id);
@@ -211,10 +197,6 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     Error? headerError = validateToolHeaders(selectedTool.inputSchema, callParams.arguments ?: {}, requestHeaders);
     if headerError is Error {
         return modernError(HEADER_MISMATCH, headerError.message(), requestMessage.id);
-    }
-    if callParams.task !is () {
-        return createJsonRpcErrorResponse(INVALID_PARAMS, "Legacy task parameters are not supported in modern MCP",
-                requestMessage.id);
     }
     string? requestState = callParams.requestState;
     if requestState is string {
@@ -241,7 +223,8 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
         return insufficientScopeFor(authenticator, callResult);
     }
     if callResult is error {
-        return createJsonRpcErrorResponse(INTERNAL_ERROR, callResult.message(), requestMessage.id);
+        return createJsonRpcErrorResponse(handlerErrorCode(callResult),
+                toServerError(callResult, callParams.name).message(), requestMessage.id);
     }
     if callResult is InputRequiredResult {
         Error? inputError = validateInputRequired(callResult, requestMeta.io\.modelcontextprotocol\/clientCapabilities);
@@ -283,13 +266,62 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     return modernResult(callResult, serviceConfig.info, requestMessage.id);
 }
 
+# Lists one page of a service's tools for a modern request, rejecting invalid header declarations.
+isolated function listValidatedToolPage(StreamableHttpService|StreamableHttpAdvancedService mcpService,
+        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig,
+        readonly & AuthContext? authContext, Cursor? cursor) returns ListToolsResult|error {
+    ListToolsResult toolList = check listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig,
+            authContext, cursor);
+    foreach ToolDefinition toolInfo in toolList.tools {
+        _ = toolInfo.removeIfHasKey("execution");
+        var headerDefinition = toolParameterHeaders(toolInfo.inputSchema, {});
+        // An invalid header declaration is a defect in the service, never the caller's invalid params.
+        if headerDefinition is Error {
+            return error ServerError(headerDefinition.message());
+        }
+    }
+    int? ttlMs = toolList.ttlMs;
+    if ttlMs is int && ttlMs < 0 {
+        log:printError("onListTools returned a negative ttlMs; using 0", ttlMs = ttlMs);
+        toolList.ttlMs = 0;
+    }
+    return toolList;
+}
+
+isolated function listingFailureResponse(error failure, ServerAuthenticator? authenticator, RequestId requestId)
+        returns http:Ok|http:Forbidden|http:InternalServerError {
+    // The tool list also resolves `tools/call`, so a listing that needs more scope challenges both.
+    if failure is InsufficientScopeError {
+        return insufficientScopeFor(authenticator, failure);
+    }
+    return createJsonRpcErrorResponse(handlerErrorCode(failure), failure.message(), requestId);
+}
+
+isolated function findTool(ListToolsResult toolList, string toolName) returns ToolDefinition? {
+    foreach ToolDefinition toolInfo in toolList.tools {
+        if toolInfo.name == toolName {
+            return toolInfo;
+        }
+    }
+    return ();
+}
+
+# Reports a failed `onSubscribe` call, logging the detail of an unexpected failure.
+isolated function toSubscribeError(error cause) returns ServerError {
+    if cause is ServerError {
+        return cause;
+    }
+    log:printError("Subscription failed", cause);
+    return error ServerError("Subscribing failed unexpectedly.");
+}
+
 isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
-        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpConfiguration serviceConfig,
-        readonly & AuthContext? authContext) returns ListToolsResult|error {
+        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig,
+        readonly & AuthContext? authContext, Cursor? cursor = ()) returns ListToolsResult|error {
     ListToolsResult|Error listResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
         ListToolsResult|error advancedResult =
-                trap invokeAdvancedOnListTools(mcpService, requestHeaders, httpRequest,
+                trap invokeAdvancedOnListTools(mcpService, cursor, requestHeaders, httpRequest,
                     extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
                     authContext);
         if advancedResult is error {
@@ -308,10 +340,10 @@ isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvanced
 
 isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         CallToolParams callParams, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpConfiguration serviceConfig, readonly & AuthContext? authContext)
+        StreamableHttpServiceConfiguration serviceConfig, readonly & AuthContext? authContext)
         returns CallToolResult|InputRequiredResult|error {
     CallToolParams applicationParams = callParams.clone();
-    RequestMetaObject applicationMeta = {...(callParams._meta ?: {})};
+    RequestMeta applicationMeta = {...(callParams._meta ?: {})};
     foreach string metaKey in [PROTOCOL_META_KEY, CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LOG_LEVEL_META_KEY] {
         _ = applicationMeta.removeIfHasKey(metaKey);
     }
@@ -340,7 +372,7 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
                 applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
                 authContext, toolContext);
-        if structuredResult is InsufficientScopeError {
+        if structuredResult is InsufficientScopeError || structuredResult is ParameterBindingError {
             return structuredResult;
         }
         if structuredResult is error {

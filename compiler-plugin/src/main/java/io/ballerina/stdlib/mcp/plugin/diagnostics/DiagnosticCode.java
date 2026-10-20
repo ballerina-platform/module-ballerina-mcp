@@ -24,7 +24,6 @@ package io.ballerina.stdlib.mcp.plugin.diagnostics;
 public enum DiagnosticCode {
     MCP_101,
     MCP_102,
-    MCP_103,
     MCP_104,
     MCP_105,
     MCP_106,
@@ -41,6 +40,7 @@ public enum DiagnosticCode {
     MCP_118,
     MCP_119,
     MCP_120,
+    MCP_121,
     MCP_WARNING_102,
     MCP_WARNING_103,
     MCP_WARNING_104,

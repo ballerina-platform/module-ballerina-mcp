@@ -31,28 +31,35 @@ isolated class JsonRpcMessageStreamTransformer {
     #
     # + return - A record with the next JsonRpcMessage, a StreamError, or nil if the stream is complete.
     public isolated function next() returns record {|JsonRpcMessage value;|}|StreamError? {
-        record {|http:SseEvent value;|}|error? sseEventRecord = self.getNextSseEvent();
+        while true {
+            record {|http:SseEvent value;|}|error? sseEventRecord = self.getNextSseEvent();
 
-        if sseEventRecord is () {
-            return; // End of stream.
+            if sseEventRecord is () {
+                return; // End of stream.
+            }
+
+            if sseEventRecord is error {
+                return error SseEventStreamError(
+                    string `Failed to retrieve SSE event: ${sseEventRecord.message()}`
+                );
+            }
+
+            // Keep-alive comments and empty-data priming events carry no message, so they are not dispatched.
+            string? eventData = sseEventRecord.value.data;
+            if eventData is () || eventData == "" {
+                continue;
+            }
+
+            JsonRpcMessage|JsonRpcMessageTransformationError jsonRpcMessage =
+                self.convertSseDataToJsonRpcMessage(eventData);
+            if jsonRpcMessage is JsonRpcMessageTransformationError {
+                return jsonRpcMessage;
+            }
+
+            return {
+                value: jsonRpcMessage
+            };
         }
-
-        if sseEventRecord is error {
-            return error SseEventStreamError(
-                string `Failed to retrieve SSE event: ${sseEventRecord.message()}`
-            );
-        }
-
-        string? eventData = sseEventRecord.value.data;
-        JsonRpcMessage|JsonRpcMessageTransformationError jsonRpcMessage = self.convertSseDataToJsonRpcMessage(eventData);
-
-        if jsonRpcMessage is JsonRpcMessageTransformationError {
-            return jsonRpcMessage;
-        }
-
-        return {
-            value: jsonRpcMessage
-        };
     }
 
     # Closes the underlying SSE event stream.
@@ -91,11 +98,7 @@ isolated class JsonRpcMessageStreamTransformer {
     #
     # + eventData - The `data` field from an SSE event.
     # + return - A JsonRpcMessage or a JsonRpcMessageTransformationError.
-    private isolated function convertSseDataToJsonRpcMessage(string? eventData) returns JsonRpcMessage|JsonRpcMessageTransformationError {
-        if eventData is () {
-            return error MissingSseDataError("SSE event is missing the required 'data' field.");
-        }
-
+    private isolated function convertSseDataToJsonRpcMessage(string eventData) returns JsonRpcMessage|JsonRpcMessageTransformationError {
         json|error payload = eventData.fromJsonString();
         JsonRpcMessage|error message = payload is error ? payload : toLegacyMessage(payload);
         if message is error {

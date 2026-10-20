@@ -22,9 +22,15 @@ const CONTENT_TYPE_HEADER = "content-type";
 const CONTENT_TYPE_JSON = "application/json";
 const CONTENT_TYPE_SSE = "text/event-stream";
 
-# Latest protocol revision using per-request negotiation.
-public const MODERN_PROTOCOL_VERSION = "2026-07-28";
-# Latest revision supporting the initialize handshake.
+# Revisions that use per-request negotiation, newest first.
+public const MODERN_PROTOCOL_VERSIONS = ["2026-07-28"];
+# Revisions that use the `initialize` handshake, newest first.
+public const LEGACY_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
+# The union of the modern and legacy revisions.
+public const SUPPORTED_PROTOCOL_VERSIONS = [...MODERN_PROTOCOL_VERSIONS, ...LEGACY_PROTOCOL_VERSIONS];
+# The newest modern revision, sent by the client.
+public const LATEST_PROTOCOL_VERSION = "2026-07-28";
+# The newest legacy revision, offered in `initialize`.
 public const LATEST_LEGACY_PROTOCOL_VERSION = "2025-11-25";
 
 const PROTOCOL_META_KEY = "io.modelcontextprotocol/protocolVersion";
@@ -33,6 +39,8 @@ const CLIENT_INFO_META_KEY = "io.modelcontextprotocol/clientInfo";
 const SERVER_INFO_META_KEY = "io.modelcontextprotocol/serverInfo";
 const LOG_LEVEL_META_KEY = "io.modelcontextprotocol/logLevel";
 const METHOD_HEADER = "mcp-method";
+// Pages read to find a tool by name, so a service that keeps offering pages cannot stall a call.
+const MAX_TOOL_LIST_PAGES = 100;
 const NAME_HEADER = "mcp-name";
 
 # HTTP header validation failed before dispatch.

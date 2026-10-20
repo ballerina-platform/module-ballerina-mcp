@@ -85,7 +85,7 @@ isolated function userToken(string subject) returns string|error {
 function userClient(string subject) returns mcp:StreamableHttpClient|error {
     mcp:StreamableHttpClient mcpClient = check new (mcpUrl,
         protocolMode = "modern",
-        auth = {token: check userToken(subject)},
+        httpConfig = {auth: {token: check userToken(subject)}},
         // Advertises URL-mode elicitation; callToolOnce never invokes it.
         elicitationHandler = isolated function(mcp:ElicitRequest request) returns mcp:ElicitResult|mcp:ClientError =>
             error mcp:ClientError("Not called by callToolOnce")

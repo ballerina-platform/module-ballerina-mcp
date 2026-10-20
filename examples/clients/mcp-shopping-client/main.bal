@@ -67,16 +67,18 @@ function runClientSession(string customerName, record {|string name; decimal pri
 
     // Create a new client (each client gets its own session)
     mcp:StreamableHttpClientConfig config = {
-        auth: {
-            username: "ballerina",
-            issuer: "wso2",
-            audience: ["ballerina", "ballerina.org", "ballerina.io"],
-            keyId: "5a0b754-895f-4279-8843-b745e11a57e9",
-            jwtId: "JlbmMiOiJBMTI4Q0JDLUhTMjU2In",
-            expTime: 3600,
-            signatureConfig: {
-                config: {
-                    keyFile: "./resource/private.key"
+        httpConfig: {
+            auth: {
+                username: "ballerina",
+                issuer: "wso2",
+                audience: ["ballerina", "ballerina.org", "ballerina.io"],
+                keyId: "5a0b754-895f-4279-8843-b745e11a57e9",
+                jwtId: "JlbmMiOiJBMTI4Q0JDLUhTMjU2In",
+                expTime: 3600,
+                signatureConfig: {
+                    config: {
+                        keyFile: "./resource/private.key"
+                    }
                 }
             }
         }

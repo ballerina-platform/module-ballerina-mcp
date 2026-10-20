@@ -36,6 +36,7 @@ public isolated class StreamableHttpListener {
     // Each virtual host has one protected resource metadata service and a path-keyed registry.
     // A registry remains here for the lifetime of the listener after its metadata service is attached.
     private final map<ProtectedResourceMetadataRegistry> metadataRegistries = {};
+    private final SubscriptionRegistry subscriptions = new;
 
     # Initializes the Listener.
     #
@@ -61,7 +62,7 @@ public isolated class StreamableHttpListener {
     # + return - Error? if attachment fails.
     public isolated function attach(StreamableHttpService|StreamableHttpAdvancedService mcpService,
             string[]|string? name = ()) returns Error? {
-        StreamableHttpConfiguration serviceConfig = getServiceConfiguration(mcpService);
+        StreamableHttpServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
         if serviceConfig.protocolMode == "modern" && requiresLegacySession(mcpService) {
             return error DispatcherError("Modern MCP services cannot require mcp:HttpSession; use explicit application state");
         }
@@ -73,7 +74,7 @@ public isolated class StreamableHttpListener {
         ServerAuthenticator? authenticator = check createServerAuthenticator(mcpService, serviceConfig);
         http:HttpServiceConfig httpServiceConfig = toHttpServiceConfig(serviceConfig, authenticator);
         final DispatcherService dispatcherService = getDispatcherService(httpServiceConfig, authenticator,
-                requestStateSigner);
+                self.subscriptions, requestStateSigner);
         check addMcpServiceToDispatcher(dispatcherService, mcpService);
         lock {
             string? metadataHost = ();
@@ -163,9 +164,11 @@ public isolated class StreamableHttpListener {
     }
 
     # Gracefully stops the listener (completes active requests before shutting down).
+    # Open subscriptions end with their `complete` result first, waiting at most 5 seconds.
     #
     # + return - Error? if graceful stop fails.
     public isolated function gracefulStop() returns Error? {
+        self.subscriptions.stopAll(SUBSCRIPTION_SHUTDOWN_TIMEOUT);
         lock {
             error? result = self.httpListener.gracefulStop();
             if result is error {
@@ -175,6 +178,7 @@ public isolated class StreamableHttpListener {
     }
 
     # Immediately stops the listener (terminates all connections).
+    # Open subscriptions end without a `complete` result.
     #
     # + return - Error? if immediate stop fails.
     public isolated function immediateStop() returns Error? {
@@ -184,11 +188,13 @@ public isolated class StreamableHttpListener {
                 return error("Failed to immediately stop MCP listener: " + result.message());
             }
         }
+        // After the HTTP stop, so that no subscription ends its response cleanly first.
+        self.subscriptions.abortAll();
     }
 }
 
 isolated function createServerAuthenticator(StreamableHttpService|StreamableHttpAdvancedService mcpService,
-        StreamableHttpConfiguration serviceConfig) returns ServerAuthenticator|Error? {
+        StreamableHttpServiceConfiguration serviceConfig) returns ServerAuthenticator|Error? {
     readonly & map<string[]> toolScopes = getToolScopes(mcpService);
     OAuthProtectedResourceConfig|http:ListenerAuthConfig[]? authConfig = serviceConfig.httpConfig.auth;
     if authConfig is OAuthProtectedResourceConfig {
@@ -209,7 +215,7 @@ isolated function createServerAuthenticator(StreamableHttpService|StreamableHttp
 // Builds the HTTP configuration of the dispatcher that serves an MCP service. Plain HTTP
 // listener authentication is handed to the HTTP module; MCP authorization is enforced by the
 // service's authenticator, so the HTTP module is given no authentication settings for it.
-isolated function toHttpServiceConfig(StreamableHttpConfiguration serviceConfig, ServerAuthenticator? authenticator)
+isolated function toHttpServiceConfig(StreamableHttpServiceConfiguration serviceConfig, ServerAuthenticator? authenticator)
         returns http:HttpServiceConfig {
     // Every setting carries over except `auth`, which is wider than the HTTP module's.
     HttpServiceConfig {auth: authConfig, ...settings} = serviceConfig.httpConfig;

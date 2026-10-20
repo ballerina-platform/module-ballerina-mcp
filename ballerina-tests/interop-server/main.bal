@@ -19,7 +19,7 @@ import ballerina/mcp;
 configurable int interopPort = ?;
 listener mcp:StreamableHttpListener interopListener = new (interopPort);
 
-@mcp:StreamableHttpConfig {info: {name: "ballerina-interop", version: "2.0.0"}}
+@mcp:StreamableHttpServiceConfig {info: {name: "ballerina-interop", version: "2.0.0"}}
 service mcp:StreamableHttpService /mcp on interopListener {
     remote isolated function add(int firstValue, int secondValue) returns int => firstValue + secondValue;
 
@@ -27,12 +27,12 @@ service mcp:StreamableHttpService /mcp on interopListener {
             @mcp:Argument {headerName: "Region"} string region) returns string => region;
 }
 
-@mcp:StreamableHttpConfig {info: {name: "ballerina-stateful-interop", version: "2.0.0"}}
+@mcp:StreamableHttpServiceConfig {info: {name: "ballerina-stateful-interop", version: "2.0.0"}}
 service mcp:StreamableHttpService /stateful on interopListener {
     remote isolated function sessionIdentity(mcp:HttpSession sessionValue) returns string => sessionValue.getSessionId();
 }
 
-@mcp:StreamableHttpConfig {info: {name: "ballerina-modern-interop", version: "2.0.0"}, protocolMode: "modern"}
+@mcp:StreamableHttpServiceConfig {info: {name: "ballerina-modern-interop", version: "2.0.0"}, protocolMode: "modern"}
 service mcp:StreamableHttpAdvancedService /modern on interopListener {
     remote isolated function onListTools() returns mcp:ListToolsResult => {
         tools: [{name: "scalar", inputSchema: {'type: "object"}, outputSchema: {"type": "integer"}}]
@@ -49,7 +49,7 @@ type SeatCount record {|
     int seats;
 |};
 
-@mcp:StreamableHttpConfig {info: {name: "ballerina-elicitation-interop", version: "2.0.0"}}
+@mcp:StreamableHttpServiceConfig {info: {name: "ballerina-elicitation-interop", version: "2.0.0"}}
 service mcp:StreamableHttpService /elicitation on interopListener {
     // The module signs the request state, so getting the name back shows the client echoed it unchanged.
     remote isolated function bookTable(string name, mcp:Context context)
@@ -72,7 +72,7 @@ service mcp:StreamableHttpService /elicitation on interopListener {
 
 isolated int cachedListingCount = 0;
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "ballerina-cached-interop", version: "2.0.0"},
     protocolMode: "modern",
     cacheHints: {

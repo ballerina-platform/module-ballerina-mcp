@@ -131,7 +131,21 @@ public class CompilerPluginTest {
     public void testSessionParamStatelessViaTransportConfig() {
         DiagnosticResult diagnosticResult = compile("sample_package_7");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "is not allowed when sessionMode is STATELESS", MCP_104);
+        assertError(diagnosticResult, 0, "is not allowed when sessionMode is 'STATELESS'", MCP_104);
+    }
+
+    @Test
+    public void testSessionParamAtAnyPosition() {
+        DiagnosticResult diagnosticResult = compile("session_param_any_position");
+        Assert.assertEquals(errorCount(diagnosticResult), 0, diagnosticResult.errors().toString());
+    }
+
+    @Test
+    public void testDuplicateSessionParams() {
+        DiagnosticResult diagnosticResult = compile("duplicate_session_param");
+        Assert.assertEquals(errorCount(diagnosticResult), 1, diagnosticResult.errors().toString());
+        assertError(diagnosticResult, 0, "Duplicate parameter 'second'", MCP_107);
+        assertError(diagnosticResult, 0, "type 'mcp:HttpSession'", MCP_107);
     }
 
     @Test
@@ -186,6 +200,7 @@ public class CompilerPluginTest {
         DiagnosticResult diagnosticResult = compile("sample_package_16");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
         assertError(diagnosticResult, 0, "Remote method 'doSomething' is not supported", MCP_113);
+        assertError(diagnosticResult, 0, "Only 'onListTools', 'onCallTool' and 'onSubscribe' are allowed", MCP_113);
     }
 
     @Test
@@ -206,9 +221,17 @@ public class CompilerPluginTest {
     public void testMetaParameterCanAppearBeforeDataParameters() {
         DiagnosticResult diagnosticResult = compile("sample_package_18");
         Assert.assertEquals(errorCount(diagnosticResult), 0,
-                "an optional mcp:RequestMetaObject parameter must be accepted outside the final position: "
+                "an optional mcp:RequestMeta parameter must be accepted outside the final position: "
                         + diagnosticResult.errors().toString());
     }
+
+    @Test
+    public void testRequestMetaParameterMustBeOptional() {
+        DiagnosticResult diagnosticResult = compile("required_request_meta");
+        Assert.assertEquals(errorCount(diagnosticResult), 1, diagnosticResult.errors().toString());
+        assertError(diagnosticResult, 0, "(e.g., 'mcp:RequestMeta?')", "MCP_106");
+    }
+
     @Test
     public void testProtocolSessionDiagnostics() {
         String[] codes = {"MCP_WARNING_102", "MCP_114", "MCP_WARNING_104", "MCP_WARNING_103"};
@@ -239,6 +262,22 @@ public class CompilerPluginTest {
     }
 
     @Test
+    public void testAdvancedHandlersBindHttpValuesAndCursor() {
+        DiagnosticResult result = compile("advanced_handler_http_parameters");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testAdvancedHandlerUnsupportedParameters() {
+        DiagnosticResult result = compile("advanced_handler_unsupported_parameters");
+        Assert.assertEquals(errorCount(result), 3L, result.diagnostics().toString());
+        assertError(result, 0, "Parameter 'session' in function 'onSubscribe' has an unsupported type", MCP_102);
+        assertError(result, 1, "'onSubscribe'", MCP_111);
+        assertError(result, 1, "must declare exactly one parameter of type mcp:SubscriptionFilter", MCP_111);
+        assertError(result, 2, "Parameter 'cursor' in function 'onListTools' has an unsupported type", MCP_102);
+    }
+
+    @Test
     public void testMcpArgumentHeaderAnnotation() {
         DiagnosticResult result = compile("sample_package_26");
         Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
@@ -248,7 +287,12 @@ public class CompilerPluginTest {
     public void testMcpArgumentHeaderDiagnostics() {
         DiagnosticResult invalidType = compile("sample_package_27");
         Assert.assertEquals(errorCount(invalidType), 1L);
-        assertError(invalidType, 0, "cannot use @mcp:Argument", "MCP_115");
+        assertError(invalidType, 0, "cannot use '@mcp:Argument'", "MCP_115");
+
+        DiagnosticResult numberTypes = compile("argument_number_headers");
+        Assert.assertEquals(errorCount(numberTypes), 2L, numberTypes.errors().toString());
+        assertError(numberTypes, 0, "cannot use '@mcp:Argument'", "MCP_115");
+        assertError(numberTypes, 1, "cannot use '@mcp:Argument'", "MCP_115");
 
         DiagnosticResult invalidName = compile("sample_package_28");
         Assert.assertEquals(errorCount(invalidName), 1L);
@@ -260,11 +304,24 @@ public class CompilerPluginTest {
 
         DiagnosticResult explicitSchema = compile("sample_package_30");
         Assert.assertEquals(errorCount(explicitSchema), 1L);
-        assertError(explicitSchema, 0, "cannot combine @mcp:Argument", "MCP_118");
+        assertError(explicitSchema, 0, "cannot combine '@mcp:Argument'", "MCP_118");
 
         DiagnosticResult conflictingBinding = compile("sample_package_31");
         Assert.assertEquals(errorCount(conflictingBinding), 1L);
-        assertError(conflictingBinding, 0, "cannot use @mcp:Argument", "MCP_115");
+        assertError(conflictingBinding, 0, "cannot use '@mcp:Argument'", "MCP_115");
+    }
+
+    @Test
+    public void testUnstructuredOutputWithExplicitOutputSchema() {
+        DiagnosticResult result = compile("unstructured_output_with_output_schema");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "cannot combine 'structuredOutput: false'", "MCP_121");
+    }
+
+    @Test
+    public void testUnstructuredOutputSkipsReturnSchemaGeneration() {
+        DiagnosticResult result = compile("unstructured_unmappable_return");
+        Assert.assertEquals(result.diagnostics().size(), 0, result.diagnostics().toString());
     }
 
     @Test

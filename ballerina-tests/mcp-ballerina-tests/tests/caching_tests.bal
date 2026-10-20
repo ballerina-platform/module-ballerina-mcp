@@ -19,7 +19,7 @@ import ballerina/test;
 
 isolated int toolListingCount = 0;
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "cached-tools", version: "1.0.0"},
     protocolMode: "modern",
     cacheHints: {

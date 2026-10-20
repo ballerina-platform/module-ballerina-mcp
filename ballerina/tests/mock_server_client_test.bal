@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/lang.runtime;
 import ballerina/test;
 
 // A deliberately misbehaving peer. A conforming MCP server cannot produce these
@@ -42,7 +43,21 @@ isolated function nextMockCall(string scenario) returns int {
     }
 }
 
-isolated function mockDiscoverResult(RequestId requestId, string[] supportedVersions = [MODERN_PROTOCOL_VERSION],
+// Counts handshake requests, and slows them for "slow" scenarios so concurrent connects overlap.
+isolated function recordHandshake(string scenario, string method) {
+    _ = nextMockCall(string `${scenario}:${method}`);
+    if scenario.startsWith("slow") {
+        runtime:sleep(0.5);
+    }
+}
+
+isolated function mockCallCount(string key) returns int {
+    lock {
+        return mockCallCounts[key] ?: 0;
+    }
+}
+
+isolated function mockDiscoverResult(RequestId requestId, string[] supportedVersions = [LATEST_PROTOCOL_VERSION],
         boolean includeWireDefaults = true, string? instructions = ()) returns http:Response {
     map<json> resultValue = {
         "supportedVersions": supportedVersions,
@@ -114,6 +129,15 @@ isolated function mockSse(string[] payloads) returns http:Response {
     return sseResponse;
 }
 
+// Writes the SSE body verbatim, so comment lines reach the client as sent.
+isolated function mockRawSse(string body) returns http:Response {
+    http:Response sseResponse = new;
+    sseResponse.setTextPayload(body, CONTENT_TYPE_SSE);
+    return sseResponse;
+}
+
+const SSE_KEEP_ALIVE = ": keep-alive\n\n";
+
 isolated function mockAckEvent(RequestId subscriptionId, json acceptedFilter) returns string =>
     string `{"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":` +
         string `{"_meta":{"${SUBSCRIPTION_ID_META_KEY}":${subscriptionId.toString()}},` +
@@ -142,12 +166,19 @@ service /mock on new http:Listener(3210) {
         string method = requestMessage.method;
 
         if method == "server/discover" {
+            recordHandshake(scenario, "discover");
             match scenario {
                 "noWireDefaults" => {
                     return mockDiscoverResult(requestId, includeWireDefaults = false);
                 }
                 "legacyOnly" => {
                     return mockDiscoverResult(requestId, [LATEST_LEGACY_PROTOCOL_VERSION]);
+                }
+                "mixedVersions" => {
+                    return mockDiscoverResult(requestId, ["2099-01-01", LATEST_LEGACY_PROTOCOL_VERSION, "2026-07-28"]);
+                }
+                "unknownVersionsOnly" => {
+                    return mockDiscoverResult(requestId, ["2099-01-01"]);
                 }
                 "nonJson" => {
                     http:Response textResponse = new;
@@ -188,7 +219,7 @@ service /mock on new http:Listener(3210) {
                         "",
                         string `{"jsonrpc":"2.0","method":"notifications/progress"}`,
                         string `{"jsonrpc":"2.0","id":${requestId.toString()},"result":{"resultType":"complete","ttlMs":0,` +
-                            string `"cacheScope":"private","supportedVersions":["${MODERN_PROTOCOL_VERSION}"],"capabilities":{}}}`
+                            string `"cacheScope":"private","supportedVersions":["${LATEST_PROTOCOL_VERSION}"],"capabilities":{}}}`
                     ]);
                 }
                 "sseMalformedEvent" => {
@@ -197,11 +228,19 @@ service /mock on new http:Listener(3210) {
                 "withInstructions" => {
                     return mockDiscoverResult(requestId, instructions = "Call echo first.");
                 }
+                "legacyTasks" => {
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "error": {"code": METHOD_NOT_FOUND, "message": "Method not found"}
+                    }, 404);
+                }
             }
             return mockDiscoverResult(requestId);
         }
 
         if method == REQUEST_INITIALIZE {
+            recordHandshake(scenario, "initialize");
             if scenario == "legacyBadInit" {
                 return mockJson({"jsonrpc": JSONRPC_VERSION, "id": requestId, "result": {"tools": []}});
             }
@@ -210,7 +249,9 @@ service /mock on new http:Listener(3210) {
                 "id": requestId,
                 "result": {
                     "protocolVersion": scenario == "legacyBadVersion" ? "1999-01-01" : LATEST_LEGACY_PROTOCOL_VERSION,
-                    "capabilities": {},
+                    "capabilities": scenario == "legacyTasks"
+                        ? {"tools": {}, "tasks": {"list": {}, "cancel": {}, "requests": {"tools": {"call": {}}}}}
+                        : {},
                     "serverInfo": {"name": "mock", "version": "1"}
                 }
             });
@@ -218,6 +259,12 @@ service /mock on new http:Listener(3210) {
 
         if method == "subscriptions/listen" {
             match scenario {
+                "sseKeepAlive" => {
+                    return mockRawSse(SSE_KEEP_ALIVE + "data: " + mockAckEvent(requestId, {"toolsListChanged": true}) +
+                        "\n\n" + SSE_KEEP_ALIVE + "data: " +
+                        mockNotificationEvent("notifications/tools/list_changed", requestId) + "\n\n" +
+                        SSE_KEEP_ALIVE + "data: " + mockCompletionEvent(requestId) + "\n\n");
+                }
                 "subNoAck" => {
                     return mockSse([mockNotificationEvent("notifications/tools/list_changed", requestId)]);
                 }
@@ -336,6 +383,44 @@ service /mock on new http:Listener(3210) {
                         }
                     ]);
                 }
+                "legacyTasks" => {
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {
+                            "tools": [
+                                {
+                                    "name": "report",
+                                    "inputSchema": {"type": "object"},
+                                    "execution": {"taskSupport": "optional"}
+                                }
+                            ]
+                        }
+                    });
+                }
+                "numberHeaderTool" => {
+                    return mockToolListResult(requestId, [
+                        {
+                            "name": "ratio",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"ratio": {"type": "number", "x-mcp-header": "Ratio"}}
+                            }
+                        },
+                        {"name": "plain", "inputSchema": {"type": "object"}}
+                    ]);
+                }
+                "intHeaderTool" => {
+                    return mockToolListResult(requestId, [
+                        {
+                            "name": "count",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"count": {"type": "integer", "x-mcp-header": "Count"}}
+                            }
+                        }
+                    ]);
+                }
                 "missingStructured" => {
                     return mockToolListResult(requestId, [
                         {"name": "structured", "inputSchema": {"type": "object"}, "outputSchema": {"type": "object"}}
@@ -424,6 +509,36 @@ service /mock on new http:Listener(3210) {
                 "legacyWrongResult" => {
                     return mockJson({"jsonrpc": JSONRPC_VERSION, "id": requestId, "result": {"tools": []}});
                 }
+                "ssePriming" => {
+                    // A 2025-11-25 server primes the stream with an id and empty data before the result.
+                    return mockRawSse("id: prime-0\n\n" + "id: prime-1\ndata:\n\n" + string `data: {"jsonrpc":"2.0",` +
+                        string `"id":${requestId.toString()},"result":{"resultType":"complete",` +
+                        string `"content":[{"type":"text","text":"after priming"}]}}` + "\n\n");
+                }
+                "sseKeepAlive" => {
+                    return mockRawSse(SSE_KEEP_ALIVE + SSE_KEEP_ALIVE + string `data: {"jsonrpc":"2.0",` +
+                        string `"id":${requestId.toString()},"result":{"resultType":"complete",` +
+                        string `"content":[{"type":"text","text":"after keep-alive"}]}}` + "\n\n");
+                }
+                "legacyTasks" => {
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {"content": [{"type": "text", "text": "done"}]}
+                    });
+                }
+                "intHeaderTool" => {
+                    // Echoes the call number and the mirrored header the client sent.
+                    string countHeader = check request.getHeader("mcp-param-count");
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {
+                            "resultType": "complete",
+                            "content": [{"type": "text", "text": string `${nextMockCall(scenario)}:${countHeader}`}]
+                        }
+                    });
+                }
                 "badToolResult" => {
                     return mockJson({
                         "jsonrpc": JSONRPC_VERSION,
@@ -463,6 +578,10 @@ service /mock on new http:Listener(3210) {
     resource function get [string scenario]() returns http:Response {
         if scenario == "sseMalformedStream" {
             return mockSse(["{not-json"]);
+        }
+        if scenario == "sseKeepAlive" {
+            string notification = string `data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}` + "\n\n";
+            return mockRawSse(SSE_KEEP_ALIVE + notification + SSE_KEEP_ALIVE + notification + SSE_KEEP_ALIVE);
         }
         if scenario == "sseMissingData" {
             MockEventOnlyIterator iterator = new;
@@ -511,13 +630,44 @@ function testModernClientRejectsInvalidDiscovery() returns error? {
     }
 }
 
+@test:Config {}
+function testAutoClientPicksTheModernVersionTheServerLists() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("mixedVersions"), protocolMode = "auto");
+    ConnectionInfo connection = check mockClient->connect();
+    test:assertEquals(connection.protocolVersion, "2026-07-28");
+    check mockClient->close();
+
+    StreamableHttpClient adoptingClient = check new (mockUrl("ok"), protocolMode = "modern");
+    ConnectionInfo adopted = check adoptingClient.adoptDiscovery({
+        supportedVersions: ["2099-01-01", LATEST_LEGACY_PROTOCOL_VERSION, "2026-07-28"],
+        capabilities: {}
+    });
+    test:assertEquals(adopted.protocolVersion, "2026-07-28");
+}
+
+@test:Config {}
+function testAutoClientFallsBackWhenDiscoveryListsNoModernVersion() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("legacyOnly"), protocolMode = "auto");
+    ConnectionInfo connection = check mockClient->connect();
+    test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
+    check mockClient->close();
+}
+
+@test:Config {}
+function testAutoClientRejectsDiscoveryWithoutAKnownVersion() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("unknownVersionsOnly"), protocolMode = "auto");
+    var connectResult = mockClient->connect();
+    test:assertTrue(connectResult is ProtocolVersionError);
+    test:assertEquals(mockCallCount("unknownVersionsOnly:initialize"), 0);
+}
+
 // resultType, ttlMs and cacheScope are required on the wire, but a discovery result that lists a modern
 // version still identifies a modern server, so auto mode must not fall back to initialize.
 @test:Config {}
 function testAutoClientStaysModernWithoutDiscoveryWireDefaults() returns error? {
     StreamableHttpClient mockClient = check new (mockUrl("noWireDefaults"), protocolMode = "auto");
     ConnectionInfo connection = check mockClient->connect();
-    test:assertEquals(connection.protocolVersion, MODERN_PROTOCOL_VERSION);
+    test:assertEquals(connection.protocolVersion, LATEST_PROTOCOL_VERSION);
 
     DiscoverResult discovered = check mockClient->discover();
     test:assertEquals(discovered.ttlMs, 0);
@@ -535,7 +685,7 @@ function testAdoptDiscoveryValidation() returns error? {
     StreamableHttpClient modernClient = check new (mockUrl("ok"), protocolMode = "modern");
     _ = check modernClient->connect();
     var reAdoptResult = modernClient.adoptDiscovery({
-        supportedVersions: [MODERN_PROTOCOL_VERSION],
+        supportedVersions: [LATEST_PROTOCOL_VERSION],
         capabilities: {}
     });
     test:assertTrue(reAdoptResult is ClientInitializationError);
@@ -571,7 +721,7 @@ function testModernClientRejectsMalformedHttpResponses() returns error? {
 function testModernClientSkipsNotificationsInSseResponses() returns error? {
     StreamableHttpClient mockClient = check new (mockUrl("sseNotificationThenResult"), protocolMode = "modern");
     DiscoverResult discovered = check mockClient->discover();
-    test:assertEquals(discovered.supportedVersions, [MODERN_PROTOCOL_VERSION]);
+    test:assertEquals(discovered.supportedVersions, [LATEST_PROTOCOL_VERSION]);
 }
 
 @test:Config {}
@@ -624,6 +774,34 @@ function testModernClientToolLookupAcrossPages() returns error? {
 }
 
 @test:Config {}
+function testModernClientLeavesOutToolsWithNumberArgumentHeaders() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("numberHeaderTool"), protocolMode = "modern");
+    _ = check mockClient->connect();
+    ListToolsResult toolList = check mockClient->listTools();
+    test:assertEquals(toolList.tools.map(toolInfo => toolInfo.name), ["plain"]);
+}
+
+@test:Config {}
+function testModernClientRejectsIntArgumentHeadersOutsideSafeRange() returns error? {
+    StreamableHttpClient rangeClient = check new (mockUrl("intHeaderTool"), protocolMode = "modern");
+    _ = check rangeClient->connect();
+    foreach int count in [9007199254740992, -9007199254740992] {
+        CallToolResult|ClientError rejected =
+            rangeClient->callTool({name: "count", arguments: {"count": count}});
+        test:assertTrue(rejected is ToolCallError, string `expected ToolCallError for ${count}`);
+    }
+    // Rejected calls never reach the server, so the first accepted call is call 1.
+    test:assertEquals(check callCountTool(rangeClient, 9007199254740991), "1:9007199254740991");
+    test:assertEquals(check callCountTool(rangeClient, -9007199254740991), "2:-9007199254740991");
+}
+
+function callCountTool(StreamableHttpClient rangeClient, int count) returns string|error {
+    CallToolResult result = check rangeClient->callTool({name: "count", arguments: {"count": count}});
+    TextContent textContent = check result.content[0].ensureType();
+    return textContent.text;
+}
+
+@test:Config {}
 function testModernClientRejectsInvalidToolResults() returns error? {
     StreamableHttpClient badResult = check new (mockUrl("badToolResult"), protocolMode = "modern");
     _ = check badResult->connect();
@@ -651,15 +829,17 @@ function testModernClientRejectsInvalidToolResults() returns error? {
 }
 
 @test:Config {}
-function testModernClientRejectsTaskAugmentedCalls() returns error? {
-    StreamableHttpClient modernClient = check new (mockUrl("ok"), protocolMode = "modern");
-    _ = check modernClient->connect();
-    var taskResult = modernClient->callToolOnce({name: "echo", task: {ttl: 1000}});
-    test:assertTrue(taskResult is ToolCallError);
-    if taskResult is ToolCallError {
-        test:assertTrue(taskResult.message().includes("Legacy task parameters cannot be sent"));
-    }
-    check modernClient->close();
+function testClientWorksWithLegacyServerAdvertisingTasks() returns error? {
+    StreamableHttpClient legacyClient = check new (mockUrl("legacyTasks"));
+    ConnectionInfo connection = check legacyClient->connect();
+    test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
+
+    ListToolsResult toolList = check legacyClient->listTools();
+    test:assertEquals(toolList.tools.map(toolInfo => toolInfo.name), ["report"]);
+
+    CallToolResult callResult = check legacyClient->callTool({name: "report"});
+    test:assertEquals(callResult.content, [{'type: "text", text: "done"}]);
+    check legacyClient->close();
 }
 
 @test:Config {}

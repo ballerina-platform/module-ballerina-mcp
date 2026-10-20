@@ -19,7 +19,7 @@ import ballerina/test;
 
 listener StreamableHttpListener dispatcherErrorListener = check new (3211);
 
-@StreamableHttpConfig {info: {name: "dispatcher-tools", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "dispatcher-tools", version: "1"}}
 service StreamableHttpAdvancedService /tools on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [{name: "echo", inputSchema: {'type: "object"}}]
@@ -28,7 +28,7 @@ service StreamableHttpAdvancedService /tools on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "mirrored-headers", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "mirrored-headers", version: "1"}}
 service StreamableHttpAdvancedService /mirrored on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [
@@ -45,7 +45,7 @@ service StreamableHttpAdvancedService /mirrored on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "fail-list", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "fail-list", version: "1"}}
 service StreamableHttpAdvancedService /failList on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult|ServerError =>
         error ServerError("tool listing is unavailable");
@@ -53,7 +53,7 @@ service StreamableHttpAdvancedService /failList on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "panic-list", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "panic-list", version: "1"}}
 service StreamableHttpAdvancedService /panicList on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult {
         panic error("unexpected listing panic");
@@ -62,7 +62,7 @@ service StreamableHttpAdvancedService /panicList on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "bad-headers", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "bad-headers", version: "1"}}
 service StreamableHttpAdvancedService /badHeaders on dispatcherErrorListener {
     // Two arguments mirrored onto the same header name cannot be represented on the wire.
     remote isolated function onListTools() returns ListToolsResult => {
@@ -83,14 +83,19 @@ service StreamableHttpAdvancedService /badHeaders on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "negative-ttl", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "negative-ttl", version: "1"}}
 service StreamableHttpAdvancedService /negativeTtl on dispatcherErrorListener {
-    remote isolated function onListTools() returns ListToolsResult => {tools: [], ttlMs: -1};
+    remote isolated function onListTools() returns ListToolsResult => {
+        tools: [{name: "echo", inputSchema: {'type: "object"}}],
+        ttlMs: -5
+    };
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {
+        content: [{'type: "text", text: "called"}]
+    };
 }
 
-@StreamableHttpConfig {info: {name: "needs-structured", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "needs-structured", version: "1"}}
 service StreamableHttpAdvancedService /needsStructured on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [{name: "structured", inputSchema: {'type: "object"}, outputSchema: {"type": "object"}}]
@@ -100,7 +105,7 @@ service StreamableHttpAdvancedService /needsStructured on dispatcherErrorListene
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "fail-call", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "fail-call", version: "1"}}
 service StreamableHttpAdvancedService /failCall on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [{name: "echo", inputSchema: {'type: "object"}}]
@@ -165,7 +170,7 @@ final readonly & map<UrlElicitationParams> badUrls = {
     spacedUrl: {mode: "url", message: "Connect", url: "https://exa mple.com/connect"}
 };
 
-@StreamableHttpConfig {info: {name: "bad-input-required", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "bad-input-required", version: "1"}}
 service StreamableHttpAdvancedService /badInputRequired on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: from string toolName in ["ask", "openLink", "openLocalLink", ...badForms.keys(), ...badUrls.keys()]
@@ -196,7 +201,7 @@ service StreamableHttpAdvancedService /badInputRequired on dispatcherErrorListen
     }
 }
 
-@StreamableHttpConfig {info: {name: "fail-subscribe", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "fail-subscribe", version: "1"}}
 service StreamableHttpAdvancedService /failSubscribe on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {tools: []};
 
@@ -206,7 +211,21 @@ service StreamableHttpAdvancedService /failSubscribe on dispatcherErrorListener 
             returns stream<JsonRpcNotification, error?>|ServerError => error ServerError("subscriptions are down");
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {info: {name: "reject-params", version: "1"}, sessionMode: STATELESS}
+service StreamableHttpAdvancedService /rejectParams on dispatcherErrorListener {
+    remote isolated function onListTools() returns ListToolsResult => {
+        tools: [{name: "forecast", inputSchema: {'type: "object"}}]
+    };
+
+    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InvalidParamsError =>
+        error InvalidParamsError("city is required");
+
+    remote isolated function onSubscribe(SubscriptionFilter notifications)
+            returns stream<JsonRpcNotification, error?>|InvalidParamsError =>
+        error InvalidParamsError("unknown notification source");
+}
+
+@StreamableHttpServiceConfig {
     info: {name: "legacy-only", version: "1"},
     protocolMode: "legacy"
 }
@@ -216,7 +235,7 @@ service StreamableHttpAdvancedService /legacyMode on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "guided", version: "1"},
     options: {instructions: "Call echo first."}
 }
@@ -226,7 +245,7 @@ service StreamableHttpAdvancedService /guided on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "cors-guarded", version: "1"},
     httpConfig: {cors: {allowOrigins: ["https://trusted.example"]}}
 }
@@ -236,7 +255,7 @@ service StreamableHttpAdvancedService /corsGuarded on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "panic-tool", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "panic-tool", version: "1"}}
 service StreamableHttpService /panicTool on dispatcherErrorListener {
     @Tool {description: "always fails", schema: {'type: "object"}}
     remote isolated function explode() returns string {
@@ -244,13 +263,28 @@ service StreamableHttpService /panicTool on dispatcherErrorListener {
     }
 }
 
+isolated int endlessListings = 0;
+
+// Always offers another page, each with a new cursor.
+@StreamableHttpServiceConfig {info: {name: "endless-pages", version: "1"}}
+service StreamableHttpAdvancedService /endlessPages on dispatcherErrorListener {
+    remote isolated function onListTools(Cursor? cursor) returns ListToolsResult {
+        lock {
+            endlessListings += 1;
+            return {tools: [], nextCursor: endlessListings.toString()};
+        }
+    }
+
+    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+}
+
 final http:Client dispatcherErrorClient = check new ("http://localhost:3211");
 
 isolated function dispatcherPost(string servicePath, string methodName, RequestParams requestParams = {},
-        map<string|string[]> extraHeaders = {}, string protocolVersion = MODERN_PROTOCOL_VERSION,
+        map<string|string[]> extraHeaders = {}, string protocolVersion = LATEST_PROTOCOL_VERSION,
         string? metaProtocolVersion = (), boolean includeCapabilities = true,
         ClientCapabilities capabilities = {}) returns http:Response|error {
-    RequestMetaObject requestMeta = {};
+    RequestMeta requestMeta = {};
     requestMeta[PROTOCOL_META_KEY] = metaProtocolVersion ?: protocolVersion;
     if includeCapabilities {
         requestMeta[CAPABILITIES_META_KEY] = capabilities;
@@ -279,6 +313,16 @@ isolated function assertJsonRpcError(http:Response response, int expectedStatus,
 }
 
 @test:Config {}
+function testToolLookupStopsAfterAPageLimit() returns error? {
+    http:Response response = check dispatcherPost("/endlessPages", REQUEST_CALL_TOOL, {"name": "missing"},
+            {[NAME_HEADER]: "missing"});
+    check assertJsonRpcError(response, 200, INVALID_PARAMS, "Unknown tool name");
+    lock {
+        test:assertTrue(endlessListings > 1 && endlessListings <= 100, endlessListings.toString());
+    }
+}
+
+@test:Config {}
 function testDispatcherReportsToolListingFailures() returns error? {
     http:Response serverErrorResponse = check dispatcherPost("/failList", REQUEST_LIST_TOOLS);
     check assertJsonRpcError(serverErrorResponse, 200, INTERNAL_ERROR, "tool listing is unavailable");
@@ -288,9 +332,20 @@ function testDispatcherReportsToolListingFailures() returns error? {
 
     http:Response headerResponse = check dispatcherPost("/badHeaders", REQUEST_LIST_TOOLS);
     check assertJsonRpcError(headerResponse, 200, INTERNAL_ERROR, "Duplicate x-mcp-header name");
+}
 
-    http:Response ttlResponse = check dispatcherPost("/negativeTtl", REQUEST_LIST_TOOLS);
-    check assertJsonRpcError(ttlResponse, 200, INTERNAL_ERROR, "ttlMs must be non-negative");
+@test:Config {}
+function testNegativeHandlerTtlIsSentAsZero() returns error? {
+    http:Response listResponse = check dispatcherPost("/negativeTtl", REQUEST_LIST_TOOLS);
+    test:assertEquals(listResponse.statusCode, 200);
+    json listResult = check (check listResponse.getJsonPayload()).result;
+    test:assertEquals(check listResult.ttlMs, 0);
+
+    http:Response callResponse = check dispatcherPost("/negativeTtl", REQUEST_CALL_TOOL, {"name": "echo"},
+            {[NAME_HEADER]: "echo"});
+    test:assertEquals(callResponse.statusCode, 200);
+    json callResult = check (check callResponse.getJsonPayload()).result;
+    test:assertEquals(check callResult.content, [{'type: "text", text: "called"}]);
 }
 
 @test:Config {}
@@ -308,10 +363,6 @@ function testDispatcherValidatesToolCallHeaders() returns error? {
 
     http:Response invalidParams = check dispatcherPost("/tools", REQUEST_CALL_TOOL, {"name": 42});
     check assertJsonRpcError(invalidParams, 200, INVALID_PARAMS, "Invalid tool call parameters");
-
-    http:Response taskParams = check dispatcherPost("/tools", REQUEST_CALL_TOOL,
-            {"name": "echo", "task": {"ttl": 1000}}, {[NAME_HEADER]: "echo"});
-    check assertJsonRpcError(taskParams, 200, INVALID_PARAMS, "Legacy task parameters are not supported");
 }
 
 @test:Config {}
@@ -338,8 +389,14 @@ function testDispatcherValidatesProtocolNegotiation() returns error? {
     test:assertEquals(legacyError.'error.code, UNSUPPORTED_PROTOCOL_VERSION);
     record {|string[] supported; string requested;|} errorData =
             check (legacyError.'error?.data).cloneWithType();
-    test:assertFalse(errorData.supported.some(v => v == MODERN_PROTOCOL_VERSION));
-    test:assertTrue(errorData.supported.some(v => v == LATEST_LEGACY_PROTOCOL_VERSION));
+    test:assertEquals(errorData.supported, ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"]);
+
+    http:Response legacyDiscover = check dispatcherPost("/legacyMode", "server/discover");
+    test:assertEquals(legacyDiscover.statusCode, 400);
+    JsonRpcError discoverError = check (check legacyDiscover.getJsonPayload()).cloneWithType();
+    record {|string[] supported; string requested;|} discoverData =
+            check (discoverError.'error?.data).cloneWithType();
+    test:assertEquals(discoverData.supported, ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"]);
 }
 
 @test:Config {}
@@ -358,6 +415,24 @@ function testDispatcherReportsToolCallFailures() returns error? {
     test:assertEquals(panicTool.statusCode, 200);
     WireResponse panicBody = check (check panicTool.getJsonPayload()).cloneWithType();
     test:assertEquals(panicBody.result["isError"], true);
+}
+
+@test:Config {}
+function testHandlersRejectParamsWithTheirOwnMessage() returns error? {
+    http:Response modernCall = check dispatcherPost("/rejectParams", REQUEST_CALL_TOOL, {"name": "forecast"},
+            {[NAME_HEADER]: "forecast"});
+    check assertJsonRpcError(modernCall, 200, INVALID_PARAMS, "city is required");
+    JsonRpcError modernError = check (check modernCall.getJsonPayload()).cloneWithType();
+    test:assertEquals(modernError.'error.message, "city is required");
+
+    http:Response listen = check dispatcherPost("/rejectParams", "subscriptions/listen",
+            {"notifications": {"toolsListChanged": true}});
+    check assertJsonRpcError(listen, 200, INVALID_PARAMS, "unknown notification source");
+
+    http:Response legacyCall = check legacyToolPost("/rejectParams", REQUEST_CALL_TOOL, {"name": "forecast"});
+    check assertJsonRpcError(legacyCall, 200, INVALID_PARAMS, "city is required");
+    JsonRpcError legacyError = check (check legacyCall.getJsonPayload()).cloneWithType();
+    test:assertEquals(legacyError.'error.message, "city is required");
 }
 
 @test:Config {}

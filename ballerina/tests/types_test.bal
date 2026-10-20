@@ -42,50 +42,17 @@ function testImplementation() {
 }
 
 // ---------------------------------------------------------------------------
-// ClientCapabilities — verifies new fields: elicitation, tasks
-// Note: task types are defined for protocol compatibility but server-side
-// task execution is not yet supported.
+// ClientCapabilities — verifies new fields: elicitation
 // ---------------------------------------------------------------------------
 
 @test:Config {}
 function testClientCapabilities() {
     ClientCapabilities capabilities = {
         sampling: {context: {}, tools: {}},
-        elicitation: {form: {}, url: {}},
-        tasks: {
-            list: {},
-            cancel: {},
-            requests: {
-                sampling: {createMessage: {}},
-                elicitation: {create: {}}
-            }
-        }
+        elicitation: {form: {}, url: {}}
     };
     test:assertTrue(capabilities.elicitation?.form != ());
     test:assertTrue(capabilities.elicitation?.url != ());
-    test:assertTrue(capabilities.tasks?.list != ());
-    test:assertTrue(capabilities.tasks?.cancel != ());
-    test:assertTrue(capabilities.tasks?.requests?.sampling?.createMessage != ());
-    test:assertTrue(capabilities.tasks?.requests?.elicitation?.create != ());
-}
-
-// ---------------------------------------------------------------------------
-// ServerCapabilities — verifies new tasks field
-// ---------------------------------------------------------------------------
-
-@test:Config {}
-function testServerCapabilities() {
-    ServerCapabilities capabilities = {
-        tools: {listChanged: true},
-        tasks: {
-            list: {},
-            cancel: {},
-            requests: {tools: {call: {}}}
-        }
-    };
-    test:assertEquals(capabilities.tools?.listChanged, true);
-    test:assertTrue(capabilities.tasks?.list != ());
-    test:assertTrue(capabilities.tasks?.requests?.tools?.call != ());
 }
 
 // ---------------------------------------------------------------------------
@@ -127,9 +94,7 @@ function testContentBlockUnion() {
 }
 
 // ---------------------------------------------------------------------------
-// ToolDefinition — verifies new fields: title, icons, execution, outputSchema
-// Note: execution.taskSupport describes protocol capability; server-side task
-// execution is not yet supported.
+// ToolDefinition — verifies new fields: title, icons, outputSchema
 // ---------------------------------------------------------------------------
 
 @test:Config {}
@@ -147,12 +112,10 @@ function testToolDefinition() {
             "type": "object",
             "properties": {"result": {}}
         },
-        execution: {taskSupport: "optional"},
         icons: [{src: "data:image/png;base64,icon", mimeType: "image/png", sizes: ["32x32"]}]
     };
     test:assertEquals(tool.title, "Calculate");
     test:assertEquals(tool.outputSchema is OutputSchema ? tool.outputSchema["type"] : (), "object");
-    test:assertEquals(tool.execution?.taskSupport, "optional");
     test:assertEquals((tool.icons ?: [])[0].sizes, ["32x32"]);
 }
 

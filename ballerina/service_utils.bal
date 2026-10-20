@@ -22,10 +22,10 @@ import ballerina/log;
 # + mcpService - The MCP service instance
 # + return - The resolved Streamable HTTP service configuration
 isolated function getServiceConfiguration(StreamableHttpService|StreamableHttpAdvancedService mcpService)
-        returns StreamableHttpConfiguration {
+        returns StreamableHttpServiceConfiguration {
     typedesc mcpServiceType = typeof mcpService;
-    StreamableHttpConfiguration? transportConfig = mcpServiceType.@StreamableHttpConfig;
-    if transportConfig is StreamableHttpConfiguration {
+    StreamableHttpServiceConfiguration? transportConfig = mcpServiceType.@StreamableHttpServiceConfig;
+    if transportConfig is StreamableHttpServiceConfiguration {
         return transportConfig;
     }
     return {
@@ -67,7 +67,7 @@ isolated function extractHeaderValues(http:Headers headers) returns map<string[]
 # + headers - HTTP request headers
 # + requestMethod - The MCP request method (optional, used for AUTO mode logic)
 # + return - Effective session mode to use
-isolated function determineEffectiveSessionMode(StreamableHttpConfiguration config, http:Headers headers, RequestMethod? requestMethod = ()) returns HttpSessionMode {
+isolated function determineEffectiveSessionMode(StreamableHttpServiceConfiguration config, http:Headers headers, RequestMethod? requestMethod = ()) returns HttpSessionMode {
     HttpSessionMode configuredMode = config.sessionMode;
 
     if configuredMode == STATEFUL || configuredMode == STATELESS {
@@ -122,6 +122,25 @@ isolated function createSessionNotFoundResponse(string sessionId, RequestId? id 
     body: createJsonRpcError(INVALID_REQUEST, string `Invalid session ID: ${sessionId}`, id)
 };
 
+# Rejects a request whose `Origin` is not in the service's CORS allow list. A request without an
+# `Origin` is accepted, since clients other than browsers do not send one.
+#
+# + headers - The request headers
+# + serviceConfig - The service configuration holding the allow list
+# + return - A `403 Forbidden` response, or `()` if the origin is allowed
+isolated function validateOrigin(http:Headers headers, StreamableHttpServiceConfiguration serviceConfig)
+        returns http:Forbidden? {
+    string|http:HeaderNotFoundError origin = headers.getHeader("origin");
+    if origin is http:HeaderNotFoundError {
+        return;
+    }
+    string[] allowedOrigins = serviceConfig.httpConfig.cors.allowOrigins;
+    if allowedOrigins.indexOf("*") is () && allowedOrigins.indexOf(origin) is () {
+        return <http:Forbidden>{body: createJsonRpcError(INVALID_REQUEST, "Origin is not allowed")};
+    }
+    return;
+}
+
 # Reports a failed tool invocation as a tool execution error. The failure detail is logged rather
 # than returned, since a panic carries text from wherever it originated, such as a database driver.
 #
@@ -135,6 +154,23 @@ isolated function toToolExecutionError(error cause, string toolName) returns Cal
         isError: true
     };
 }
+
+# Reads the optional cursor of a `tools/list` request.
+#
+# + request - The `tools/list` request
+# + return - The cursor, or an `INVALID_PARAMS` response if it is not a string
+isolated function requestCursor(JsonRpcRequest request) returns Cursor?|http:Ok {
+    anydata cursorValue = (request.params ?: {})["cursor"];
+    return cursorValue is Cursor? ? cursorValue : createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid cursor", request.id);
+}
+
+# Returns the JSON-RPC error code for a failed handler or binding: `INVALID_PARAMS` when the
+# request's parameters were rejected, `INTERNAL_ERROR` otherwise.
+#
+# + failure - The failure to report
+# + return - The JSON-RPC error code
+isolated function handlerErrorCode(error failure) returns int =>
+    failure is InvalidParamsError ? INVALID_PARAMS : INTERNAL_ERROR;
 
 # Reports a failed advanced service invocation as a server error, logging the detail. Advanced
 # services own their tool dispatch, so a failure there is a server error rather than a tool failure.
@@ -232,12 +268,7 @@ isolated function validateRequiredHeaders(http:Headers headers) returns http:Not
 # + requestedVersion - The protocol version requested by the client
 # + return - The negotiated protocol version
 isolated function selectProtocolVersion(string requestedVersion) returns string {
-    foreach string supportedVersion in SUPPORTED_PROTOCOL_VERSIONS {
-        if supportedVersion == requestedVersion && supportedVersion != MODERN_PROTOCOL_VERSION {
-            return requestedVersion;
-        }
-    }
-    return LATEST_LEGACY_PROTOCOL_VERSION;
+    return isLegacyProtocolVersion(requestedVersion) ? requestedVersion : LATEST_LEGACY_PROTOCOL_VERSION;
 }
 
 # Extracts the `MCP-Protocol-Version` header value from the request headers, if present.
@@ -260,13 +291,17 @@ isolated function validateProtocolVersionHeader(string? protocolVersion) returns
     if protocolVersion is () {
         return;
     }
-    foreach string supportedVersion in SUPPORTED_PROTOCOL_VERSIONS {
-        if supportedVersion == protocolVersion {
-            return;
-        }
+    if isLegacyProtocolVersion(protocolVersion) {
+        return;
     }
     return <http:BadRequest>{
         body: createJsonRpcError(INVALID_REQUEST,
                 string `Unsupported MCP-Protocol-Version header: ${protocolVersion}`)
     };
 }
+
+isolated function isLegacyProtocolVersion(string? protocolVersion) returns boolean =>
+    LEGACY_PROTOCOL_VERSIONS.some(versionValue => versionValue == protocolVersion);
+
+isolated function isModernProtocolVersion(string? protocolVersion) returns boolean =>
+    MODERN_PROTOCOL_VERSIONS.some(versionValue => versionValue == protocolVersion);

@@ -33,7 +33,6 @@ import static io.ballerina.tools.diagnostics.DiagnosticSeverity.WARNING;
 public enum CompilationDiagnostic {
     UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION(DiagnosticMessage.ERROR_101, DiagnosticCode.MCP_101, ERROR),
     INVALID_PARAMETER_TYPE(DiagnosticMessage.ERROR_102, DiagnosticCode.MCP_102, ERROR),
-    SESSION_PARAM_MUST_BE_FIRST(DiagnosticMessage.ERROR_103, DiagnosticCode.MCP_103, ERROR),
     SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE(DiagnosticMessage.ERROR_104, DiagnosticCode.MCP_104, ERROR),
     // Retained for compatibility; Meta parameters are no longer required to be last.
     META_PARAM_MUST_BE_LAST(DiagnosticMessage.ERROR_105, DiagnosticCode.MCP_105, ERROR),
@@ -41,7 +40,7 @@ public enum CompilationDiagnostic {
     DUPLICATE_PARAMETER(DiagnosticMessage.ERROR_107, DiagnosticCode.MCP_107, ERROR),
     INVALID_HEADER_PARAMETER_TYPE(DiagnosticMessage.ERROR_108, DiagnosticCode.MCP_108, ERROR),
     ADVANCED_SERVICE_MISSING_METHOD(DiagnosticMessage.ERROR_110, DiagnosticCode.MCP_110, ERROR),
-    ADVANCED_ON_CALL_TOOL_PARAMS(DiagnosticMessage.ERROR_111, DiagnosticCode.MCP_111, ERROR),
+    ADVANCED_METHOD_PARAMS(DiagnosticMessage.ERROR_111, DiagnosticCode.MCP_111, ERROR),
     ADVANCED_INVALID_RETURN_TYPE(DiagnosticMessage.ERROR_112, DiagnosticCode.MCP_112, ERROR),
     ADVANCED_UNKNOWN_REMOTE_METHOD(DiagnosticMessage.ERROR_113, DiagnosticCode.MCP_113, ERROR),
     REQUIRED_SESSION_IN_MODERN_MODE(DiagnosticMessage.ERROR_114, DiagnosticCode.MCP_114, ERROR),
@@ -51,6 +50,7 @@ public enum CompilationDiagnostic {
     MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA(DiagnosticMessage.ERROR_118, DiagnosticCode.MCP_118, ERROR),
     UNSUPPORTED_FORM_FIELD(DiagnosticMessage.ERROR_119, DiagnosticCode.MCP_119, ERROR),
     FORM_SCHEMA_TYPE_NOT_STATIC(DiagnosticMessage.ERROR_120, DiagnosticCode.MCP_120, ERROR),
+    UNSTRUCTURED_OUTPUT_WITH_OUTPUT_SCHEMA(DiagnosticMessage.ERROR_121, DiagnosticCode.MCP_121, ERROR),
     REQUIRED_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_102, DiagnosticCode.MCP_WARNING_102, WARNING),
     OPTIONAL_SESSION_IN_MODERN_MODE(DiagnosticMessage.WARNING_103, DiagnosticCode.MCP_WARNING_103, WARNING),
     OPTIONAL_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_104, DiagnosticCode.MCP_WARNING_104, WARNING),

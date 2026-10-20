@@ -34,73 +34,81 @@ isolated function provideIdentityAssertion(IdentityAssertionContext context) ret
 @test:Config {}
 isolated function testCimdWithPrivateKeyJwt() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {
-                    url: "https://wso2.com/mcp/client.json",
-                    clientAuth: {
-                        signatureConfig: {config: {keyFile: "./client-private.key"}},
-                        keyId: "mcp-signing-1"
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {
+                        url: "https://wso2.com/mcp/client.json",
+                        clientAuth: {
+                            signatureConfig: {config: {keyFile: "./client-private.key"}},
+                            keyId: "mcp-signing-1"
+                        }
                     }
                 }
             }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testPreRegisteredWithClientSecret() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {
-                    clientId: "reporting-agent",
-                    issuer: "https://auth.example.com",
-                    clientAuth: {clientSecret: "s3cr3t"}
-                }
-            },
-            scopes: ["mcp:read"]
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {
+                        clientId: "reporting-agent",
+                        issuer: "https://auth.example.com",
+                        clientAuth: {clientSecret: "s3cr3t"}
+                    }
+                },
+                scopes: ["mcp:read"]
+            }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testIdentityAssertionWithPreRegisteredClient() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {
-                    clientId: "reporting-agent",
-                    issuer: "https://auth.example.com",
-                    clientAuth: {clientSecret: "s3cr3t"}
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {
+                        clientId: "reporting-agent",
+                        issuer: "https://auth.example.com",
+                        clientAuth: {clientSecret: "s3cr3t"}
+                    },
+                    assertionProvider: provideIdentityAssertion
                 },
-                assertionProvider: provideIdentityAssertion
-            },
-            scopes: ["mcp:read"]
+                scopes: ["mcp:read"]
+            }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testIdentityAssertionWithCimdClient() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {
-                    url: "https://wso2.com/mcp/client.json",
-                    clientAuth: {
-                        signatureConfig: {config: {keyFile: "./client-private.key"}},
-                        keyId: "mcp-signing-1"
-                    }
-                },
-                assertionProvider: provideIdentityAssertion
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {
+                        url: "https://wso2.com/mcp/client.json",
+                        clientAuth: {
+                            signatureConfig: {config: {keyFile: "./client-private.key"}},
+                            keyId: "mcp-signing-1"
+                        }
+                    },
+                    assertionProvider: provideIdentityAssertion
+                }
             }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
@@ -139,129 +147,143 @@ isolated function testGrantClientConfigShapes() {
 @test:Config {}
 isolated function testIdentityAssertionWithPublicCimdClient() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {url: "https://wso2.com/mcp/client.json"},
-                assertionProvider: provideIdentityAssertion
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {url: "https://wso2.com/mcp/client.json"},
+                    assertionProvider: provideIdentityAssertion
+                }
             }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testIdentityAssertionWithPublicPreRegisteredClient() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {clientId: "reporting-agent", issuer: "https://auth.example.com"},
-                assertionProvider: provideIdentityAssertion
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {clientId: "reporting-agent", issuer: "https://auth.example.com"},
+                    assertionProvider: provideIdentityAssertion
+                }
             }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testClientSecretInPostBody() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {
-                    clientId: "reporting-agent",
-                    issuer: "https://auth.example.com",
-                    clientAuth: {clientSecret: "s3cr3t", authMethod: CLIENT_SECRET_POST}
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {
+                        clientId: "reporting-agent",
+                        issuer: "https://auth.example.com",
+                        clientAuth: {clientSecret: "s3cr3t", authMethod: CLIENT_SECRET_POST}
+                    }
                 }
             }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testCimdPublicAuthorizationCodeClient() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {url: "https://wso2.com/mcp/client.json"},
-                redirectUri: "http://127.0.0.1:3030/callback",
-                redirectHandler: printAuthorizationUrl,
-                callbackHandler: receiveAuthorizationResponse
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {url: "https://wso2.com/mcp/client.json"},
+                    redirectUri: "http://127.0.0.1:3030/callback",
+                    redirectHandler: printAuthorizationUrl,
+                    callbackHandler: receiveAuthorizationResponse
+                }
             }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testPreRegisteredAuthorizationCodeClientWithSecret() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {
-                    clientId: "interactive-client",
-                    issuer: "https://auth.example.com",
-                    clientAuth: {clientSecret: "s3cr3t"}
-                },
-                redirectUri: "https://client.example.com/oauth/callback",
-                redirectHandler: printAuthorizationUrl,
-                callbackHandler: receiveAuthorizationResponse
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {
+                        clientId: "interactive-client",
+                        issuer: "https://auth.example.com",
+                        clientAuth: {clientSecret: "s3cr3t"}
+                    },
+                    redirectUri: "https://client.example.com/oauth/callback",
+                    redirectHandler: printAuthorizationUrl,
+                    callbackHandler: receiveAuthorizationResponse
+                }
             }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testCimdAuthorizationCodeWithMutualTls() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {
-                    url: "https://wso2.com/mcp/client.json",
-                    clientAuth: {
-                        key: {certFile: "./client.crt", keyFile: "./client.key"},
-                        authMethod: SELF_SIGNED_TLS_CLIENT_AUTH
-                    }
-                },
-                redirectUri: "http://127.0.0.1:3030/callback",
-                redirectHandler: printAuthorizationUrl,
-                callbackHandler: receiveAuthorizationResponse
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {
+                        url: "https://wso2.com/mcp/client.json",
+                        clientAuth: {
+                            key: {certFile: "./client.crt", keyFile: "./client.key"},
+                            authMethod: SELF_SIGNED_TLS_CLIENT_AUTH
+                        }
+                    },
+                    redirectUri: "http://127.0.0.1:3030/callback",
+                    redirectHandler: printAuthorizationUrl,
+                    callbackHandler: receiveAuthorizationResponse
+                }
             }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testPreRegisteredClientCredentialsWithMutualTls() {
     StreamableHttpClientConfig config = {
-        auth: {
-            grant: {
-                clientConfig: {
-                    clientId: "reporting-agent",
-                    issuer: "https://auth.example.com",
-                    clientAuth: {
-                        key: {path: "./client-keystore.p12", password: "changeit"},
-                        authMethod: TLS_CLIENT_AUTH
+        httpConfig: {
+            auth: {
+                grant: {
+                    clientConfig: {
+                        clientId: "reporting-agent",
+                        issuer: "https://auth.example.com",
+                        clientAuth: {
+                            key: {path: "./client-keystore.p12", password: "changeit"},
+                            authMethod: TLS_CLIENT_AUTH
+                        }
                     }
                 }
             }
         }
     };
-    test:assertTrue(config.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuthConfig);
 }
 
 @test:Config {}
 isolated function testStaticCredentialIsUnaffected() {
-    StreamableHttpClientConfig config = {auth: {token: "sk-abc123"}};
-    test:assertTrue(config.auth is http:ClientAuthConfig);
+    StreamableHttpClientConfig config = {httpConfig: {auth: {token: "sk-abc123"}}};
+    test:assertTrue(config.httpConfig.auth is http:ClientAuthConfig);
 }
 
 @test:Config {}
 isolated function testNoAuthorizationConfigured() {
     StreamableHttpClientConfig config = {};
-    test:assertTrue(config.auth is ());
+    test:assertTrue(config.httpConfig.auth is ());
 }
 
 @test:Config {}
@@ -299,14 +321,16 @@ isolated function testNoOAuthExtensionCapability() {
 
 @test:Config {}
 isolated function testTransportReportsOAuthExtension() returns error? {
-    StreamableHttpClientTransport identityAssertion = check new ("https://mcp.example.com/mcp", auth = {
-        grant: {
-            clientConfig: {
-                clientId: "reporting-agent",
-                issuer: "https://auth.example.com",
-                clientAuth: {clientSecret: "s3cr3t"}
-            },
-            assertionProvider: provideIdentityAssertion
+    StreamableHttpClientTransport identityAssertion = check new ("https://mcp.example.com/mcp", httpConfig = {
+        auth: {
+            grant: {
+                clientConfig: {
+                    clientId: "reporting-agent",
+                    issuer: "https://auth.example.com",
+                    clientAuth: {clientSecret: "s3cr3t"}
+                },
+                assertionProvider: provideIdentityAssertion
+            }
         }
     });
     test:assertEquals(identityAssertion.oauthExtension(), ENTERPRISE_MANAGED_AUTHORIZATION_EXTENSION);

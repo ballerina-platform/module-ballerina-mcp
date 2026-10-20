@@ -19,7 +19,7 @@ import ballerina/mcp;
 
 // An mcp:StreamableHttpAdvancedService whose remote methods bind transport-specific request
 // information the same way StreamableHttpService tools do. Must compile without diagnostics.
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "sample-11", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9311) {

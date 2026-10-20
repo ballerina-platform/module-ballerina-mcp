@@ -36,7 +36,7 @@ isolated int urlPrompts = 0;
 
 public function main() returns error? {
     mcp:StreamableHttpClient calendar = check new (serverUrl + "/mcp",
-        auth = {token: aliceToken},
+        httpConfig = {auth: {token: aliceToken}},
         elicitationHandler = handleElicitation
     );
     _ = check calendar->connect({name: "Calendar demo client", version: "1.0.0"});

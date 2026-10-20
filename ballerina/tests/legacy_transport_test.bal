@@ -94,16 +94,6 @@ function testLegacyClientRejectsUnexpectedResultTypes() returns error? {
 }
 
 @test:Config {}
-function testLegacyClientRejectsTaskAugmentedCallsWithoutServerSupport() returns error? {
-    StreamableHttpClient legacyClient = check legacyMockClient("ok");
-    var taskResult = legacyClient->callTool({name: "echo", task: {ttl: 1000}});
-    test:assertTrue(taskResult is ToolCallError);
-    if taskResult is ToolCallError {
-        test:assertTrue(taskResult.message().includes("does not support task-augmented tool calls"));
-    }
-}
-
-@test:Config {}
 function testLegacyClientReadsResultsFromSseResponses() returns error? {
     StreamableHttpClient sseClient = check legacyMockClient("legacySseResult");
     ListToolsResult toolList = check sseClient->listTools();
@@ -142,8 +132,8 @@ function testLegacyEventStreamSurfacesTransformationErrors() returns error? {
 
     StreamableHttpClient missingData = check legacyMockClient("sseMissingData");
     stream<JsonRpcMessage, StreamError?> missingDataEvents = check missingData->listen();
-    var missingDataItem = missingDataEvents.next();
-    test:assertTrue(missingDataItem is MissingSseDataError);
+    // An event without data is not dispatched, so the stream just ends.
+    test:assertEquals(check missingDataEvents.next(), ());
     check missingDataEvents.close();
 
     StreamableHttpClient wellFormed = check legacyMockClient("ok");
@@ -165,7 +155,7 @@ function testAdditionalHeadersOverrideGeneratedTransportHeaders() returns error?
 
 @test:Config {}
 function testCloseResetsTheClientWhenSessionTerminationFails() returns error? {
-    StreamableHttpAdvancedService sessionService = @StreamableHttpConfig {
+    StreamableHttpAdvancedService sessionService = @StreamableHttpServiceConfig {
         info: {name: "closing-session", version: "1"},
         sessionMode: STATEFUL
     } isolated service object {

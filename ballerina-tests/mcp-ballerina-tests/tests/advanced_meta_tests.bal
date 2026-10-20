@@ -21,7 +21,7 @@ import ballerina/test;
 // response _meta regardless of whether the client sent request _meta.
 listener mcp:StreamableHttpListener advancedMetaListener = check new (8768);
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "advanced-meta-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -42,7 +42,7 @@ service mcp:StreamableHttpAdvancedService /mcp on advancedMetaListener {
     remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
             returns mcp:CallToolResult|mcp:ServerError {
         // Server-originated metadata, independent of the request.
-        mcp:ResultMetaObject responseMeta = {"serverId": "srv-1"};
+        mcp:ResultMeta responseMeta = {"serverId": "srv-1"};
 
         // Optionally fold in a client-supplied key, if present.
         if params._meta is record {} {

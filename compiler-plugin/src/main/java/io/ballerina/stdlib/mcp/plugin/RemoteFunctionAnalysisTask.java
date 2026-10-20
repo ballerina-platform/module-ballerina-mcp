@@ -140,6 +140,10 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                 : getParameterSchema(functionSymbol, functionNodeLocation);
         String structuredOutput = fieldValues.containsKey(STRUCTURED_OUTPUT_FIELD_NAME)
                 ? fieldValues.get(STRUCTURED_OUTPUT_FIELD_NAME).toSourceCode() : "true";
+        if ("false".equals(structuredOutput) && fieldValues.containsKey(OUTPUT_SCHEMA_FIELD_NAME)) {
+            reportDiagnostic(CompilationDiagnostic.getDiagnostic(
+                    CompilationDiagnostic.UNSTRUCTURED_OUTPUT_WITH_OUTPUT_SCHEMA, functionNodeLocation, functionName));
+        }
         String outputSchema = "false".equals(structuredOutput) ? NIL_EXPRESSION :
                 fieldValues.containsKey(OUTPUT_SCHEMA_FIELD_NAME)
                         ? fieldValues.get(OUTPUT_SCHEMA_FIELD_NAME).toSourceCode()

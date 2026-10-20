@@ -1,7 +1,7 @@
 import ballerina/mcp;
 type OptionalSession mcp:HttpSession?;
 const string PROTOCOL_MODE = "modern";
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "alias-test", version: "1"}, protocolMode: PROTOCOL_MODE, sessionMode: mcp:STATELESS
 }
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9000) {

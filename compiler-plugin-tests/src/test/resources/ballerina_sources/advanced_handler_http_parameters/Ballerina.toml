@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "advanced_handler_http_parameters"
+version = "0.1.0"

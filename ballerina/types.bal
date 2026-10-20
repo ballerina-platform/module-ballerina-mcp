@@ -19,16 +19,6 @@ import ballerina/http;
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcError|JsonRpcResponse;
 
-public const LATEST_PROTOCOL_VERSION = "2026-07-28";
-public const SUPPORTED_PROTOCOL_VERSIONS = [
-    LATEST_PROTOCOL_VERSION,
-    LATEST_LEGACY_PROTOCOL_VERSION,
-    "2025-06-18",
-    "2025-03-26",
-    "2024-11-05",
-    "2024-10-07"
-];
-
 public const JSONRPC_VERSION = "2.0";
 
 # Standard JSON-RPC request methods supported by the MCP protocol
@@ -67,7 +57,7 @@ public type ProgressToken string|int;
 public type Cursor string;
 
 # Application-facing metadata for requests.
-public type RequestMetaObject record {
+public type RequestMeta record {
     # If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress).
     # The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
     ProgressToken progressToken?;
@@ -76,7 +66,7 @@ public type RequestMetaObject record {
 # Parameters for the request
 public type RequestParams record {
     # Optional metadata for the request
-    RequestMetaObject _meta?;
+    RequestMeta _meta?;
 };
 
 # Represents a generic request in the protocol
@@ -93,18 +83,18 @@ public type Notification record {|
     string method;
     # Additional parameters for the notification
     record {
-        NotificationMetaObject _meta?;
+        NotificationMeta _meta?;
     } params?;
 |};
 
 # Application-facing metadata attached to a result.
-public type ResultMetaObject record {
+public type ResultMeta record {
     # Server implementation that produced the response.
     Implementation serverInfo?;
 };
 
 # Application-facing metadata attached to a notification.
-public type NotificationMetaObject record {
+public type NotificationMeta record {
     # Request identifier of the subscription that delivered the notification.
     RequestId subscriptionId?;
 };
@@ -112,7 +102,7 @@ public type NotificationMetaObject record {
 # Fields shared by result records.
 type ResultFields record {
     # Metadata attached to the result.
-    ResultMetaObject _meta?;
+    ResultMeta _meta?;
 };
 
 # Result discriminator. Known core results narrow this to a string singleton.
@@ -257,26 +247,6 @@ public type ClientCapabilities record {
         map<anydata> form?;
         map<anydata> url?;
     } elicitation?;
-    # Present if the client supports task-augmented requests.
-    record {
-        # Whether this client supports tasks/list.
-        map<anydata> list?;
-        # Whether this client supports tasks/cancel.
-        map<anydata> cancel?;
-        # Specifies which request types can be augmented with tasks.
-        record {
-            # Task support for sampling-related requests.
-            record {
-                # Whether the client supports task-augmented sampling/createMessage requests.
-                map<anydata> createMessage?;
-            } sampling?;
-            # Task support for elicitation-related requests.
-            record {
-                # Whether the client supports task-augmented elicitation/create requests.
-                map<anydata> create?;
-            } elicitation?;
-        } requests?;
-    } tasks?;
 };
 
 # Capabilities that a server may support. Known capabilities are defined here, in this schema,
@@ -307,21 +277,6 @@ public type ServerCapabilities record {
         # Whether this server supports notifications for changes to the tool list.
         boolean listChanged?;
     } tools?;
-    # Present if the server supports task-augmented requests.
-    record {
-        # Whether this server supports tasks/list.
-        map<anydata> list?;
-        # Whether this server supports tasks/cancel.
-        map<anydata> cancel?;
-        # Specifies which request types can be augmented with tasks.
-        record {
-            # Task support for tool-related requests.
-            record {
-                # Whether the server supports task-augmented tools/call requests.
-                map<anydata> call?;
-            } tools?;
-        } requests?;
-    } tasks?;
 };
 
 # Base metadata with name (identifier) and title (display name) properties.
@@ -490,12 +445,6 @@ public type CallToolParams record {|
     string requestState?;
     # Optional arguments to pass to the tool
     record {} arguments?;
-    # If present, this is a task-augmented request (MCP 2025-11-25 TaskAugmentedRequestParams).
-    # Currently disallowed — no server advertises `tasks.requests.tools.call` yet.
-    record {|
-        # Optional time-to-live in milliseconds for the task.
-        int ttl?;
-    |} task?;
 |};
 
 # Additional properties describing a Tool to clients.
@@ -524,22 +473,6 @@ public type ToolAnnotations record {
     boolean openWorldHint?;
 };
 
-# Indicates whether a tool supports task-augmented execution.
-public enum TaskSupport {
-    # Task-augmented execution is not allowed for this tool.
-    TASK_SUPPORT_FORBIDDEN = "forbidden",
-    # Task-augmented execution is allowed but not required for this tool.
-    TASK_SUPPORT_OPTIONAL = "optional",
-    # Task-augmented execution is required for this tool.
-    TASK_SUPPORT_REQUIRED = "required"
-}
-
-# Execution-related properties for a tool.
-public type ToolExecution record {|
-    # Indicates whether this tool supports task-augmented execution.
-    TaskSupport taskSupport = TASK_SUPPORT_FORBIDDEN;
-|};
-
 # An object-root JSON Schema describing tool arguments.
 public type InputSchema record {|
     # JSON Schema dialect, defaulting to JSON Schema 2020-12.
@@ -561,8 +494,6 @@ public type ToolDefinition record {
     string description?;
     # A JSON Schema object defining the expected parameters for the tool.
     InputSchema inputSchema;
-    # Execution-related properties for this tool.
-    ToolExecution execution?;
     # An optional general JSON Schema object defining the tool's structured output.
     OutputSchema outputSchema?;
     # Optional additional tool information.
@@ -680,7 +611,7 @@ public type CacheHints record {|
 |};
 
 # Configuration for an MCP service exposed over the Streamable HTTP transport.
-public type StreamableHttpConfiguration record {|
+public type StreamableHttpServiceConfiguration record {|
     # Server implementation information
     Implementation info;
     # Protocol selection. Auto preserves legacy requests and accepts modern requests when the service supports them.
@@ -752,9 +683,8 @@ public type HttpServiceConfig record {|
     boolean laxDataBinding = false;
 |};
 
-# Annotation to provide configuration to Streamable HTTP MCP services.
 # Annotation to configure an MCP service exposed over Streamable HTTP.
-public annotation StreamableHttpConfiguration StreamableHttpConfig on service;
+public annotation StreamableHttpServiceConfiguration StreamableHttpServiceConfig on service;
 
 # Defines a basic MCP service interface exposed over the Streamable HTTP transport. Tool
 # `remote` functions may additionally bind HTTP request information (e.g. `@http:Header`

@@ -29,7 +29,7 @@ type TestCallerHeaders record {|
     string tenantId?;
 |};
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "header-binding-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -79,7 +79,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 }
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "strict-header-binding-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS,
     httpConfig: {treatNilableAsOptional: false}

@@ -16,9 +16,33 @@
 
 import ballerina/http;
 import ballerina/jballerina.java;
+import ballerina/lang.runtime;
+import ballerina/time;
 
-isolated function invokeOnSubscribe(StreamableHttpAdvancedService mcpService, SubscriptionFilter notifications)
-        returns stream<JsonRpcNotification, error?>|ServerError = @java:Method {
+// Seconds between SSE comment keep-alives on an idle subscription.
+const decimal SUBSCRIPTION_KEEP_ALIVE_INTERVAL = 15;
+
+isolated decimal keepAliveInterval = SUBSCRIPTION_KEEP_ALIVE_INTERVAL;
+
+isolated function currentKeepAliveInterval() returns decimal {
+    lock {
+        return keepAliveInterval;
+    }
+}
+
+// Returned by a wait for the user stream that timed out or was woken.
+const SOURCE_IDLE = "idle";
+
+// Test-only: lets tests shorten the keep-alive interval for subscriptions opened afterwards.
+isolated function setKeepAliveIntervalForTesting(decimal interval) {
+    lock {
+        keepAliveInterval = interval;
+    }
+}
+
+isolated function invokeOnSubscribe(StreamableHttpAdvancedService mcpService, SubscriptionFilter notifications,
+        http:Headers headers, http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional,
+        AuthContext? authContext) returns stream<JsonRpcNotification, error?>|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
@@ -26,25 +50,110 @@ isolated function hasSubscriptionHandler(StreamableHttpAdvancedService mcpServic
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
-// The shared native stream holder permits close to run while the event source waits in next.
+// Seconds `gracefulStop` waits for open subscriptions to send their `complete` result.
+const decimal SUBSCRIPTION_SHUTDOWN_TIMEOUT = 5;
+
+// The open subscriptions of one listener, so that shutdown can end them.
+isolated class SubscriptionRegistry {
+    private final map<ServerSubscriptionStream> openSubscriptions = {};
+    private int lastKey = 0;
+    private boolean stopping = false;
+
+    isolated function newKey() returns string {
+        lock {
+            self.lastKey += 1;
+            return self.lastKey.toString();
+        }
+    }
+
+    // Returns whether the listener is already stopping, in which case the subscription must complete at once.
+    isolated function add(string key, ServerSubscriptionStream subscription) returns boolean {
+        lock {
+            self.openSubscriptions[key] = subscription;
+            return self.stopping;
+        }
+    }
+
+    isolated function remove(string key) {
+        lock {
+            _ = self.openSubscriptions.removeIfHasKey(key);
+        }
+    }
+
+    // Asks every open subscription to send `complete`, and waits until they have or the timeout passes.
+    isolated function stopAll(decimal timeout) {
+        foreach string key in self.beginStopping() {
+            ServerSubscriptionStream? subscription = self.get(key);
+            if subscription is ServerSubscriptionStream {
+                subscription.stop();
+            }
+        }
+        decimal waited = 0;
+        while waited < timeout {
+            lock {
+                if self.openSubscriptions.length() == 0 {
+                    return;
+                }
+            }
+            runtime:sleep(0.05);
+            waited += 0.05d;
+        }
+    }
+
+    // Closes every open subscription's source without sending `complete`.
+    isolated function abortAll() {
+        foreach string key in self.beginStopping() {
+            ServerSubscriptionStream? subscription = self.get(key);
+            if subscription is ServerSubscriptionStream {
+                subscription.abort();
+            }
+        }
+    }
+
+    private isolated function beginStopping() returns string[] & readonly {
+        lock {
+            self.stopping = true;
+            return self.openSubscriptions.keys().cloneReadOnly();
+        }
+    }
+
+    private isolated function get(string key) returns ServerSubscriptionStream? {
+        lock {
+            return self.openSubscriptions[key];
+        }
+    }
+}
+
+// Wraps the stream `onSubscribe` returned. A wait for its next item times out after the keep-alive
+// interval, so an idle subscription still writes, and http only notices a disconnect on a failed write.
 isolated class ServerSubscriptionStream {
     private final RequestId subscriptionId;
     private final SubscriptionFilter & readonly acceptedFilter;
+    private final decimal keepAliveInterval;
+    private final SubscriptionRegistry registry;
+    private final string registryKey;
     private boolean acknowledged = false;
     private boolean finished = false;
+    private boolean stopping = false;
 
     isolated function init(stream<JsonRpcNotification, error?> eventSource, RequestId subscriptionId,
-            SubscriptionFilter acceptedFilter) {
+            SubscriptionFilter acceptedFilter, SubscriptionRegistry registry) {
         self.subscriptionId = subscriptionId;
         self.acceptedFilter = acceptedFilter.cloneReadOnly();
-        self.attachSseStream(eventSource);
+        self.keepAliveInterval = currentKeepAliveInterval();
+        self.registry = registry;
+        self.registryKey = registry.newKey();
+        self.attachSubscriptionSource(eventSource);
+        self.stopping = registry.add(self.registryKey, self);
     }
 
     public isolated function next() returns record {|http:SseEvent value;|}|error? {
+        if self.isFinished() {
+            // http asks for the next event only once the previous one was written.
+            self.registry.remove(self.registryKey);
+            return;
+        }
         lock {
-            if self.finished {
-                return;
-            }
             if !self.acknowledged {
                 self.acknowledged = true;
                 record {} acceptedNotifications = {};
@@ -62,22 +171,31 @@ isolated class ServerSubscriptionStream {
                 return {value: {data: acknowledgement.toJsonString()}};
             }
         }
+        // Dropped items write nothing, so they must not push the next keep-alive back.
+        decimal keepAliveDue = time:monotonicNow() + self.keepAliveInterval;
         while true {
-            var sourceItem = check self.getNextSseEvent();
-            if sourceItem is () {
-                lock {
-                    self.finished = true;
+            if self.isStopping() {
+                self.closeSubscriptionSourceLater();
+                return self.complete();
+            }
+            decimal untilKeepAlive = keepAliveDue - time:monotonicNow();
+            record {|JsonRpcNotification value;|}|SOURCE_IDLE? sourceItem = untilKeepAlive > 0d
+                ? check self.pollSubscriptionSource(untilKeepAlive) : SOURCE_IDLE;
+            if sourceItem is SOURCE_IDLE {
+                if self.isFinished() {
+                    return;
                 }
-                WireResponse completed = {
-                    jsonrpc: JSONRPC_VERSION,
-                    id: self.subscriptionId,
-                    result: {"resultType": "complete", _meta: {"io.modelcontextprotocol/subscriptionId": self.subscriptionId}}
-                };
-                return {value: {data: completed.toJsonString()}};
+                if self.isStopping() {
+                    continue;
+                }
+                return {value: {comment: "keep-alive"}};
+            }
+            if sourceItem is () {
+                return self.complete();
             }
             if sourceItem.value.method == "notifications/tools/list_changed" && self.acceptedFilter.toolsListChanged {
-                record {NotificationMetaObject _meta?;} notificationParams = {...(sourceItem.value.params ?: {})};
-                NotificationMetaObject notificationMeta = {...(sourceItem.value.params?._meta ?: {})};
+                record {NotificationMeta _meta?;} notificationParams = {...(sourceItem.value.params ?: {})};
+                NotificationMeta notificationMeta = {...(sourceItem.value.params?._meta ?: {})};
                 notificationMeta["io.modelcontextprotocol/subscriptionId"] = self.subscriptionId;
                 notificationParams._meta = notificationMeta;
                 JsonRpcNotification notificationValue = {
@@ -94,19 +212,69 @@ isolated class ServerSubscriptionStream {
         lock {
             self.finished = true;
         }
-        return self.closeSseEventStream();
+        self.registry.remove(self.registryKey);
+        return self.closeSubscriptionSource();
     }
 
-    private isolated function attachSseStream(stream<JsonRpcNotification, error?> sseEventStream) = @java:Method {
-        'class: "io.ballerina.stdlib.mcp.SseEventStreamHelper"
+    // Ends the subscription with `complete` at its next event, without waiting for the source.
+    isolated function stop() {
+        lock {
+            self.stopping = true;
+        }
+        self.wakeSubscriptionSource();
+    }
+
+    isolated function abort() {
+        lock {
+            self.finished = true;
+        }
+        self.registry.remove(self.registryKey);
+        self.closeSubscriptionSourceLater();
+    }
+
+    private isolated function isFinished() returns boolean {
+        lock {
+            return self.finished;
+        }
+    }
+
+    private isolated function isStopping() returns boolean {
+        lock {
+            return self.stopping;
+        }
+    }
+
+    private isolated function complete() returns record {|http:SseEvent value;|} {
+        lock {
+            self.finished = true;
+        }
+        WireResponse completed = {
+            jsonrpc: JSONRPC_VERSION,
+            id: self.subscriptionId,
+            result: {"resultType": "complete", _meta: {"io.modelcontextprotocol/subscriptionId": self.subscriptionId}}
+        };
+        return {value: {data: completed.toJsonString()}};
+    }
+
+    private isolated function attachSubscriptionSource(stream<JsonRpcNotification, error?> eventSource) = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.SubscriptionSource"
     } external;
 
-    private isolated function getNextSseEvent() returns record {|JsonRpcNotification value;|}?|error? = @java:Method {
-        'class: "io.ballerina.stdlib.mcp.SseEventStreamHelper"
+    private isolated function pollSubscriptionSource(decimal timeout)
+            returns record {|JsonRpcNotification value;|}|SOURCE_IDLE|error? = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.SubscriptionSource"
     } external;
 
-    private isolated function closeSseEventStream() returns error? = @java:Method {
-        'class: "io.ballerina.stdlib.mcp.SseEventStreamHelper"
+    private isolated function closeSubscriptionSource() returns error? = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.SubscriptionSource"
+    } external;
+
+    private isolated function closeSubscriptionSourceLater() = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.SubscriptionSource"
+    } external;
+
+    private isolated function wakeSubscriptionSource() = @java:Method {
+        'class: "io.ballerina.stdlib.mcp.SubscriptionSource"
     } external;
 }
 

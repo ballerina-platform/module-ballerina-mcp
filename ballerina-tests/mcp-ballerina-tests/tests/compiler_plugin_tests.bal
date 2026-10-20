@@ -17,7 +17,7 @@
 import ballerina/mcp;
 import ballerina/test;
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "inline-listener-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -67,7 +67,7 @@ function testInlineListenerCallTool() returns error? {
 
 listener mcp:StreamableHttpListener ln = check new (8766);
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "inline-listener-test-server-2", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }

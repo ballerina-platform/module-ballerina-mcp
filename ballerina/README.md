@@ -13,11 +13,11 @@ The `ballerina/mcp` module builds MCP clients and servers over Streamable HTTP. 
 
 ## Protocol modes
 
-Set `protocolMode` on the client or in `@mcp:StreamableHttpConfig`.
+Set `protocolMode` on the client or in `@mcp:StreamableHttpServiceConfig`.
 
 | Mode | Client behavior | Server behavior |
 | --- | --- | --- |
-| `"auto"` | Try modern discovery, then fall back to the legacy initialize handshake only when the response indicates an older server | Accept modern requests and legacy initialize-based requests |
+| `"auto"` | Try modern discovery, then fall back to the legacy initialize handshake only when the response indicates an older server or lists only legacy versions; return an error when it lists no supported version | Accept modern requests and legacy initialize-based requests |
 | `"modern"` | Require MCP `2026-07-28` | Accept modern requests only |
 | `"legacy"` | Use the initialize handshake | Accept initialize-based requests only |
 
@@ -39,7 +39,7 @@ import ballerina/mcp;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9090);
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {
         name: "calculator",
         version: "2.0.0"
@@ -50,17 +50,18 @@ listener mcp:StreamableHttpListener mcpListener = check new (9090);
 service mcp:StreamableHttpService /mcp on mcpListener {
     # Add two numbers.
     remote isolated function add(int left, int right,
-            mcp:RequestMetaObject? meta) returns int {
+            mcp:RequestMeta? meta) returns int {
         return left + right;
     }
 }
 ```
 
 The annotation has one `httpConfig` field for Ballerina HTTP service settings. Its CORS origin list is also used for
-the MCP transport's required inbound `Origin` validation.
+the MCP transport's required inbound `Origin` validation, on modern and legacy requests and before authentication. A
+request without an `Origin` header is accepted; one whose origin is not listed, or matched by `*`, gets `403 Forbidden`.
 
 ```ballerina
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "calculator", version: "2.0.0"},
     httpConfig: {
         cors: {
@@ -76,8 +77,8 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 
 A tool may bind these runtime values in addition to ordinary `anydata` arguments:
 
-- `mcp:HttpSession` or `mcp:HttpSession?`, placed first, for legacy HTTP session state.
-- `mcp:RequestMetaObject?`, at any position, for the request's `_meta` value.
+- `mcp:HttpSession` or `mcp:HttpSession?`, at any position, for legacy HTTP session state.
+- `mcp:RequestMeta?`, at any position, for the request's `_meta` value.
 - `@http:Header` parameters, `http:Headers`, and `http:Request` for Streamable HTTP request data.
 - `mcp:Context`, at any position, for the input responses and request state of a continuation (see
   [Eliciting input from a basic service](#eliciting-input-from-a-basic-service)).
@@ -87,15 +88,17 @@ may omit it.
 
 ### Structured tool output
 
-Basic tools may return records, scalars, arrays, or other `anydata` values. The library always creates a text content
-block. For a modern request it also:
+Basic tools may return records, scalars, arrays, or other `anydata` values. The library builds the text content from
+the return value: a `string` is used as is, `()` produces no content block, and any other value becomes its JSON
+serialization. For a modern request it also:
 
 - advertises a generated `outputSchema`;
 - preserves the raw return value in `structuredContent`;
 - accepts object, scalar, array, and nil JSON roots.
 
-For a legacy request, the adapter preserves the older wire shape. Object-root structured content remains available
-where the legacy schema permits it; scalar and array structured values remain represented by the text content block.
+For a legacy request, basic tools keep the 1.x wire shape: `tools/list` advertises no `outputSchema`, and results
+carry only the text content block, without `structuredContent`. Results from an advanced service are kept within the
+legacy schema: an `outputSchema` or `structuredContent` whose root is not an object is removed.
 
 Use `@mcp:Tool` to override generated metadata:
 
@@ -119,6 +122,11 @@ remote isolated function balances(string accountId) returns decimal[] {
 }
 ```
 
+Set `structuredOutput: false` in `@mcp:Tool` to make a tool's output unstructured on both protocols: the compiler
+generates no `outputSchema`, and results carry only the text content. It cannot be combined with an explicit
+`outputSchema`. A tool with no return type, or one that can only return `()` apart from `error`, such as `error?`, is
+unstructured in the same way.
+
 `InputSchema` enforces an object root. `OutputSchema` allows any JSON Schema root. Both are open records and accept
 JSON Schema keywords that the module does not declare. Until Ballerina provides native JSON Schema evaluation, these
 documents are carried as metadata; Ballerina type binding remains responsible for ordinary tool arguments.
@@ -134,8 +142,12 @@ remote isolated function weather(
 }
 ```
 
-This produces a `region` property containing `"x-mcp-header": "Region"`. Use `@http:Header` when a value comes only
-from an HTTP header and must not be part of the MCP tool arguments.
+This produces a `region` property containing `"x-mcp-header": "Region"`. `@mcp:Argument` applies to a non-nilable
+`string`, `int` or `boolean` argument. Header names are compared case-insensitively, and the client rejects a call whose
+`int` argument header is outside ±(2<sup>53</sup>−1) with a `ToolCallError`. Only `string`, `integer` and `boolean`
+schema properties may carry `x-mcp-header`, so the client leaves out of `listTools()` any tool whose header
+declarations are invalid, such as one on a `number` property. Use `@http:Header` when a value comes only from an HTTP
+header and must not be part of the MCP tool arguments.
 
 ### Eliciting input from a basic service
 
@@ -274,7 +286,7 @@ Legacy requests support three `HttpSessionMode` values:
 - `mcp:AUTO`: select behavior from the request lifecycle.
 
 ```ballerina
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "cart", version: "2.0.0"},
     protocolMode: "auto",
     sessionMode: mcp:STATEFUL
@@ -329,8 +341,35 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
 
 `onListTools` and `onCallTool` are required. `onCallTool` may return `InputRequiredResult` for a modern
 continuation. An optional `onSubscribe(mcp:SubscriptionFilter)` method may return
-`stream<mcp:JsonRpcNotification, error?>|mcp:ServerError` for change notifications. Advanced handlers can bind the
-same HTTP request values as basic tools; `onCallTool` reads request metadata from `CallToolParams._meta`.
+`stream<mcp:JsonRpcNotification, error?>|mcp:ServerError` for change notifications. All three handlers can bind the
+same HTTP request values as basic tools (`http:Headers`, `http:Request`, `@http:Header` and `mcp:AuthContext`);
+`onSubscribe` binds them from the `subscriptions/listen` request, so a service whose tool list varies by caller can
+scope its notifications to that caller. `onCallTool` reads request metadata from `CallToolParams._meta`.
+
+A handler returns an `mcp:InvalidParamsError` to reject the request's parameters, such as an unknown cursor or a
+missing argument. The service answers with a JSON-RPC `INVALID_PARAMS` error carrying the error's message, on both
+protocols. Any other `mcp:ServerError` is answered with `INTERNAL_ERROR` and its message.
+
+While a subscription is open, the listener sends an SSE comment after every 15 seconds without other output, so idle
+timeouts do not close a quiet connection. When the client disconnects, the listener closes the stream `onSubscribe` returned within one
+such interval, and it may call `close()` while a `next()` call on that stream is still pending. `gracefulStop()`
+ends every open subscription with its final result, waiting at most 5 seconds; `immediateStop()` does not.
+
+`onListTools` may declare an `mcp:Cursor?` parameter to return its tools in pages. It receives the request's cursor,
+or `()` for the first page, and sets `nextCursor` on every page but the last. A basic service always returns all of
+its tools in one page. A modern `tools/call` reads at most 100 pages to find the called tool.
+
+```ballerina
+remote isolated function onListTools(mcp:Cursor? cursor) returns mcp:ListToolsResult|mcp:ServerError {
+    if cursor is () {
+        return {tools: firstPage, nextCursor: "page-2"};
+    }
+    if cursor == "page-2" {
+        return {tools: secondPage};
+    }
+    return error mcp:InvalidParamsError("Unknown cursor");
+}
+```
 
 ### Eliciting input from an advanced service
 
@@ -399,13 +438,13 @@ reason is logged at debug level on the server only.
 
 Request state is signed, not encrypted: the client can read it, so do not put secrets in it.
 
-Configure signing with `requestState` on `@mcp:StreamableHttpConfig`:
+Configure signing with `requestState` on `@mcp:StreamableHttpServiceConfig`:
 
 ```ballerina
 configurable string requestStateKey = ?;
 configurable string previousRequestStateKey = ?;
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "files", version: "1.0.0"},
     requestState: {keys: [requestStateKey, previousRequestStateKey], ttl: 300}
 }
@@ -426,7 +465,7 @@ Invalid keys or a non-positive `ttl` fail when the service is attached.
 
 ## Server authorization
 
-Set `httpConfig.auth` on `@mcp:StreamableHttpConfig` to an `mcp:OAuthProtectedResourceConfig` to protect a service as an OAuth
+Set `httpConfig.auth` on `@mcp:StreamableHttpServiceConfig` to an `mcp:OAuthProtectedResourceConfig` to protect a service as an OAuth
 protected resource (RFC 9728), as the MCP authorization specification requires. The service then:
 
 - publishes protected resource metadata at `<origin>/.well-known/oauth-protected-resource<path>`,
@@ -437,7 +476,7 @@ protected resource (RFC 9728), as the MCP authorization specification requires. 
   obtain a token with more scopes and retry.
 
 ```ballerina
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "files", version: "1.0.0"},
     httpConfig: {
         cors: {allowOrigins: ["https://app.example.com"]},
@@ -501,7 +540,7 @@ service mcp:StreamableHttpService /files on mcpListener {
   ```
 - `offline_access` cannot be used in `requiredScopes`, `scopesSupported`, or tool `scopes`. It asks the authorization
   server for a refresh token rather than granting access to this server, so clients request it themselves.
-- Declare an `mcp:AuthContext` parameter on a tool, or on `onListTools`/`onCallTool` of an advanced service, to
+- Declare an `mcp:AuthContext` parameter on a tool, or on a handler of an advanced service, to
   receive the authenticated caller. Declare it as `mcp:AuthContext?` on services without an `mcp:OAuthProtectedResourceConfig`.
 - A tool or an advanced handler that decides at runtime that more scopes are needed returns
   `error mcp:InsufficientScopeError("...", scopes = ["admin"])`; the server answers with the `403` challenge.
@@ -577,16 +616,18 @@ isolated function provideIdJag(mcp:IdentityAssertionContext context)
 
 final mcp:StreamableHttpClient client = check new (
     "https://tools.example.com/mcp",
-    auth = {
-        grant: {
-            clientConfig: {
-                clientId: "mcp-host-at-resource-as",
-                issuer: "https://resource-auth.example.com",
-                clientAuth: {clientSecret: resourceAsClientSecret}
+    httpConfig = {
+        auth: {
+            grant: {
+                clientConfig: {
+                    clientId: "mcp-host-at-resource-as",
+                    issuer: "https://resource-auth.example.com",
+                    clientAuth: {clientSecret: resourceAsClientSecret}
+                },
+                assertionProvider: provideIdJag
             },
-            assertionProvider: provideIdJag
-        },
-        scopes: ["tools:read"]
+            scopes: ["tools:read"]
+        }
     }
 );
 ```
@@ -635,10 +676,15 @@ mcp:StreamableHttpClientConfig config = {
         }
         return {action: "accept", content: {confirmed: true}};
     },
-    timeout: 30
+    httpConfig: {timeout: 30}
 };
 final mcp:StreamableHttpClient client = check new ("http://localhost:9090/mcp", config);
 ```
+
+HTTP settings go under `httpConfig`, an `mcp:HttpClientConfig` with the fields and defaults of
+`http:ClientConfiguration`, except that `auth` also accepts `mcp:OAuthConfig`. With `mcp:OAuthConfig`, redirects are
+not followed and `init` returns an error if `followRedirects` enables them; the metadata and token endpoint requests
+reuse `secureSocket` and `proxy`.
 
 Configuring `elicitationHandler` advertises the `elicitation` capability with form and URL modes on every modern
 request, merged with the capabilities passed to `connect()`. The client does not validate answers against the
@@ -669,10 +715,10 @@ The lower-level lifecycle methods are available for applications that manage dis
 Modern `server/discover` and `tools/list` results carry caching hints: `ttlMs`, how long a client may treat the
 result as fresh, and `cacheScope`, whether the result may be shared between callers (`public`) or only reused for
 the same authorization context (`private`). Services default to `ttlMs: 0` and `cacheScope: "private"`, which
-disables reuse. Set hints per method in `@mcp:StreamableHttpConfig`:
+disables reuse. Set hints per method in `@mcp:StreamableHttpServiceConfig`:
 
 ```ballerina
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "weather", version: "1.0.0"},
     cacheHints: {
         discover: {ttlMs: 300000, cacheScope: "public"},
@@ -685,36 +731,57 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 ```
 
 An advanced service may also set `ttlMs` or `cacheScope` on the `ListToolsResult` returned by `onListTools`; each
-field set there takes precedence over the configured hint. Hints are only sent to modern clients.
+field set there takes precedence over the configured hint. A negative configured `ttlMs` fails `attach`, while a
+negative `ttlMs` from `onListTools` is sent as `0` and logged as an error. Hints are only sent to modern clients.
 
 The client reuses a `tools/list` result while it is fresh, caching each page by its cursor. Each client keeps its own
-cache and represents a single authorization context: configure credentials through `auth`, and use a separate client
-for each user rather than passing different credentials as per-call headers. A call that passes its own `Authorization`
-header bypasses the cache. A `notifications/tools/list_changed`
-notification read from `listen()` drops the cached list. Pass `cacheMode = "refresh"` to `listTools()` to fetch and
-re-cache the list, or `cacheMode = "bypass"` to fetch without touching the cache. Set `resultCache = ()` in the client
-configuration to disable reuse, or adjust `maxTtlMs` and `maxEntries` in `resultCache` to bound it.
+cache and represents a single authorization context: configure credentials through `httpConfig.auth`, and use a
+separate client for each user rather than passing different credentials as per-call headers. A call that passes its own
+`Authorization` header bypasses the cache. Cached results are dropped when:
+
+- the application reads `notifications/tools/list_changed` from `listen()`,
+- the server rejects a cursor with `INVALID_PARAMS` (all pages are dropped),
+- a call fails with `HEADER_MISMATCH`,
+- a `401` or `insufficient_scope` challenge yields a different token, since a step-up can change the tool list, or
+- the client is closed with `close()`.
+
+A token refreshed on expiry keeps the cache. A negative `ttlMs` from a server is treated as `0`. Pass
+`cacheMode = "refresh"` to `listTools()` to fetch and re-cache the list, or `cacheMode = "bypass"` to fetch without
+touching the cache. Set `resultCache = ()` in the client configuration to disable reuse, or adjust `maxTtlMs` and
+`maxEntries` in `resultCache` to bound it.
 
 ## Migrating from 1.x
 
-Version 2.0 removes deprecated transport-neutral aliases and gives Streamable HTTP concepts explicit names.
+Version 2.0 removes the transport-neutral listener, service types and annotation, and gives Streamable HTTP concepts
+explicit names.
 
 | 1.x API | 2.0 API |
 | --- | --- |
 | `mcp:Listener` | `mcp:StreamableHttpListener` |
 | `mcp:Service` | `mcp:StreamableHttpService` |
 | `mcp:AdvancedService` | `mcp:StreamableHttpAdvancedService` |
-| `@mcp:ServiceConfig`, `@mcp:StreamableHttpServiceConfig` | `@mcp:StreamableHttpConfig` |
+| `@mcp:ServiceConfig` | `@mcp:StreamableHttpServiceConfig` |
 | `mcp:Session`, `mcp:SessionEntry` | `mcp:HttpSession`, `mcp:HttpSessionEntry` |
 | `mcp:SessionMode` | `mcp:HttpSessionMode` |
-| `mcp:Meta` | `mcp:RequestMetaObject` |
+| `mcp:Meta` | `mcp:RequestMeta` |
 | `mcp:StreamableHttpClientTransportConfig` | `mcp:StreamableHttpClientConfig` |
+| `http:ClientConfiguration` fields at the top level of the client configuration | The same fields under `httpConfig`, an `mcp:HttpClientConfig` |
 | An `http:HttpServiceConfig` value for `httpConfig` | `mcp:HttpServiceConfig`: the same fields, with `auth` also accepting `mcp:OAuthProtectedResourceConfig` |
 | `initialize()` | `connect()` or `initializeLegacy()` |
-| `callToolWithResult()` | `callToolOnce()` |
 | `subscribeToServerMessages()` | `listen()` |
 
-The client no longer connects implicitly. Call `connect()` before operations that depend on negotiated server state.
+1.x did not validate `Origin`. A 2.0 service rejects browser requests from origins that are not listed in
+`httpConfig.cors.allowOrigins`, which is empty by default.
+
+The client must now call `connect()`, or `initializeLegacy()`, before other operations; 1.x did not enforce
+`initialize()`.
+
+A legacy client keeps receiving the legacy wire shapes from a 2.0 server. The text content of a tool that returns a
+structured value is now its JSON serialization.
+
+The `2025-11-25` task fields are removed: `CallToolParams.task`, `ToolDefinition.execution` and the `tasks` client and
+server capabilities. A client still connects to a server that advertises tasks.
+
 The public error hierarchy is `mcp:Error`, `mcp:ClientError`, `mcp:TransportError`, `mcp:ProtocolError`,
-`mcp:ToolCallError`, `mcp:StreamError`, and `mcp:ServerError`; transport and decoder implementation errors are
-internal.
+`mcp:ToolCallError`, `mcp:StreamError`, and `mcp:ServerError` with `mcp:InvalidParamsError`; transport and decoder
+implementation errors are internal.

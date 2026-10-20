@@ -35,7 +35,7 @@ type ReadonlyHeaders readonly & record {|
     int retries;
 |};
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "header-binding-edge-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -74,7 +74,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 
     @mcp:Tool {description: "Receives the request metadata of the tool call"}
-    isolated remote function readMeta(mcp:RequestMetaObject? meta) returns string {
+    isolated remote function readMeta(mcp:RequestMeta? meta) returns string {
         return meta is () ? "<no-meta>" : (meta.progressToken ?: "<no-token>").toString();
     }
 }

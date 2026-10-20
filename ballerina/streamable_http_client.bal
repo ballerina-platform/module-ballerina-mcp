@@ -16,6 +16,19 @@
 
 import ballerina/lang.runtime;
 
+# Picks the newest modern revision that the server lists.
+#
+# + offeredVersions - The versions listed by the server
+# + return - The selected modern version, or nil if none is listed
+isolated function selectModernProtocolVersion(string[] offeredVersions) returns string? {
+    foreach string modernVersion in MODERN_PROTOCOL_VERSIONS {
+        if offeredVersions.some(offeredVersion => offeredVersion == modernVersion) {
+            return modernVersion;
+        }
+    }
+    return ();
+}
+
 // Adds the configured MCP authorization extension to the advertised capabilities.
 isolated function withOAuthExtensionCapability(ClientCapabilities capabilities, string? extension)
         returns ClientCapabilities {
@@ -92,6 +105,9 @@ public distinct isolated client class StreamableHttpClient {
         if config.protocolMode == "modern" && config.sessionId is string {
             return error ClientInitializationError("A legacy session ID cannot be used in modern protocol mode");
         }
+        if config.httpConfig.auth is OAuthConfig && config.httpConfig.followRedirects?.enabled == true {
+            return error ClientInitializationError("Redirects cannot be enabled with MCP authorization");
+        }
         self.protocolMode = config.sessionId is string ? "legacy" : config.protocolMode;
         self.maxInputRounds = config.maxInputRounds;
         self.elicitationHandler = config.elicitationHandler;
@@ -114,15 +130,26 @@ public distinct isolated client class StreamableHttpClient {
     isolated remote function connect(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
             returns ConnectionInfo|ClientError {
-        ClientCapabilities advertisedCapabilities =
-            withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
-        ClientCapabilities modernCapabilities = self.withHandlerCapabilities(advertisedCapabilities);
+        ClientCapabilities withExtension = withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
+        ClientCapabilities & readonly advertisedCapabilities = withExtension.cloneReadOnly();
+        ClientCapabilities & readonly modernCapabilities = self.withHandlerCapabilities(withExtension).cloneReadOnly();
+        Implementation & readonly connectingClient = clientInfo.cloneReadOnly();
+        map<string|string[]> & readonly requestHeaders = headers.cloneReadOnly();
+        // Held through the handshake, so a concurrent first connect() waits and reuses its result.
         lock {
             if self.connected {
                 return self.getConnectionInfo();
             }
-            self.clientInfo = clientInfo.cloneReadOnly();
-            self.clientCapabilities = modernCapabilities.cloneReadOnly();
+            return self.handshake(connectingClient, advertisedCapabilities, modernCapabilities, requestHeaders);
+        }
+    }
+
+    private isolated function handshake(Implementation & readonly clientInfo,
+            ClientCapabilities & readonly advertisedCapabilities, ClientCapabilities & readonly modernCapabilities,
+            map<string|string[]> & readonly headers) returns ConnectionInfo|ClientError {
+        lock {
+            self.clientInfo = clientInfo;
+            self.clientCapabilities = modernCapabilities;
             string? sessionId = self.transport.getSessionId();
 
             // If a session ID exists, assume reconnection and skip initialization.
@@ -138,13 +165,14 @@ public distinct isolated client class StreamableHttpClient {
         if self.protocolMode != "legacy" {
             DiscoverResult|ClientError discovered = self.discoverModern(headers);
             if discovered is DiscoverResult {
-                if discovered.supportedVersions.some(versionValue => versionValue == MODERN_PROTOCOL_VERSION) {
+                string? modernVersion = selectModernProtocolVersion(discovered.supportedVersions);
+                if modernVersion is string {
                     DiscoverResult & readonly discoveredInfo = discovered.cloneReadOnly();
                     lock {
                         self.modernSelected = true;
                         self.connected = true;
-                        self.negotiatedProtocolVersion = MODERN_PROTOCOL_VERSION;
-                        self.transport.setProtocolVersion(MODERN_PROTOCOL_VERSION);
+                        self.negotiatedProtocolVersion = modernVersion;
+                        self.transport.setProtocolVersion(modernVersion);
                         self.discovery = discoveredInfo;
                         self.serverCapabilities = discoveredInfo.capabilities;
                         self.serverInfo = discoveredInfo._meta?.serverInfo;
@@ -153,6 +181,9 @@ public distinct isolated client class StreamableHttpClient {
                 }
                 if self.protocolMode == "modern" {
                     return error ProtocolVersionError("Server does not support the modern protocol version");
+                }
+                if !discovered.supportedVersions.some(isLegacyProtocolVersion) {
+                    return error ProtocolVersionError("Server lists no supported protocol version");
                 }
             } else if self.protocolMode == "modern" || !shouldUseLegacy(discovered) {
                 return discovered;
@@ -204,11 +235,11 @@ public distinct isolated client class StreamableHttpClient {
 
         // Validate protocol compatibility.
         final string protocolVersion = response.protocolVersion;
-        if (protocolVersion == MODERN_PROTOCOL_VERSION || !SUPPORTED_PROTOCOL_VERSIONS.some(v => v == protocolVersion)) {
+        if !isLegacyProtocolVersion(protocolVersion) {
             return error ProtocolVersionError(
                     string `Server protocol version '${
                         protocolVersion}' is not supported. Supported versions: ${
-                        SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
+                        LEGACY_PROTOCOL_VERSIONS.toString()}.`
                 );
         }
 
@@ -339,15 +370,6 @@ public distinct isolated client class StreamableHttpClient {
             }
             return error ToolCallError("Input-required continuation did not complete");
         }
-        // Reject task-augmented calls when the server hasn't advertised task support.
-        if params.task !is () {
-            lock {
-                if self.serverCapabilities?.tasks?.requests?.tools?.call is () {
-                    return error ToolCallError("Server does not support task-augmented tool calls");
-                }
-            }
-        }
-
         CallToolRequest toolCallRequest = {
             params: params
         };
@@ -405,7 +427,7 @@ public distinct isolated client class StreamableHttpClient {
                 params: {
                     "notifications": notifications.cloneReadOnly(),
                     _meta: {
-                        [PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION,
+                        [PROTOCOL_META_KEY]: self.metaProtocolVersion(),
                         [CLIENT_INFO_META_KEY]: self.clientInfo.cloneReadOnly(),
                         [CAPABILITIES_META_KEY]: self.clientCapabilities.cloneReadOnly()
                     }
@@ -431,7 +453,8 @@ public distinct isolated client class StreamableHttpClient {
     public isolated function adoptDiscovery(DiscoverResult discovered,
             Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}) returns ConnectionInfo|ClientError {
-        if !discovered.supportedVersions.some(versionValue => versionValue == MODERN_PROTOCOL_VERSION) {
+        string? modernVersion = selectModernProtocolVersion(discovered.supportedVersions);
+        if modernVersion is () {
             return error ProtocolVersionError("Discovery result does not advertise the modern protocol version");
         }
         Implementation? discoveredServerInfo = discovered._meta?.serverInfo;
@@ -446,8 +469,8 @@ public distinct isolated client class StreamableHttpClient {
             self.clientCapabilities = modernCapabilities.cloneReadOnly();
             self.modernSelected = true;
             self.connected = true;
-            self.negotiatedProtocolVersion = MODERN_PROTOCOL_VERSION;
-            self.transport.setProtocolVersion(MODERN_PROTOCOL_VERSION);
+            self.negotiatedProtocolVersion = modernVersion;
+            self.transport.setProtocolVersion(modernVersion);
             self.discovery = discovered.cloneReadOnly();
             self.serverCapabilities = discovered.capabilities.cloneReadOnly();
             self.serverInfo = discoveredServerInfo is Implementation ? discoveredServerInfo.cloneReadOnly() : ();
@@ -471,9 +494,6 @@ public distinct isolated client class StreamableHttpClient {
 
     private isolated function callModernTool(CallToolParams params, map<string|string[]> headers, boolean refreshAllowed)
             returns CallToolResult|InputRequiredResult|ClientError {
-        if params.task !is () {
-            return error ToolCallError("Legacy task parameters cannot be sent to modern servers");
-        }
         ToolDefinition? toolInfo = hasAuthorizationHeader(headers) ? () : self.transport.cache().toolSchema(params.name);
         Cursor? nextCursor = ();
         map<boolean> visitedCursors = {};
@@ -489,7 +509,7 @@ public distinct isolated client class StreamableHttpClient {
             if nextCursor is () {
                 break;
             }
-            if visitedCursors.hasKey(nextCursor) || visitedCursors.length() >= 1000 {
+            if visitedCursors.hasKey(nextCursor) || visitedCursors.length() >= MAX_TOOL_LIST_PAGES - 1 {
                 return error ToolCallError("Tool pagination repeated a cursor or exceeded the page limit");
             }
             visitedCursors[nextCursor] = true;
@@ -579,6 +599,14 @@ public distinct isolated client class StreamableHttpClient {
         return discovery;
     }
 
+    // Discovery runs before a version is negotiated, so it offers the newest one.
+    private isolated function metaProtocolVersion() returns string {
+        lock {
+            string? negotiatedVersion = self.negotiatedProtocolVersion;
+            return self.modernSelected && negotiatedVersion is string ? negotiatedVersion : LATEST_PROTOCOL_VERSION;
+        }
+    }
+
     private isolated function sendModernRequest(string methodName, RequestParams requestParams,
             map<string|string[]> headers, map<string> parameterHeaders = {}, boolean requireResultType = true)
             returns Result|ClientError {
@@ -586,8 +614,8 @@ public distinct isolated client class StreamableHttpClient {
         lock {
             self.requestId += 1;
             RequestParams wireParams = {...requestParams.cloneReadOnly()};
-            RequestMetaObject requestMeta = {...(wireParams._meta ?: {})};
-            requestMeta[PROTOCOL_META_KEY] = MODERN_PROTOCOL_VERSION;
+            RequestMeta requestMeta = {...(wireParams._meta ?: {})};
+            requestMeta[PROTOCOL_META_KEY] = self.metaProtocolVersion();
             requestMeta[CLIENT_INFO_META_KEY] = self.clientInfo;
             requestMeta[CAPABILITIES_META_KEY] = self.clientCapabilities;
             wireParams._meta = requestMeta;

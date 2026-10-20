@@ -20,7 +20,7 @@ import ballerina/test;
 
 // An advanced Streamable HTTP service whose onListTools/onCallTool bind transport-specific request
 // information the same way StreamableHttpService tools do: @http:Header, http:Headers, http:Request.
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "advanced-http-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }

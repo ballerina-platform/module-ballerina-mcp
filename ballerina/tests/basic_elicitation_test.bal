@@ -25,7 +25,7 @@ final readonly & FormSchema deleteConfirmationSchema = {
     required: ["confirmed"]
 };
 
-@StreamableHttpConfig {info: {name: "basic-elicitation", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "basic-elicitation", version: "1"}}
 service StreamableHttpService /basic on new StreamableHttpListener(3250) {
     @Tool {description: "Deletes a file after confirmation", schema: {'type: "object"}}
     remote isolated function deleteFile(Context context) returns string|InputRequiredResult {

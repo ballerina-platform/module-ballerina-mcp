@@ -126,7 +126,7 @@ function testApplicationResultLiftsWireServerInfo() {
         "resultType": "complete"
     };
     Result applicationValue = applicationResult(wireResult);
-    ResultMetaObject resultMeta = applicationValue._meta ?: {};
+    ResultMeta resultMeta = applicationValue._meta ?: {};
     test:assertFalse(resultMeta.hasKey(SERVER_INFO_META_KEY));
     test:assertEquals(resultMeta.serverInfo?.name, "srv");
     test:assertEquals(resultMeta.serverInfo?.version, "2.0.0");
@@ -137,7 +137,7 @@ function testApplicationResultLiftsWireServerInfo() {
 
     // Unrelated metadata entries survive.
     Result otherMetaResult = applicationResult({_meta: {"vendor/custom": "value"}});
-    ResultMetaObject otherMeta = otherMetaResult._meta ?: {};
+    ResultMeta otherMeta = otherMetaResult._meta ?: {};
     test:assertEquals(otherMeta["vendor/custom"], "value");
 }
 

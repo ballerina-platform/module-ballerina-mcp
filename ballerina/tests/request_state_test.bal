@@ -37,7 +37,7 @@ isolated function echoState(CallToolParams callParams) returns CallToolResult|In
     return {resultType: "complete", content: [{'type: "text", text: requestState}]};
 }
 
-@StreamableHttpConfig {info: {name: "request-state", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "request-state", version: "1"}}
 service StreamableHttpAdvancedService /state on requestStateListener {
     remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
 
@@ -45,7 +45,7 @@ service StreamableHttpAdvancedService /state on requestStateListener {
         echoState(callParams);
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "protected-request-state", version: "1"},
     httpConfig: {
         auth: {
@@ -77,7 +77,7 @@ isolated function callerToken(string audience, string? subject = "alice", string
     });
 }
 
-@StreamableHttpConfig {info: {name: "short-lived-state", version: "1"}, requestState: {ttl: 1}}
+@StreamableHttpServiceConfig {info: {name: "short-lived-state", version: "1"}, requestState: {ttl: 1}}
 service StreamableHttpAdvancedService /shortLived on requestStateListener {
     remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
 
@@ -92,7 +92,7 @@ service StreamableHttpAdvancedService /shortLived on requestStateListener {
 }
 
 // The same tool behind shared keys, with and without an auth context.
-@StreamableHttpConfig {info: {name: "unbound-shared", version: "1"}, requestState: {keys: [SIGNING_KEY]}}
+@StreamableHttpServiceConfig {info: {name: "unbound-shared", version: "1"}, requestState: {keys: [SIGNING_KEY]}}
 service StreamableHttpAdvancedService /unboundShared on requestStateListener {
     remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
 
@@ -100,7 +100,7 @@ service StreamableHttpAdvancedService /unboundShared on requestStateListener {
         echoState(callParams);
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "bound-shared", version: "1"},
     requestState: {keys: [SIGNING_KEY]},
     httpConfig: {
@@ -127,14 +127,14 @@ isolated function postToolCall(string servicePath, string toolName, map<json> ar
     map<json> callParams = {
         name: toolName,
         arguments,
-        _meta: {[PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}
+        _meta: {[PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}
     };
     if requestState is string {
         callParams["requestState"] = requestState;
     }
     map<string> requestHeaders = {
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
         [METHOD_HEADER]: REQUEST_CALL_TOOL,
         [NAME_HEADER]: encodeProtocolHeader(toolName)
     };
@@ -239,7 +239,7 @@ function testRequestStateIsBoundToTheCaller() returns error? {
 }
 
 isolated function newSharedKeyService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {info: {name: "replica", version: "1"}, requestState: {keys: [SIGNING_KEY]}}
+    @StreamableHttpServiceConfig {info: {name: "replica", version: "1"}, requestState: {keys: [SIGNING_KEY]}}
     isolated service object {
         remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
 
@@ -250,7 +250,7 @@ isolated function newSharedKeyService() returns StreamableHttpAdvancedService =>
 final string ROTATED_KEY = uuid:createType4AsString() + uuid:createType4AsString();
 
 isolated function newRotatedKeyService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {info: {name: "replica", version: "1"}, requestState: {keys: [ROTATED_KEY, SIGNING_KEY]}}
+    @StreamableHttpServiceConfig {info: {name: "replica", version: "1"}, requestState: {keys: [ROTATED_KEY, SIGNING_KEY]}}
     isolated service object {
         remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
 
@@ -259,7 +259,7 @@ isolated function newRotatedKeyService() returns StreamableHttpAdvancedService =
     };
 
 isolated function newDefaultKeyService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {info: {name: "replica", version: "1"}} isolated service object {
+    @StreamableHttpServiceConfig {info: {name: "replica", version: "1"}} isolated service object {
         remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
 
         remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
@@ -319,7 +319,7 @@ function testInvalidRequestStateConfigurationFailsAtAttach() returns error? {
 }
 
 isolated function newShortKeyService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {info: {name: "invalid", version: "1"}, requestState: {keys: [SIGNING_KEY, "too-short"]}}
+    @StreamableHttpServiceConfig {info: {name: "invalid", version: "1"}, requestState: {keys: [SIGNING_KEY, "too-short"]}}
     isolated service object {
         remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
 
@@ -328,7 +328,7 @@ isolated function newShortKeyService() returns StreamableHttpAdvancedService =>
     };
 
 isolated function newZeroTtlService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {info: {name: "invalid", version: "1"}, requestState: {ttl: 0}}
+    @StreamableHttpServiceConfig {info: {name: "invalid", version: "1"}, requestState: {ttl: 0}}
     isolated service object {
         remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
 
@@ -337,7 +337,7 @@ isolated function newZeroTtlService() returns StreamableHttpAdvancedService =>
     };
 
 isolated function newNegativeTtlService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {info: {name: "invalid", version: "1"}, requestState: {ttl: -1}}
+    @StreamableHttpServiceConfig {info: {name: "invalid", version: "1"}, requestState: {ttl: -1}}
     isolated service object {
         remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
 

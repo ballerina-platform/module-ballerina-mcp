@@ -20,7 +20,7 @@ import ballerina/test;
 
 listener StreamableHttpListener cachingListener = check new (3222);
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "hinted", version: "1"},
     cacheHints: {
         discover: {ttlMs: 300000, cacheScope: "public"},
@@ -32,13 +32,13 @@ service StreamableHttpService /hinted on cachingListener {
     remote isolated function echo() returns string => "ok";
 }
 
-@StreamableHttpConfig {info: {name: "unhinted", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "unhinted", version: "1"}}
 service StreamableHttpService /unhinted on cachingListener {
     @Tool {description: "echo", schema: {'type: "object"}}
     remote isolated function echo() returns string => "ok";
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "handler-hinted", version: "1"},
     sessionMode: STATELESS,
     cacheHints: {listTools: {ttlMs: 60000, cacheScope: "public"}}
@@ -49,7 +49,7 @@ service StreamableHttpAdvancedService /handlerHinted on cachingListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "scope-only", version: "1"}, cacheHints: {listTools: {cacheScope: "public"}}}
+@StreamableHttpServiceConfig {info: {name: "scope-only", version: "1"}, cacheHints: {listTools: {cacheScope: "public"}}}
 service StreamableHttpAdvancedService /scopeOnly on cachingListener {
     remote isolated function onListTools() returns ListToolsResult => {tools: []};
 
@@ -63,11 +63,11 @@ isolated function cachingPost(string servicePath, string methodName) returns map
         jsonrpc: JSONRPC_VERSION,
         id: 300,
         method: methodName,
-        params: {_meta: {[PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
+        params: {_meta: {[PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
     };
     http:Response response = check cachingHttpClient->post(servicePath, requestMessage, headers = {
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
         [METHOD_HEADER]: methodName
     });
     WireResponse payload = check (check response.getJsonPayload()).cloneWithType();
@@ -113,7 +113,7 @@ function testLegacyResultsCarryNoCacheHints() returns error? {
 
 @test:Config {}
 function testNegativeConfiguredTtlIsRejectedOnAttach() returns error? {
-    StreamableHttpAdvancedService negativeService = @StreamableHttpConfig {
+    StreamableHttpAdvancedService negativeService = @StreamableHttpServiceConfig {
         info: {name: "negative", version: "1"},
         cacheHints: {discover: {ttlMs: -1}}
     } isolated service object {
@@ -174,6 +174,12 @@ service /cacheMock on new http:Listener(3223) {
         }
         RequestId requestId = parsedRequest.id;
         string hitKey = scenario + "/" + testId;
+        if scenario == "oauth" {
+            http:Response? challenge = cacheMockChallenge(request, parsedRequest.method, testId);
+            if challenge is http:Response {
+                return challenge;
+            }
+        }
         match parsedRequest.method {
             "server/discover" => {
                 return mockDiscoverResult(requestId);
@@ -197,7 +203,7 @@ service /cacheMock on new http:Listener(3223) {
         recordCacheMockHit(hitKey);
         anydata cursor = (parsedRequest.params ?: {})["cursor"];
         match scenario {
-            "private" => {
+            "private"|"oauth" => {
                 return cacheMockListResult(requestId, 60000);
             }
             "public" => {
@@ -390,6 +396,115 @@ function testCloseClearsCachedResults() returns error? {
     _ = check closingClient->connect();
     _ = check closingClient->listTools();
     test:assertEquals(cacheMockHitCount("private", "close"), 2);
+}
+
+// The `oauth` scenario challenges token-less requests; its `stepUp` test needs more scope for tools/call.
+// Each test's metadata document is named by its test id.
+const CACHE_OAUTH_PRM_URL = "https://mcp.example.com/.well-known/oauth-protected-resource/cache";
+
+isolated function cacheMockChallenge(http:Request request, string methodName, string testId) returns http:Response? {
+    string|error authorization = request.getHeader(AUTHORIZATION_HEADER);
+    http:Response challenge = new;
+    if authorization is error {
+        challenge.statusCode = http:STATUS_UNAUTHORIZED;
+        challenge.setHeader(WWW_AUTHENTICATE_HEADER, string `Bearer resource_metadata="${CACHE_OAUTH_PRM_URL}/${testId}"`);
+        return challenge;
+    }
+    if testId == "stepUp" && methodName == REQUEST_CALL_TOOL && authorization == "Bearer cache-token-1" {
+        challenge.statusCode = http:STATUS_FORBIDDEN;
+        challenge.setHeader(WWW_AUTHENTICATE_HEADER, "Bearer error=\"insufficient_scope\", scope=\"tools:admin\"");
+        return challenge;
+    }
+    return ();
+}
+
+isolated int cacheTokensIssued = 0;
+isolated int cacheTokenLifetime = 3600;
+
+isolated function cacheOAuthFetchJson(string targetUrl, readonly & AuthHttpConfig config) returns json|Error {
+    if targetUrl.startsWith(CACHE_OAUTH_PRM_URL + "/") {
+        string testId = targetUrl.substring(CACHE_OAUTH_PRM_URL.length() + 1);
+        return {"resource": string `${CACHE_MOCK_URL}/oauth/${testId}`, "authorization_servers": [ISSUER]};
+    }
+    if targetUrl == ISSUER + "/.well-known/oauth-authorization-server" {
+        return {
+            "issuer": ISSUER,
+            "token_endpoint": ISSUER + "/token",
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["client_credentials"],
+            "token_endpoint_auth_methods_supported": [CLIENT_SECRET_BASIC]
+        };
+    }
+    return error OAuthDiscoveryError(string `Unexpected metadata request to '${targetUrl}'.`);
+}
+
+isolated function cacheOAuthPostTokenRequest(ClientAuth? clientAuth, string clientId, string tokenEndpoint,
+        map<string> form, readonly & AuthHttpConfig config) returns json|Error {
+    int lifetime;
+    lock {
+        lifetime = cacheTokenLifetime;
+    }
+    lock {
+        cacheTokensIssued += 1;
+        return {"access_token": string `cache-token-${cacheTokensIssued}`, "token_type": "Bearer", "expires_in": lifetime};
+    }
+}
+
+function issuedCacheTokens() returns int {
+    lock {
+        return cacheTokensIssued;
+    }
+}
+
+function stubCacheOAuthNetwork() {
+    lock {
+        cacheTokensIssued = 0;
+    }
+    test:when(fetchJsonMock).call("cacheOAuthFetchJson");
+    test:when(postTokenRequestMock).call("cacheOAuthPostTokenRequest");
+}
+
+function restoreCacheOAuthNetwork() {
+    lock {
+        cacheTokenLifetime = 3600;
+    }
+    restoreIdentityAssertionNetwork();
+}
+
+function connectedOAuthCacheClient(string testId) returns StreamableHttpClient|error {
+    StreamableHttpClient oauthClient = check new (string `${CACHE_MOCK_URL}/oauth/${testId}`,
+        protocolMode = "modern", httpConfig = {auth: {grant: clientCredentialsGrant()}});
+    _ = check oauthClient->connect();
+    return oauthClient;
+}
+
+@test:Config {before: stubCacheOAuthNetwork, after: restoreCacheOAuthNetwork}
+function testStepUpTokenInvalidatesCachedList() returns error? {
+    StreamableHttpClient stepUpClient = check connectedOAuthCacheClient("stepUp");
+    _ = check stepUpClient->listTools();
+    _ = check stepUpClient->listTools();
+    test:assertEquals(cacheMockHitCount("oauth", "stepUp"), 1);
+
+    _ = check stepUpClient->callToolOnce({name: "echo"});
+    test:assertEquals(issuedCacheTokens(), 2, "the insufficient_scope challenge must yield a new token");
+    _ = check stepUpClient->listTools();
+    test:assertEquals(cacheMockHitCount("oauth", "stepUp"), 2, "a step-up token may list other tools");
+}
+
+@test:Config {before: stubCacheOAuthNetwork, after: restoreCacheOAuthNetwork}
+function testExpiryRefreshKeepsCachedList() returns error? {
+    lock {
+        // Expires a second after issue, after the clock-skew margin.
+        cacheTokenLifetime = 2;
+    }
+    StreamableHttpClient expiringClient = check connectedOAuthCacheClient("expiring");
+    _ = check expiringClient->listTools();
+    runtime:sleep(1.1);
+    int tokensBefore = issuedCacheTokens();
+    _ = check expiringClient->callToolOnce({name: "echo"});
+    test:assertTrue(issuedCacheTokens() > tokensBefore, "the expired token must be renewed");
+    _ = check expiringClient->listTools();
+    test:assertEquals(cacheMockHitCount("oauth", "expiring"), 1);
 }
 
 isolated decimal fakeCacheNow = 0;

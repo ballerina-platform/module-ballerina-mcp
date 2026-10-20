@@ -32,16 +32,14 @@ function testMirroredHeadersAreEncodedByType() returns error? {
         properties: {
             region: {"type": "string", "x-mcp-header": "Region"},
             count: {"type": "integer", "x-mcp-header": "Count"},
-            ratio: {"type": "number", "x-mcp-header": "Ratio"},
             debug: {"type": "boolean", "x-mcp-header": "Debug"}
         }
     };
     map<string> headerValues = check toolParameterHeaders(toolSchema,
-            {"region": "north", "count": 7, "ratio": 1.5, "debug": true});
-    test:assertEquals(headerValues.length(), 4);
+            {"region": "north", "count": 7, "debug": true});
+    test:assertEquals(headerValues.length(), 3);
     test:assertEquals(check decodeProtocolHeader(headerValues.get("mcp-param-region")), "north");
     test:assertEquals(check decodeProtocolHeader(headerValues.get("mcp-param-count")), "7");
-    test:assertEquals(check decodeProtocolHeader(headerValues.get("mcp-param-ratio")), "1.5");
     test:assertEquals(check decodeProtocolHeader(headerValues.get("mcp-param-debug")), "true");
 
     // Declared but unsupplied arguments simply do not produce a header.
@@ -89,11 +87,15 @@ function testMirroredHeaderRejectsUnusableAnnotations() {
         "properties": {wrapper: {"type": "array", "prefixItems": [{"type": "string", "x-mcp-header": "Region"}]}}
     }, {}, "Invalid or unreachable x-mcp-header annotation");
 
-    // Only scalar JSON types can be mirrored onto a header.
+    // Only string, integer and boolean arguments can be mirrored onto a header.
     assertSchemaRejected({
         'type: "object",
         properties: {payload: {"type": "object", "x-mcp-header": "Payload"}}
-    }, {}, "x-mcp-header requires string, integer, number or boolean type");
+    }, {}, "x-mcp-header requires string, integer or boolean type");
+    assertSchemaRejected({
+        'type: "object",
+        properties: {ratio: {"type": "number", "x-mcp-header": "Ratio"}}
+    }, {}, "x-mcp-header requires string, integer or boolean type");
 }
 
 @test:Config {}

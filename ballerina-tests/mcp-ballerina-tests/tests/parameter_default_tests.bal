@@ -33,7 +33,7 @@ isolated function nextCallCount() returns int {
     }
 }
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "parameter-default-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -82,7 +82,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
 
     @mcp:Tool {description: "Defaultable parameter followed by an injected meta"}
     isolated remote function withDefaultBeforeMeta(string city, string unit = "celsius",
-            mcp:RequestMetaObject? meta = ()) returns string {
+            mcp:RequestMeta? meta = ()) returns string {
         return string `city=${city} unit=${unit} meta=${meta is () ? "()" : "present"}`;
     }
 }

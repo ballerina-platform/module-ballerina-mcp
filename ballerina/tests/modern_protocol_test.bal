@@ -18,7 +18,7 @@ import ballerina/http;
 import ballerina/test;
 import ballerina/time;
 
-@StreamableHttpConfig {info: {name: "modern-test", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "modern-test", version: "1"}}
 service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
     remote isolated function onListTools() returns ListToolsResult {
         ListToolsResult handlerResult = {
@@ -214,7 +214,7 @@ type StructuredPerson record {|
     int age;
 |};
 
-@StreamableHttpConfig {info: {name: "regular-structured-output", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "regular-structured-output", version: "1"}}
 service StreamableHttpService /regular on structuredOutputListener {
     @Tool {description: "string", schema: {'type: "object"}, outputSchema: {"type": "string"}}
     remote isolated function stringValue() returns string => "hello";
@@ -232,7 +232,7 @@ service StreamableHttpService /regular on structuredOutputListener {
     remote isolated function textOnlyValue() returns string => "text only";
 }
 
-@StreamableHttpConfig {info: {name: "generic-structured-output", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "generic-structured-output", version: "1"}}
 service StreamableHttpService /generic on structuredOutputListener {
     @Tool {description: "boolean", schema: {'type: "object"}, outputSchema: {"type": "boolean"}}
     remote isolated function booleanValue() returns boolean => true;
@@ -241,13 +241,13 @@ service StreamableHttpService /generic on structuredOutputListener {
 isolated function modernPost(string methodName, RequestParams requestParams = {}, map<string|string[]> extraHeaders = {})
         returns http:Response|error {
     requestParams._meta = {
-        [PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION,
         [CAPABILITIES_META_KEY]: {}
     };
     map<string|string[]> requestHeaders = {
         [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
         [METHOD_HEADER]: methodName,
         ...extraHeaders
     };
@@ -271,7 +271,7 @@ function testClientCanDiscoverAndAdoptModernConnection() returns error? {
     StreamableHttpClient discoveryClient = check new ("http://localhost:3205/mcp", protocolMode = "modern");
     DiscoverResult discovered = check discoveryClient->discover();
     ConnectionInfo connection = check discoveryClient.adoptDiscovery(discovered);
-    test:assertEquals(connection.protocolVersion, MODERN_PROTOCOL_VERSION);
+    test:assertEquals(connection.protocolVersion, LATEST_PROTOCOL_VERSION);
     test:assertEquals(connection.serverInfo?.name, "modern-test");
     ListToolsResult tools = check discoveryClient->listTools();
     test:assertEquals(tools.tools.length(), 13);
@@ -345,7 +345,7 @@ function testModernOriginAndDelete() returns error? {
     http:Response originResponse = check modernPost("server/discover", {}, {"origin": "https://untrusted.example"});
     test:assertEquals(originResponse.statusCode, 403);
     http:Response deleteResponse = check modernHttpClient->delete("/mcp", headers = {
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION
     });
     test:assertEquals(deleteResponse.statusCode, 405);
 }
@@ -443,7 +443,7 @@ function testModernRejectsLegacyInitializedNotification() returns error? {
     JsonRpcNotification notificationValue = {jsonrpc: JSONRPC_VERSION, method: NOTIFICATION_INITIALIZED};
     http:Response responseValue = check modernHttpClient->post("/mcp", notificationValue, headers = {
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION
     });
     test:assertEquals(responseValue.statusCode, 400);
 }

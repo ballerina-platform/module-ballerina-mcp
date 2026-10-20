@@ -67,6 +67,7 @@ import static io.ballerina.stdlib.mcp.plugin.Utils.isSessionType;
  * Utility class for generating and manipulating function tool parameter schemas.
  */
 public class SchemaUtils {
+    private static final String NIL_SCHEMA = "{\"type\":\"null\"}";
     private static final String STRING = "string";
     private static final String BYTE = "byte";
     private static final String NUMBER = "number";
@@ -150,7 +151,8 @@ public class SchemaUtils {
         }
         TypeMapper typeMapper = new TypeMapperImpl(context);
         List<String> schemas = getSuccessfulReturnSchemas(returnType, typeMapper);
-        if (schemas.isEmpty()) {
+        // A tool that can only return nil has no output to describe, so it stays unstructured.
+        if (schemas.stream().allMatch(NIL_SCHEMA::equals)) {
             return null;
         }
         if (schemas.size() == 1) {
@@ -179,7 +181,7 @@ public class SchemaUtils {
             return Collections.emptyList();
         }
         if (returnType.typeKind() == TypeDescKind.NIL) {
-            return List.of("{\"type\":\"null\"}");
+            return List.of(NIL_SCHEMA);
         }
         try {
             @SuppressWarnings("rawtypes")

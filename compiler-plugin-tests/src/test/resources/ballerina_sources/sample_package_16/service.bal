@@ -16,8 +16,8 @@
 
 import ballerina/mcp;
 
-// Only onListTools and onCallTool are allowed; any other remote method is unsupported (MCP_113).
-@mcp:StreamableHttpConfig {
+// Only onListTools, onCallTool and onSubscribe are allowed; any other remote method is unsupported (MCP_113).
+@mcp:StreamableHttpServiceConfig {
     info: {name: "sample-16", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9316) {

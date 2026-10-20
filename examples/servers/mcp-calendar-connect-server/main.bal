@@ -47,7 +47,7 @@ isolated map<PendingConnection> pendingConnections = {};
 // Users whose calendar is connected. A real service would store the third-party tokens here.
 isolated map<true> connectedUsers = {};
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "Calendar", version: "1.0.0"},
     httpConfig: {
         auth: {

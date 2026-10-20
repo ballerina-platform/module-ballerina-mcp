@@ -21,7 +21,7 @@ type FileDeletion record {|
     boolean confirmed;
 |};
 
-@mcp:StreamableHttpConfig {info: {name: "elicitation", version: "1.0.0"}}
+@mcp:StreamableHttpServiceConfig {info: {name: "elicitation", version: "1.0.0"}}
 service mcp:StreamableHttpService /elicitation on new mcp:StreamableHttpListener(8793) {
     # Deletes a file after the user confirms.
     #
@@ -79,7 +79,7 @@ type TableBooking record {|
     boolean highChair = false;
 |};
 
-@mcp:StreamableHttpConfig {info: {name: "booking", version: "1.0.0"}}
+@mcp:StreamableHttpServiceConfig {info: {name: "booking", version: "1.0.0"}}
 service mcp:StreamableHttpService /booking on new mcp:StreamableHttpListener(8794) {
     # Books a table, asking the user for the details.
     #

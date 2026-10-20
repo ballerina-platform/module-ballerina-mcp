@@ -18,7 +18,7 @@ import ballerina/http;
 import ballerina/test;
 
 isolated function newTestMcpService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {info: {name: "lifecycle", version: "1"}}
+    @StreamableHttpServiceConfig {info: {name: "lifecycle", version: "1"}}
     service object {
         remote isolated function onListTools() returns ListToolsResult => {
             tools: [{name: "ping", inputSchema: {'type: "object"}}]
@@ -61,11 +61,11 @@ isolated function assertListenerServesAndDetaches(StreamableHttpListener mcpList
         jsonrpc: JSONRPC_VERSION,
         id: 1,
         method: REQUEST_LIST_TOOLS,
-        params: {_meta: {[PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
+        params: {_meta: {[PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
     }, headers = {
         [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
         [METHOD_HEADER]: REQUEST_LIST_TOOLS
     });
     test:assertEquals(listResponse.statusCode, 200);
@@ -86,7 +86,7 @@ function testListenerImmediateStop() returns error? {
 @test:Config {}
 function testModernServicesCannotRequireLegacySessions() returns error? {
     StreamableHttpAdvancedService sessionService =
-        @StreamableHttpConfig {info: {name: "session-bound", version: "1"}, protocolMode: "modern"}
+        @StreamableHttpServiceConfig {info: {name: "session-bound", version: "1"}, protocolMode: "modern"}
         service object {
             remote isolated function onListTools() returns ListToolsResult => {tools: []};
 

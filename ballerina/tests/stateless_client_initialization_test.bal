@@ -49,8 +49,10 @@ function testClientConstructionWithUnreachableServer() returns error? {
 @test:Config {}
 function testClientConstructionWithConfig() returns error? {
     StreamableHttpClientConfig config = {
-        timeout: 30,
-        followRedirects: {enabled: true}
+        httpConfig: {
+            timeout: 30,
+            followRedirects: {enabled: true}
+        }
     };
     StreamableHttpClient 'client = check new (VALID_MCP_URL, config);
 
