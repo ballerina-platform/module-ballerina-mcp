@@ -200,6 +200,13 @@ service /mock on new http:Listener(3210) {
                 "withInstructions" => {
                     return mockDiscoverResult(requestId, instructions = "Call echo first.");
                 }
+                "legacyTasks" => {
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "error": {"code": METHOD_NOT_FOUND, "message": "Method not found"}
+                    }, 404);
+                }
             }
             return mockDiscoverResult(requestId);
         }
@@ -213,7 +220,9 @@ service /mock on new http:Listener(3210) {
                 "id": requestId,
                 "result": {
                     "protocolVersion": scenario == "legacyBadVersion" ? "1999-01-01" : LATEST_LEGACY_PROTOCOL_VERSION,
-                    "capabilities": {},
+                    "capabilities": scenario == "legacyTasks"
+                        ? {"tools": {}, "tasks": {"list": {}, "cancel": {}, "requests": {"tools": {"call": {}}}}}
+                        : {},
                     "serverInfo": {"name": "mock", "version": "1"}
                 }
             });
@@ -339,6 +348,21 @@ service /mock on new http:Listener(3210) {
                         }
                     ]);
                 }
+                "legacyTasks" => {
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {
+                            "tools": [
+                                {
+                                    "name": "report",
+                                    "inputSchema": {"type": "object"},
+                                    "execution": {"taskSupport": "optional"}
+                                }
+                            ]
+                        }
+                    });
+                }
                 "intHeaderTool" => {
                     return mockToolListResult(requestId, [
                         {
@@ -399,6 +423,13 @@ service /mock on new http:Listener(3210) {
                 }
                 "legacyWrongResult" => {
                     return mockJson({"jsonrpc": JSONRPC_VERSION, "id": requestId, "result": {"tools": []}});
+                }
+                "legacyTasks" => {
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {"content": [{"type": "text", "text": "done"}]}
+                    });
                 }
                 "intHeaderTool" => {
                     // Echoes the call number and the mirrored header the client sent.
@@ -682,15 +713,17 @@ function testModernClientRejectsInvalidToolResults() returns error? {
 }
 
 @test:Config {}
-function testModernClientRejectsTaskAugmentedCalls() returns error? {
-    StreamableHttpClient modernClient = check new (mockUrl("ok"), protocolMode = "modern");
-    _ = check modernClient->connect();
-    var taskResult = modernClient->callToolOnce({name: "echo", task: {ttl: 1000}});
-    test:assertTrue(taskResult is ToolCallError);
-    if taskResult is ToolCallError {
-        test:assertTrue(taskResult.message().includes("Legacy task parameters cannot be sent"));
-    }
-    check modernClient->close();
+function testClientWorksWithLegacyServerAdvertisingTasks() returns error? {
+    StreamableHttpClient legacyClient = check new (mockUrl("legacyTasks"));
+    ConnectionInfo connection = check legacyClient->connect();
+    test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
+
+    ListToolsResult toolList = check legacyClient->listTools();
+    test:assertEquals(toolList.tools.map(toolInfo => toolInfo.name), ["report"]);
+
+    CallToolResult callResult = check legacyClient->callTool({name: "report"});
+    test:assertEquals(callResult.content, [{'type: "text", text: "done"}]);
+    check legacyClient->close();
 }
 
 @test:Config {}

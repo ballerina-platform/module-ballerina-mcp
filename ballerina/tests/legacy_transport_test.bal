@@ -94,16 +94,6 @@ function testLegacyClientRejectsUnexpectedResultTypes() returns error? {
 }
 
 @test:Config {}
-function testLegacyClientRejectsTaskAugmentedCallsWithoutServerSupport() returns error? {
-    StreamableHttpClient legacyClient = check legacyMockClient("ok");
-    var taskResult = legacyClient->callTool({name: "echo", task: {ttl: 1000}});
-    test:assertTrue(taskResult is ToolCallError);
-    if taskResult is ToolCallError {
-        test:assertTrue(taskResult.message().includes("does not support task-augmented tool calls"));
-    }
-}
-
-@test:Config {}
 function testLegacyClientReadsResultsFromSseResponses() returns error? {
     StreamableHttpClient sseClient = check legacyMockClient("legacySseResult");
     ListToolsResult toolList = check sseClient->listTools();

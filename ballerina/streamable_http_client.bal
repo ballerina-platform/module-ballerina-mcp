@@ -317,15 +317,6 @@ public distinct isolated client class StreamableHttpClient {
             }
             return error ToolCallError("Input-required continuation did not complete");
         }
-        // Reject task-augmented calls when the server hasn't advertised task support.
-        if params.task !is () {
-            lock {
-                if self.serverCapabilities?.tasks?.requests?.tools?.call is () {
-                    return error ToolCallError("Server does not support task-augmented tool calls");
-                }
-            }
-        }
-
         CallToolRequest toolCallRequest = {
             params: params
         };
@@ -449,9 +440,6 @@ public distinct isolated client class StreamableHttpClient {
 
     private isolated function callModernTool(CallToolParams params, map<string|string[]> headers, boolean refreshAllowed)
             returns CallToolResult|InputRequiredResult|ClientError {
-        if params.task !is () {
-            return error ToolCallError("Legacy task parameters cannot be sent to modern servers");
-        }
         ToolDefinition? toolInfo = hasAuthorizationHeader(headers) ? () : self.transport.cache().toolSchema(params.name);
         Cursor? nextCursor = ();
         map<boolean> visitedCursors = {};

@@ -214,11 +214,6 @@ function testLegacyCallToolRejectsInputRequiredResults() returns error? {
     JsonRpcError inputError = check (check inputRequired.getJsonPayload()).cloneWithType();
     test:assertTrue(inputError.'error.message.includes("Input-required tool calls require modern MCP"));
 
-    http:Response taskCall = check legacyPost("/stateless",
-            legacyRequest(REQUEST_CALL_TOOL, {"name": "ask", "task": {"ttl": 1}}));
-    JsonRpcError taskError = check (check taskCall.getJsonPayload()).cloneWithType();
-    test:assertEquals(taskError.'error.message, "Task-augmented tool calls are not supported");
-
     http:Response invalidParams = check legacyPost("/stateless",
             legacyRequest(REQUEST_CALL_TOOL, {"name": 42}));
     JsonRpcError paramsError = check (check invalidParams.getJsonPayload()).cloneWithType();

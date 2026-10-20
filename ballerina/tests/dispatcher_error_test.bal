@@ -245,10 +245,6 @@ function testDispatcherValidatesToolCallHeaders() returns error? {
 
     http:Response invalidParams = check dispatcherPost("/tools", REQUEST_CALL_TOOL, {"name": 42});
     check assertJsonRpcError(invalidParams, 200, INVALID_PARAMS, "Invalid tool call parameters");
-
-    http:Response taskParams = check dispatcherPost("/tools", REQUEST_CALL_TOOL,
-            {"name": "echo", "task": {"ttl": 1000}}, {[NAME_HEADER]: "echo"});
-    check assertJsonRpcError(taskParams, 200, INVALID_PARAMS, "Legacy task parameters are not supported");
 }
 
 @test:Config {}

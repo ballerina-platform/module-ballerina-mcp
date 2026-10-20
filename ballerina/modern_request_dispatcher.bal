@@ -206,10 +206,6 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if headerError is Error {
         return modernError(HEADER_MISMATCH, headerError.message(), requestMessage.id);
     }
-    if callParams.task !is () {
-        return createJsonRpcErrorResponse(INVALID_PARAMS, "Legacy task parameters are not supported in modern MCP",
-                requestMessage.id);
-    }
     CallToolResult|InputRequiredResult|error callResult = callProtocolTool(mcpService, callParams,
             httpRequest, requestHeaders, serviceConfig, authContext);
     if callResult is InsufficientScopeError {

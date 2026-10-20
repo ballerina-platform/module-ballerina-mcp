@@ -247,26 +247,6 @@ public type ClientCapabilities record {
         map<anydata> form?;
         map<anydata> url?;
     } elicitation?;
-    # Present if the client supports task-augmented requests.
-    record {
-        # Whether this client supports tasks/list.
-        map<anydata> list?;
-        # Whether this client supports tasks/cancel.
-        map<anydata> cancel?;
-        # Specifies which request types can be augmented with tasks.
-        record {
-            # Task support for sampling-related requests.
-            record {
-                # Whether the client supports task-augmented sampling/createMessage requests.
-                map<anydata> createMessage?;
-            } sampling?;
-            # Task support for elicitation-related requests.
-            record {
-                # Whether the client supports task-augmented elicitation/create requests.
-                map<anydata> create?;
-            } elicitation?;
-        } requests?;
-    } tasks?;
 };
 
 # Capabilities that a server may support. Known capabilities are defined here, in this schema,
@@ -297,21 +277,6 @@ public type ServerCapabilities record {
         # Whether this server supports notifications for changes to the tool list.
         boolean listChanged?;
     } tools?;
-    # Present if the server supports task-augmented requests.
-    record {
-        # Whether this server supports tasks/list.
-        map<anydata> list?;
-        # Whether this server supports tasks/cancel.
-        map<anydata> cancel?;
-        # Specifies which request types can be augmented with tasks.
-        record {
-            # Task support for tool-related requests.
-            record {
-                # Whether the server supports task-augmented tools/call requests.
-                map<anydata> call?;
-            } tools?;
-        } requests?;
-    } tasks?;
 };
 
 # Base metadata with name (identifier) and title (display name) properties.
@@ -480,12 +445,6 @@ public type CallToolParams record {|
     string requestState?;
     # Optional arguments to pass to the tool
     record {} arguments?;
-    # If present, this is a task-augmented request (MCP 2025-11-25 TaskAugmentedRequestParams).
-    # Currently disallowed — no server advertises `tasks.requests.tools.call` yet.
-    record {|
-        # Optional time-to-live in milliseconds for the task.
-        int ttl?;
-    |} task?;
 |};
 
 # Additional properties describing a Tool to clients.
@@ -514,22 +473,6 @@ public type ToolAnnotations record {
     boolean openWorldHint?;
 };
 
-# Indicates whether a tool supports task-augmented execution.
-public enum TaskSupport {
-    # Task-augmented execution is not allowed for this tool.
-    TASK_SUPPORT_FORBIDDEN = "forbidden",
-    # Task-augmented execution is allowed but not required for this tool.
-    TASK_SUPPORT_OPTIONAL = "optional",
-    # Task-augmented execution is required for this tool.
-    TASK_SUPPORT_REQUIRED = "required"
-}
-
-# Execution-related properties for a tool.
-public type ToolExecution record {|
-    # Indicates whether this tool supports task-augmented execution.
-    TaskSupport taskSupport = TASK_SUPPORT_FORBIDDEN;
-|};
-
 # An object-root JSON Schema describing tool arguments.
 public type InputSchema record {|
     # JSON Schema dialect, defaulting to JSON Schema 2020-12.
@@ -551,8 +494,6 @@ public type ToolDefinition record {
     string description?;
     # A JSON Schema object defining the expected parameters for the tool.
     InputSchema inputSchema;
-    # Execution-related properties for this tool.
-    ToolExecution execution?;
     # An optional general JSON Schema object defining the tool's structured output.
     OutputSchema outputSchema?;
     # Optional additional tool information.

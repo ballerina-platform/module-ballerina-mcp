@@ -471,7 +471,7 @@ function testSuppliedOptionalArgumentIsBound() returns error? {
 }
 
 @test:Config
-function testTaskAugmentedToolCallIsRejected() returns error? {
+function testTaskFieldOnToolCallIsIgnored() returns error? {
     http:Response response = check postJsonRpc(errorHandlingClient, {
         jsonrpc: "2.0",
         id: 1,
@@ -479,9 +479,7 @@ function testTaskAugmentedToolCallIsRejected() returns error? {
         params: {name: "divide", arguments: {a: 10, b: 2}, task: {ttl: 60000}}
     });
     test:assertEquals(response.statusCode, http:STATUS_OK);
-    [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
-    test:assertEquals(code, mcp:INVALID_REQUEST);
-    test:assertEquals(message, "Task-augmented tool calls are not supported");
+    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "5");
 }
 
 @test:Config

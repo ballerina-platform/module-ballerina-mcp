@@ -398,12 +398,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                         string `Invalid parameters for '${REQUEST_CALL_TOOL}'`, request.id);
             }
 
-            // Task-augmented tool calls are not yet supported.
-            if params.task !is () {
-                return createJsonRpcErrorResponse(INVALID_REQUEST,
-                        "Task-augmented tool calls are not supported", request.id);
-            }
-
             ServerAuthenticator? authenticator = self.authenticator;
             if authenticator is ServerAuthenticator && authContext is AuthContext {
                 http:Forbidden? denied = authenticator.authorizeTool(authContext, params.name);
