@@ -24,3 +24,8 @@ The Ballerina client (`interop-client`) against SDK servers:
 ```
 
 Each check prints `PASS`; a failed check exits with an error.
+
+Form elicitation runs on the modern protocol in both directions through a `bookTable` tool that asks how many seats to book and keeps the guest's name in its request state:
+
+- The Ballerina client answers it against each SDK server. The Python SDK and FastMCP servers encrypt their request state, so those round trips show the client echoes the state as an opaque token.
+- The Python SDK and TypeScript clients answer it through their elicitation callbacks against the Ballerina server's `/elicitation` service, which signs its request state. Each client accepts once and declines once.

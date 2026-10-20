@@ -99,7 +99,8 @@ isolated class JsonRpcMessageStreamTransformer {
     # + eventData - The `data` field from an SSE event.
     # + return - A JsonRpcMessage or a JsonRpcMessageTransformationError.
     private isolated function convertSseDataToJsonRpcMessage(string eventData) returns JsonRpcMessage|JsonRpcMessageTransformationError {
-        JsonRpcMessage|error message = eventData.fromJsonStringWithType();
+        json|error payload = eventData.fromJsonString();
+        JsonRpcMessage|error message = payload is error ? payload : toLegacyMessage(payload);
         if message is error {
             return error TypeConversionError(string `Failed to convert JSON data to JsonRpcMessage: ${message.message()}`);
         }

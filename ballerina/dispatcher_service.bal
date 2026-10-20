@@ -22,7 +22,8 @@ isolated service class DispatcherService {
 }
 
 isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
-        ServerAuthenticator? serviceAuthenticator, SubscriptionRegistry subscriptionRegistry) returns DispatcherService {
+        ServerAuthenticator? serviceAuthenticator, SubscriptionRegistry subscriptionRegistry,
+        RequestStateSigner serviceRequestStateSigner) returns DispatcherService {
     return @http:ServiceConfig {
         ...httpServiceConfig
     } isolated service object {
@@ -31,6 +32,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         private map<string> sessionOwners = {};
         private final ServerAuthenticator? authenticator = serviceAuthenticator;
         private final SubscriptionRegistry subscriptions = subscriptionRegistry;
+        private final RequestStateSigner requestStateSigner = serviceRequestStateSigner;
         private StreamableHttpServiceConfiguration? cachedServiceConfig = ();
 
         isolated resource function delete .(http:Headers headers)
@@ -150,7 +152,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                     return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), request.id);
                 }
                 var modernResponse = trap handleModernRequest(mcpService, request, httpRequest, headers, routeConfig,
-                        self.subscriptions, self.authenticator, authContext);
+                        self.subscriptions, self.requestStateSigner, self.authenticator, authContext);
                 if modernResponse is error {
                     return createJsonRpcErrorResponse(INTERNAL_ERROR, "Failed to process MCP request", request.id);
                 }
@@ -477,11 +479,15 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
+                // Legacy calls have no continuations, so state and answers here were never verified.
+                CallToolParams legacyParams = params.clone();
+                _ = legacyParams.removeIfHasKey("requestState");
+                _ = legacyParams.removeIfHasKey("inputResponses");
                 CallToolResult|InputRequiredResult|error result =
-                        trap invokeAdvancedOnCallTool(mcpService, params.cloneReadOnly(), session, headers,
+                        trap invokeAdvancedOnCallTool(mcpService, legacyParams.cloneReadOnly(), session, headers,
                             httpRequest, extractHeaderValues(headers), treatNilableAsOptional, authContext);
                 if result is InputRequiredResult {
-                    return error ServerError("Input-required tool calls require modern MCP");
+                    return error ServerError(INPUT_REQUIRED_ON_LEGACY);
                 }
                 if result is InsufficientScopeError {
                     return result;
@@ -491,22 +497,25 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }
                 CallToolResult|error completedResult = result.cloneWithType();
                 if completedResult is error {
-                    return error ServerError("Input-required tool calls require modern MCP");
+                    return error ServerError(INPUT_REQUIRED_ON_LEGACY);
                 }
                 CallToolResult|error legacyResult = legacyToolCallResult(completedResult);
                 return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
             if mcpService is StreamableHttpService {
-                CallToolResult|error result = trap callToolForRemoteFunctions(mcpService, params.cloneReadOnly(),
-                        session, headers, httpRequest, extractHeaderValues(headers), treatNilableAsOptional,
-                        authContext);
+                CallToolResult|InputRequiredResult|error result = trap callToolForRemoteFunctions(mcpService,
+                        params.cloneReadOnly(), session, headers, httpRequest, extractHeaderValues(headers),
+                        treatNilableAsOptional, authContext, new);
                 if result is ParameterBindingError || result is InsufficientScopeError {
                     return result;
                 }
                 if result is error {
                     return toToolExecutionError(result, params.name);
                 }
-                return result;
+                if result is InputRequiredResult {
+                    return error ServerError(INPUT_REQUIRED_ON_LEGACY);
+                }
+                return <CallToolResult>result;
             }
             return error DispatcherError("MCP service is not available");
         }

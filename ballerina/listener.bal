@@ -70,9 +70,11 @@ public isolated class StreamableHttpListener {
         if (cacheHints.discover?.ttlMs ?: 0) < 0 || (cacheHints.listTools?.ttlMs ?: 0) < 0 {
             return error DispatcherError("Cache hint ttlMs must be non-negative");
         }
+        RequestStateSigner requestStateSigner = check new (serviceConfig.requestState);
         ServerAuthenticator? authenticator = check createServerAuthenticator(mcpService, serviceConfig);
         http:HttpServiceConfig httpServiceConfig = toHttpServiceConfig(serviceConfig, authenticator);
-        final DispatcherService dispatcherService = getDispatcherService(httpServiceConfig, authenticator, self.subscriptions);
+        final DispatcherService dispatcherService = getDispatcherService(httpServiceConfig, authenticator,
+                self.subscriptions, requestStateSigner);
         check addMcpServiceToDispatcher(dispatcherService, mcpService);
         lock {
             string? metadataHost = ();

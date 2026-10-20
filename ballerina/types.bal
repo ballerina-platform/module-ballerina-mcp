@@ -627,6 +627,19 @@ public type StreamableHttpServiceConfiguration record {|
     HttpSessionMode sessionMode = AUTO;
     # Caching hints sent to modern clients on cacheable results
     CacheHints cacheHints = {};
+    # Signing of the request state returned in input-required results
+    RequestStateConfig requestState = {};
+|};
+
+# How the request state of input-required results is signed. Request state is signed, not
+# encrypted: clients can read it, so it must not hold anything they should not see.
+public type RequestStateConfig record {|
+    # Signing secrets, each at least 32 bytes. The first signs and all verify, so a key can be rotated
+    # by putting its replacement first. Without keys, each service generates a random key of its own when
+    # it is attached, so replicas that share continuations must configure the same keys.
+    string[] keys = [];
+    # Seconds a request state stays valid, renewed on every round. Must be positive.
+    decimal ttl = 600;
 |};
 
 # HTTP settings of the service that serves an MCP endpoint. These are the settings of
@@ -726,12 +739,194 @@ public type ConnectionInfo record {|
     string instructions?;
 |};
 
-# Embedded server input request. Only declared client capabilities may be requested.
-public type InputRequest record {|
-    # The requested input operation.
-    "elicitation/create"|"sampling/createMessage"|"roots/list" method;
-    # Parameters describing the requested input.
-    RequestParams params?;
+# An input request a server embeds in an input-required result. Elicitation is the only kind supported.
+public type InputRequest ElicitRequest;
+
+# An elicitation the server embeds in an input-required result. Only declared elicitation modes may be requested.
+public type ElicitRequest record {|
+    # The elicitation method.
+    "elicitation/create" method = "elicitation/create";
+    # A form elicitation or a URL elicitation.
+    FormElicitationParams|UrlElicitationParams params;
+|};
+
+# Asks the user to fill in a form the client renders.
+public type FormElicitationParams record {|
+    # The elicitation mode.
+    "form" mode = "form";
+    # The message to show the user.
+    string message;
+    # The form schema describing the fields to collect.
+    FormSchema requestedSchema;
+|};
+
+# Asks the user to open a URL, for an out-of-band step.
+public type UrlElicitationParams record {|
+    # The elicitation mode.
+    "url" mode;
+    # The message to show the user.
+    string message;
+    # The absolute URL the user should open.
+    string url;
+|};
+
+# A flat object of string, number, boolean and enum fields describing an elicitation form.
+public type FormSchema record {|
+    # JSON Schema dialect.
+    string \$schema?;
+    # Always an object.
+    "object" 'type = "object";
+    # Field schemas keyed by field name.
+    map<FormFieldSchema> properties;
+    # Names of the fields the user must fill in.
+    string[] required?;
+|};
+
+# The schema of one form field.
+public type FormFieldSchema StringFieldSchema|NumberFieldSchema|BooleanFieldSchema|EnumFieldSchema|
+    TitledEnumFieldSchema|MultiSelectEnumFieldSchema|TitledMultiSelectEnumFieldSchema|LegacyTitledEnumFieldSchema;
+
+# A free-text form field.
+public type StringFieldSchema record {|
+    # The JSON type.
+    "string" 'type;
+    # A display label.
+    string title?;
+    # A description of the field.
+    string description?;
+    # The minimum length.
+    int minLength?;
+    # The maximum length.
+    int maxLength?;
+    # The expected string format.
+    "email"|"uri"|"date"|"date-time" format?;
+    # The initial value.
+    string default?;
+|};
+
+# A numeric form field.
+public type NumberFieldSchema record {|
+    # The JSON type.
+    "number"|"integer" 'type;
+    # A display label.
+    string title?;
+    # A description of the field.
+    string description?;
+    # The minimum value.
+    decimal minimum?;
+    # The maximum value.
+    decimal maximum?;
+    # The initial value.
+    decimal default?;
+|};
+
+# A yes/no form field.
+public type BooleanFieldSchema record {|
+    # The JSON type.
+    "boolean" 'type;
+    # A display label.
+    string title?;
+    # A description of the field.
+    string description?;
+    # The initial value.
+    boolean default?;
+|};
+
+# A single-select field whose options are their own labels.
+public type EnumFieldSchema record {|
+    # The JSON type.
+    "string" 'type;
+    # A display label.
+    string title?;
+    # A description of the field.
+    string description?;
+    # The allowed values.
+    string[] 'enum;
+    # The initially selected value.
+    string default?;
+|};
+
+# A single-select field whose labels are listed in `enumNames`, in the order of `enum`. MCP keeps this
+# shape for older servers; the client accepts it, but a service cannot send it. Use `TitledEnumFieldSchema`.
+public type LegacyTitledEnumFieldSchema record {|
+    # The JSON type.
+    "string" 'type;
+    # A display label.
+    string title?;
+    # A description of the field.
+    string description?;
+    # The allowed values.
+    string[] 'enum;
+    # A display label for each allowed value.
+    string[] enumNames;
+    # The initially selected value.
+    string default?;
+|};
+
+# A single-select field whose options carry display labels.
+public type TitledEnumFieldSchema record {|
+    # The JSON type.
+    "string" 'type;
+    # A display label.
+    string title?;
+    # A description of the field.
+    string description?;
+    # The allowed values with their labels.
+    TitledOption[] oneOf;
+    # The initially selected value.
+    string default?;
+|};
+
+# A multi-select field whose options are their own labels.
+public type MultiSelectEnumFieldSchema record {|
+    # The JSON type.
+    "array" 'type;
+    # A display label.
+    string title?;
+    # A description of the field.
+    string description?;
+    # The minimum number of selections.
+    int minItems?;
+    # The maximum number of selections.
+    int maxItems?;
+    # The allowed values.
+    record {|
+        # The JSON type of each selection.
+        "string" 'type = "string";
+        # The allowed values.
+        string[] 'enum;
+    |} items;
+    # The initially selected values.
+    string[] default?;
+|};
+
+# A multi-select field whose options carry display labels.
+public type TitledMultiSelectEnumFieldSchema record {|
+    # The JSON type.
+    "array" 'type;
+    # A display label.
+    string title?;
+    # A description of the field.
+    string description?;
+    # The minimum number of selections.
+    int minItems?;
+    # The maximum number of selections.
+    int maxItems?;
+    # The allowed values with their labels.
+    record {|
+        # The allowed values with their labels.
+        TitledOption[] anyOf;
+    |} items;
+    # The initially selected values.
+    string[] default?;
+|};
+
+# An enum option with a display label.
+public type TitledOption record {|
+    # The value sent back when the option is chosen.
+    string 'const;
+    # The label shown to the user.
+    string title;
 |};
 
 # Additional input required before the original operation can complete.
@@ -745,12 +940,24 @@ public type InputRequiredResult record {
     string requestState?;
 };
 
-# An input result supplied by the application, for example an elicitation response.
-public type InputResponse record {
+# The client's answer to an input request, sent back on the continuation.
+public type InputResponse ElicitResult;
+
+# The user's answer to an elicitation.
+public type ElicitResult record {
+    *ResultFields;
+    # Whether the user submitted the form or opened the URL, declined, or dismissed the elicitation.
+    "accept"|"decline"|"cancel" action;
+    # The submitted form values, keyed by field name.
+    map<ElicitationValue> content?;
 };
 
-# Callback for gathering input requested by a server. It is invoked outside client locks.
-public type InputHandler isolated function (InputRequest inputRequest) returns InputResponse|ClientError;
+# A value the user submitted for one form field.
+public type ElicitationValue string|int|float|decimal|boolean|string[];
+
+# Answers elicitations for the client. It is invoked once per input request, outside client locks.
+# The client does not validate the answer against the form schema.
+public type ElicitationHandler isolated function (ElicitRequest elicitRequest) returns ElicitResult|ClientError;
 
 # Selects change notifications for a subscription.
 public type SubscriptionFilter record {|

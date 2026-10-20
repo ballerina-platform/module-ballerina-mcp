@@ -25,10 +25,10 @@ public type StreamableHttpClientConfig record {|
     HttpClientConfig httpConfig = {};
     # Reuse of modern results while their caching hints keep them fresh. `()` disables reuse.
     ResultCacheConfig? resultCache = {};
-    # Optional application callback for embedded input requests.
-    InputHandler inputHandler?;
+    # Answers elicitations in input-required results, and advertises the elicitation capability.
+    ElicitationHandler elicitationHandler?;
     # Maximum number of input-required continuations per call.
-    int maxInputRounds = 8;
+    int maxInputRounds = 10;
     # Legacy session to resume; cannot be combined with `"modern"`.
     string sessionId?;
 |};
@@ -553,8 +553,7 @@ isolated class StreamableHttpClientTransport {
             returns JsonRpcMessage|StreamableHttpTransportError {
         do {
             json payload = check response.getJsonPayload();
-            JsonRpcMessage result = check payload.cloneWithType();
-            return result;
+            return check toLegacyMessage(payload);
         } on fail error e {
             return error ResponseParsingError(
                 string `Unable to parse JSON response: ${e.message()}`

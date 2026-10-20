@@ -16,6 +16,7 @@
 
 import ballerina/http;
 import ballerina/test;
+import ballerina/time;
 
 @StreamableHttpServiceConfig {info: {name: "modern-test", version: "1"}}
 service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
@@ -34,7 +35,14 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
                 },
                 {name: "continue", inputSchema: {'type: "object"}},
                 {name: "ask", inputSchema: {'type: "object"}},
+                {name: "survey", inputSchema: {'type: "object"}},
+                {name: "openLink", inputSchema: {'type: "object"}},
+                {name: "mixedAnswers", inputSchema: {'type: "object"}},
                 {name: "loop", inputSchema: {'type: "object"}},
+                {name: "count", inputSchema: {'type: "object"}},
+                {name: "probe", inputSchema: {'type: "object"}},
+                {name: "dropState", inputSchema: {'type: "object"}},
+                {name: "shed", inputSchema: {'type: "object"}},
                 {
                     name: "schemaMetadata",
                     inputSchema: {
@@ -54,21 +62,130 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
         if callParams.name == "scalar" || callParams.name == "schemaMetadata" {
             return {resultType: "complete", content: [], structuredContent: 42};
         }
-        if callParams.name == "ask" && callParams.inputResponses is () {
+        if callParams.name == "ask" {
+            InputResponse? answer = (callParams.inputResponses ?: {})["answer"];
+            if answer is () {
+                return {
+                    requestState: "echo-only-state",
+                    inputRequests: {
+                        "answer": {
+                            params: {
+                                message: "Confirm the deletion",
+                                requestedSchema: {
+                                    properties: {confirmed: {'type: "boolean", description: "Delete it?"}},
+                                    required: ["confirmed"]
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+            string confirmed = (answer.content ?: {})["confirmed"].toString();
+            string text = string `${answer.action}:${confirmed}:${callParams.requestState ?: ""}`;
+            return {resultType: "complete", content: [{'type: "text", text}]};
+        }
+        if callParams.name == "survey" {
+            map<InputResponse> answers = callParams.inputResponses ?: {};
+            if answers.length() == 0 {
+                // Every field schema kind, so the client parses each one from the wire.
+                FormSchema confirmSchema = {
+                    properties: {
+                        confirmed: {'type: "boolean", default: false},
+                        name: {'type: "string", minLength: 1, format: "email"},
+                        age: {'type: "integer", minimum: 0, maximum: 150},
+                        color: {'type: "string", 'enum: ["red", "green"], default: "red"},
+                        size: {'type: "string", oneOf: [{'const: "s", title: "Small"}]},
+                        tags: {'type: "array", maxItems: 2, items: {'enum: ["a", "b"]}},
+                        labels: {'type: "array", items: {anyOf: [{'const: "x", title: "X"}]}, default: ["x"]}
+                    },
+                    required: ["confirmed"]
+                };
+                // Keys deliberately out of alphabetical order: the client must follow the server's order.
+                return {
+                    inputRequests: {
+                        "zeta": {params: {message: "First", requestedSchema: confirmSchema}},
+                        "alpha": {params: {message: "Second", requestedSchema: confirmSchema}}
+                    }
+                };
+            }
+            return {resultType: "complete", content: [{'type: "text", text: answers.keys().sort().toString()}]};
+        }
+        if callParams.name == "openLink" {
+            if callParams.inputResponses is () {
+                return {
+                    inputRequests: {
+                        "connect": {params: {mode: "url", message: "Connect", url: "https://example.com/connect"}}
+                    }
+                };
+            }
+            return {resultType: "complete", content: [{'type: "text", text: "connected"}]};
+        }
+        if callParams.name == "mixedAnswers" {
+            // Reports which answers arrived with content, so the client's stripping is visible on the wire.
+            map<InputResponse>? answers = callParams.inputResponses;
+            if answers is () {
+                FormSchema confirmSchema = {properties: {confirmed: {'type: "boolean"}}};
+                return {
+                    inputRequests: {
+                        "link": {params: {mode: "url", message: "url", url: "https://example.com/connect"}},
+                        "linkDeclined": {params: {mode: "url", message: "decline", url: "https://example.com/connect"}},
+                        "accepted": {params: {message: "accept", requestedSchema: confirmSchema}},
+                        "declined": {params: {message: "decline", requestedSchema: confirmSchema}},
+                        "cancelled": {params: {message: "cancel", requestedSchema: confirmSchema}}
+                    }
+                };
+            }
+            string[] withContent = from [string, InputResponse] [key, answer] in answers.entries()
+                where answer.hasKey("content")
+                order by key
+                select key;
+            return {resultType: "complete", content: [{'type: "text", text: withContent.toString()}]};
+        }
+        if callParams.name == "count" {
+            // Never completes; each round's message is its 1-based round number.
+            int round = nextRound(callParams);
             return {
-                resultType: "input_required",
-                requestState: "echo-only-state",
+                requestState: round.toString(),
                 inputRequests: {
-                    "answer": {
-                        method: "elicitation/create",
+                    "again": {
                         params: {
-                            "mode": "form",
-                            "message": "Confirm",
-                            "requestedSchema": {"type": "object"}
+                            message: round.toString(),
+                            requestedSchema: {properties: {confirmed: {'type: "boolean"}}}
                         }
                     }
                 }
             };
+        }
+        if callParams.name == "probe" {
+            // One state-only round, then report what the continuation carried.
+            string? requestState = callParams.requestState;
+            if requestState is () {
+                return {requestState: PROBE_STATE};
+            }
+            string sent = callParams.inputResponses is () ? "none" : "sent";
+            return {resultType: "complete", content: [{'type: "text", text: sent + "|" + requestState}]};
+        }
+        if callParams.name == "dropState" {
+            // Round one sends state, round two none; round three reports what it received.
+            ElicitRequest confirm = {params: {message: "Confirm", requestedSchema: {properties: {confirmed: {'type: "boolean"}}}}};
+            if callParams.inputResponses is () {
+                return {requestState: "first", inputRequests: {"one": confirm}};
+            }
+            if callParams.requestState == "first" {
+                return {inputRequests: {"two": confirm}};
+            }
+            return {resultType: "complete", content: [{'type: "text", text: callParams.requestState ?: "absent"}]};
+        }
+        if callParams.name == "shed" {
+            // Sheds load for five state-only rounds, recording when each call arrives.
+            lock {
+                shedArrivals.push(time:monotonicNow());
+            }
+            int round = nextRound(callParams);
+            if round <= 5 {
+                return {requestState: round.toString()};
+            }
+            return {resultType: "complete", content: [{'type: "text", text: "served"}]};
         }
         if (callParams.name == "continue" && callParams.requestState is ()) || callParams.name == "loop" {
             return {resultType: "input_required", requestState: "opaque-state"};
@@ -76,6 +193,17 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
         return {resultType: "complete", content: [{'type: "text", text: callParams.requestState ?: "ok"}]};
     }
 }
+
+isolated decimal[] shedArrivals = [];
+
+// The 1-based round of a call whose request state holds the previous round number.
+isolated function nextRound(CallToolParams callParams) returns int {
+    int|error previous = int:fromString(callParams.requestState ?: "0");
+    return (previous is int ? previous : 0) + 1;
+}
+
+// Whitespace, escapes and non-ASCII that a lossy echo would alter.
+const PROBE_STATE = " ü\"{\\n}\t 💡 ";
 
 final http:Client modernHttpClient = check new ("http://localhost:3205");
 
@@ -146,7 +274,7 @@ function testClientCanDiscoverAndAdoptModernConnection() returns error? {
     test:assertEquals(connection.protocolVersion, LATEST_PROTOCOL_VERSION);
     test:assertEquals(connection.serverInfo?.name, "modern-test");
     ListToolsResult tools = check discoveryClient->listTools();
-    test:assertEquals(tools.tools.length(), 6);
+    test:assertEquals(tools.tools.length(), 13);
     check discoveryClient->close();
 }
 
@@ -166,7 +294,7 @@ function testModernClientWideResultAndContinuation() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
     ListToolsResult toolList = check modernClient->listTools();
-    test:assertEquals(toolList.tools.length(), 6);
+    test:assertEquals(toolList.tools.length(), 13);
     test:assertEquals(toolList.ttlMs, 0);
     test:assertEquals(toolList.cacheScope, "private");
     CallToolResult scalarResult = check modernClient->callTool({name: "scalar"});
@@ -344,26 +472,221 @@ function testModernErrorWithoutIdDoesNotTriggerLegacyFallback() returns error? {
     }
 }
 
-isolated function acceptTestInput(InputRequest inputRequest) returns InputResponse|ClientError {
-    if inputRequest.method != "elicitation/create" {
-        return error ClientError("Unexpected input request");
-    }
-    return {"action": "accept"};
+isolated function confirmTestElicitation(ElicitRequest inputRequest) returns ElicitResult|ClientError {
+    return {action: "accept", content: {confirmed: true}};
 }
 
 @test:Config {}
-function testElicitationHandlerAndContinuationLimit() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp", inputHandler = acceptTestInput,
-        maxInputRounds = 2
-    );
-    _ = check modernClient->connect(capabilities = {elicitation: {form: {}}});
+function testHandlerCompletesFormElicitation() returns error? {
+    // No capabilities passed to connect(): the configured handler advertises elicitation itself.
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation);
+    _ = check modernClient->connect();
     CallToolResult callResult = check modernClient->callTool({name: "ask"});
-    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "echo-only-state"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "accept:true:echo-only-state"});
+    check modernClient->close();
+}
+
+isolated string[] handledMessages = [];
+
+isolated function recordTestElicitation(ElicitRequest inputRequest) returns ElicitResult|ClientError {
+    lock {
+        handledMessages.push(inputRequest.params.message);
+    }
+    return {action: "accept", content: {confirmed: true}};
+}
+
+@test:Config {}
+function testHandlerAnswersInputRequestsInServerOrder() returns error? {
+    lock {
+        handledMessages.removeAll();
+    }
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = recordTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "survey"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "[\"alpha\",\"zeta\"]"});
+    lock {
+        test:assertEquals(handledMessages, ["First", "Second"]);
+    }
+    check modernClient->close();
+}
+
+@test:Config {}
+function testHandlerCapabilityMergesWithConnectCapabilities() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation);
+    // Declaring only form must not hide the URL mode the handler also answers.
+    _ = check modernClient->connect(capabilities = {elicitation: {form: {}}});
+    CallToolResult callResult = check modernClient->callTool({name: "openLink"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "connected"});
+    check modernClient->close();
+}
+
+isolated string[] failedPrompts = [];
+
+isolated function failTestElicitation(ElicitRequest inputRequest) returns ElicitResult|ClientError {
+    lock {
+        failedPrompts.push(inputRequest.params.message);
+    }
+    return error ClientError("The user closed the client");
+}
+
+@test:Config {}
+function testHandlerErrorEndsTheCallWithoutAContinuation() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = failTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult|ClientError callResult = modernClient->callTool({name: "count"});
+    if callResult !is ClientError {
+        test:assertFail("Expected the handler's error");
+    }
+    test:assertEquals(callResult.message(), "The user closed the client");
+    // A continuation would have reached round 2 and asked the handler again.
+    lock {
+        test:assertEquals(failedPrompts, ["1"]);
+    }
+    check modernClient->close();
+}
+
+isolated string[] openedUrls = [];
+
+isolated function openTestUrl(ElicitRequest inputRequest) returns ElicitResult|ClientError {
+    FormElicitationParams|UrlElicitationParams params = inputRequest.params;
+    if params !is UrlElicitationParams {
+        return error ClientError("Expected a URL elicitation");
+    }
+    lock {
+        openedUrls.push(params.url);
+    }
+    return {action: "accept"};
+}
+
+@test:Config {}
+function testHandlerCompletesUrlElicitation() returns error? {
+    lock {
+        openedUrls.removeAll();
+    }
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp", elicitationHandler = openTestUrl);
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "openLink"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "connected"});
+    lock {
+        test:assertEquals(openedUrls, ["https://example.com/connect"]);
+    }
+    check modernClient->close();
+}
+
+@test:Config {}
+function testFormOnlyClientCannotReceiveUrlElicitation() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    _ = check modernClient->connect(capabilities = {elicitation: {form: {}}});
+    CallToolResult|InputRequiredResult|ClientError callResult = modernClient->callToolOnce({name: "openLink"});
+    if callResult !is ServerResponseError {
+        test:assertFail("Expected the missing-capability error");
+    }
+    JsonRpcError rpcError = check callResult.detail()["rpcError"].ensureType();
+    test:assertEquals(rpcError.'error.code, MISSING_REQUIRED_CLIENT_CAPABILITY);
+    test:assertEquals(rpcError.'error["data"], {requiredCapabilities: {elicitation: {url: {}}}});
+    check modernClient->close();
+}
+
+// Answers every elicitation with content, even where the user submitted none.
+isolated function overshareTestElicitation(ElicitRequest inputRequest) returns ElicitResult|ClientError {
+    string message = inputRequest.params.message;
+    "accept"|"decline"|"cancel" action = message == "decline" ? "decline" : message == "cancel" ? "cancel" : "accept";
+    return {action, content: {confirmed: true}};
+}
+
+@test:Config {}
+function testContinuationStripsContentTheUserDidNotSubmit() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = overshareTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "mixedAnswers"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "[\"accepted\"]"});
+    check modernClient->close();
+}
+
+@test:Config {}
+function testContinuationLimit() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation, maxInputRounds = 2);
+    _ = check modernClient->connect();
     var exhaustedResult = modernClient->callTool({name: "loop"});
     test:assertTrue(exhaustedResult is ToolCallError);
     if exhaustedResult is ToolCallError {
         test:assertTrue(exhaustedResult.message().includes("Maximum input-required"));
     }
+    check modernClient->close();
+}
+
+@test:Config {}
+function testContinuationsStopAfterTenRoundsByDefault() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult|ClientError exhaustedResult = modernClient->callTool({name: "count"});
+    if exhaustedResult !is ToolCallError {
+        test:assertFail("Expected a tool call error once the rounds ran out");
+    }
+    // The first call plus ten continuations: the error carries the eleventh result.
+    InputRequiredResult lastResult = check exhaustedResult.detail()["inputRequired"].ensureType();
+    test:assertEquals((lastResult.inputRequests ?: {})["again"]?.params?.message, "11");
+    check modernClient->close();
+}
+
+@test:Config {}
+function testStateOnlyContinuationOmitsInputResponses() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "probe"});
+    TextContent text = check callResult.content[0].ensureType();
+    test:assertTrue(text.text.startsWith("none|"), text.text);
+    check modernClient->close();
+}
+
+@test:Config {}
+function testContinuationEchoesRequestStateExactly() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "probe"});
+    TextContent text = check callResult.content[0].ensureType();
+    test:assertEquals(text.text.substring(<int>text.text.indexOf("|") + 1), PROBE_STATE);
+    check modernClient->close();
+}
+
+@test:Config {}
+function testContinuationOmitsRequestStateTheServerDidNotSend() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = confirmTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "dropState"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "absent"});
+    check modernClient->close();
+}
+
+@test:Config {}
+function testStateOnlyRoundsBackOffToACap() returns error? {
+    lock {
+        shedArrivals.removeAll();
+    }
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    _ = check modernClient->connect();
+    CallToolResult callResult = check modernClient->callTool({name: "shed"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "served"});
+    decimal[] arrivals;
+    lock {
+        arrivals = shedArrivals.clone();
+    }
+    test:assertEquals(arrivals.length(), 6);
+    decimal[] minimumGaps = [0.05, 0.1, 0.2, 0.25, 0.25];
+    foreach int i in 0 ..< minimumGaps.length() {
+        decimal gap = arrivals[i + 1] - arrivals[i];
+        test:assertTrue(gap >= minimumGaps[i], string `Round ${i + 1} retried after ${gap}s`);
+    }
+    // Capped: the last wait stays at 250 ms instead of doubling to 400 ms.
+    test:assertTrue(arrivals[5] - arrivals[4] < 0.4d, string `Last retry after ${arrivals[5] - arrivals[4]}s`);
     check modernClient->close();
 }
 
@@ -388,9 +711,9 @@ function testMissingClientCapabilityRemainsAModernError() returns error? {
 
 @test:Config {}
 function testEmptyElicitationCapabilityRetainsFormCompatibility() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp", inputHandler = acceptTestInput);
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect(capabilities = {elicitation: {}});
-    CallToolResult callResult = check modernClient->callTool({name: "ask"});
-    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "echo-only-state"});
+    CallToolResult|InputRequiredResult callResult = check modernClient->callToolOnce({name: "ask"});
+    test:assertTrue(callResult is InputRequiredResult);
     check modernClient->close();
 }

@@ -80,6 +80,8 @@ A tool may bind these runtime values in addition to ordinary `anydata` arguments
 - `mcp:HttpSession` or `mcp:HttpSession?`, at any position, for legacy HTTP session state.
 - `mcp:RequestMeta?`, at any position, for the request's `_meta` value.
 - `@http:Header` parameters, `http:Headers`, and `http:Request` for Streamable HTTP request data.
+- `mcp:Context`, at any position, for the input responses and request state of a continuation (see
+  [Eliciting input from a basic service](#eliciting-input-from-a-basic-service)).
 
 Runtime parameters do not appear in the generated tool input schema. Request metadata must be nilable because clients
 may omit it.
@@ -146,6 +148,134 @@ This produces a `region` property containing `"x-mcp-header": "Region"`. `@mcp:A
 schema properties may carry `x-mcp-header`, so the client leaves out of `listTools()` any tool whose header
 declarations are invalid, such as one on a `number` property. Use `@http:Header` when a value comes only from an HTTP
 header and must not be part of the MCP tool arguments.
+
+### Eliciting input from a basic service
+
+On the modern protocol, a tool can ask the user for input by returning an `mcp:InputRequiredResult` instead of its
+result. Build its elicitations with `mcp:elicitForm(message, schema)` or `mcp:elicitUrl(message, url)`. The client
+answers them and retries the call as a continuation. The tool then runs again from the top and reads the answers
+through an `mcp:Context` parameter.
+
+```ballerina
+type Confirmation record {|
+    boolean confirmed;
+|};
+
+remote isolated function deleteRepository(string name, mcp:Context context)
+        returns string|mcp:InputRequiredResult {
+    Confirmation? confirmation = context.acceptedContent("confirm");
+    if confirmation is () {
+        return {
+            inputRequests: {
+                "confirm": mcp:elicitForm(string `Delete ${name}?`, {
+                    properties: {confirmed: {'type: "boolean", description: "Confirm deletion"}},
+                    required: ["confirmed"]
+                })
+            }
+        };
+    }
+    return confirmation.confirmed ? "Deleted" : "Kept";
+}
+```
+
+The schema can also be a record type. Its form schema is generated at compile time: each field becomes a form
+field, its doc comment becomes the field's description, and optional fields and fields with defaults are left out of
+`required`. Read the answer back as the same type.
+
+```ballerina
+enum Seating {
+    INDOOR = "indoor",
+    PATIO = "patio"
+}
+
+type TableBooking record {|
+    # Who the table is for
+    string name;
+    # How many people are coming
+    int guests;
+    # Where to sit
+    Seating seating;
+    # Anything the kitchen should know
+    string notes?;
+|};
+
+remote isolated function bookTable(mcp:Context context) returns string|mcp:InputRequiredResult {
+    TableBooking? booking = context.acceptedContent("booking");
+    if booking is () {
+        return {inputRequests: {"booking": mcp:elicitForm("Book a table", TableBooking)}};
+    }
+    return string `Booked for ${booking.name}`;
+}
+```
+
+A field must be a `string`, `int`, `float`, `decimal` or `boolean`, which become text, integer, number and yes/no
+fields; a union of string constants or an `enum`, which becomes a single-select field; or an array of those, which
+becomes a multi-select field. Any other field type, such as a nested record, `json`, an array of records or a nilable
+type, is a compile error. The record type must be named at the call site; a `typedesc` variable is a compile error.
+
+`mcp:Context` is read-only and covers one round:
+
+- `acceptedContent(key, T)` returns the submitted content as `T`. It returns `()` when the input request was not
+  answered, was declined or cancelled, or its content does not convert to `T`, so treat `()` as "ask again".
+- `elicitResult(key)` returns the raw `mcp:ElicitResult`, to tell a decline from a cancel or to read the answer to
+  a URL elicitation (see [Completing a URL elicitation](#completing-a-url-elicitation)).
+- `requestState()` returns the request state the tool returned in the previous round.
+
+Neither `mcp:Context` nor `mcp:InputRequiredResult` appears in the generated tool schemas.
+
+Because the tool runs again on every round, work done before it decides to ask is repeated. Keep that work safe to
+repeat, and put anything expensive or non-repeatable after the ask or in the request state. The request state is
+readable by the client, so do not put secrets in it; see [Request state](#request-state).
+
+On a legacy call the context is empty, so a tool that does not need input works for older clients. A tool that
+returns an input-required result on a legacy call gets a JSON-RPC error. The service checks input-required results
+as described in [Eliciting input from an advanced service](#eliciting-input-from-an-advanced-service).
+
+### Completing a URL elicitation
+
+A URL elicitation sends the user to a page outside the MCP client, for example to connect a third-party account. An
+`accept` answer only means the user agreed to open the URL, not that they finished there. The page reports
+completion to the service out of band, so on each continuation the tool checks its own store and, until the step is
+done, returns the URL elicitation again. A `decline` or `cancel` answer means the user will not open it.
+
+```ballerina
+remote isolated function listEvents(mcp:AuthContext auth, mcp:Context context)
+        returns string[]|mcp:InputRequiredResult|error {
+    string? subject = auth.subject;
+    if subject is () {
+        return error("The access token names no user");
+    }
+    if isConnected(subject) {
+        return fetchEvents(subject);
+    }
+    mcp:ElicitResult? answer = context.elicitResult("connect");
+    if answer is mcp:ElicitResult && answer.action != "accept" {
+        return error("The calendar is not connected");
+    }
+    // Reuse the previous round's link, whose id the request state carries, or issue a new one.
+    string connectionId = check issueConnectLink(context.requestState(), subject);
+    return {
+        inputRequests: {
+            "connect": mcp:elicitUrl("Connect your calendar",
+                    string `https://calendar.example.com/connect?id=${connectionId}`)
+        },
+        requestState: connectionId
+    };
+}
+```
+
+Anyone the URL is passed to can open it, so the page must check that the user who opened it is the user the
+elicitation was issued to. Record the `mcp:AuthContext` subject when issuing the link, sign the user in on the page
+through the same authorization server, and compare the subjects before accepting anything. Keep the URL free of
+credentials and user identifiers, do not make it grant access by itself, and serve it over HTTPS outside development.
+Store third-party tokens obtained on the page in the service; never return them to the client.
+
+The service only checks that the URL is absolute (a scheme and a host); `http` URLs are allowed for development.
+The connect page must also hold when the URL is altered: an unknown or expired id completes nothing, and a valid id
+completes only for its own user. The [calendar connect example][calendar-connect-example] runs the whole flow,
+including a connect page that rejects other users.
+
+[calendar-connect-example]: https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-calendar-connect-server
 
 ## Sessions
 
@@ -240,6 +370,98 @@ remote isolated function onListTools(mcp:Cursor? cursor) returns mcp:ListToolsRe
     return error mcp:InvalidParamsError("Unknown cursor");
 }
 ```
+
+### Eliciting input from an advanced service
+
+On the modern protocol, `onCallTool` can ask the user for input by returning an `InputRequiredResult` with
+elicitations. The client answers them and retries the call as a continuation, which carries the answers in
+`inputResponses` and echoes `requestState`. The handler runs again from the top, so work done before it decides
+to ask is repeated on every round.
+
+```ballerina
+remote isolated function onCallTool(mcp:CallToolParams params)
+        returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
+    mcp:ElicitResult? answer = (params.inputResponses ?: {})["confirm"];
+    if answer is () {
+        return {
+            inputRequests: {
+                "confirm": {
+                    params: {
+                        message: "Delete the repository?",
+                        requestedSchema: {
+                            properties: {confirmed: {'type: "boolean", description: "Confirm deletion"}},
+                            required: ["confirmed"]
+                        }
+                    }
+                }
+            }
+        };
+    }
+    boolean confirmed = answer.action == "accept" && (answer.content ?: {})["confirmed"] == true;
+    return {resultType: "complete", content: [{'type: "text", text: confirmed ? "Deleted" : "Kept"}]};
+}
+```
+
+A form schema is a flat object whose fields are string, number or integer, boolean, single-select enum (`enum`,
+or `oneOf` with titles) and multi-select enum (`items.enum`, or `items.anyOf` with titles) schemas. Elicitations
+use form mode by default; set `mode: "url"` with a `url` to send the user to an out-of-band page. The
+`mcp:elicitForm` and `mcp:elicitUrl` builders also work here. The older single-select shape with labels in
+`enumNames` is rejected; use `oneOf` with titles instead. The client still accepts it from other servers.
+
+Before sending an input-required result, the service checks it:
+
+- A result with neither `inputRequests` nor `requestState` is rejected with JSON-RPC `-32603`.
+- A form elicitation with a blank `message`, a `required` field missing from `properties`, inverted or negative
+  bounds, an empty enum or a default outside the enum is rejected with `-32603`.
+- A URL elicitation with a blank `message`, or a `url` that is not absolute (a scheme and a host), is rejected
+  with `-32603`. `http` URLs are allowed.
+- An elicitation in a mode the client did not declare is rejected with the missing-capability error, whose
+  `requiredCapabilities` names the mode. A client that declares an empty `elicitation` capability supports form.
+
+`inputRequests` and `inputResponses` hold `mcp:InputRequest` and `mcp:InputResponse` values. Elicitation is the only
+kind of input request, so these are `mcp:ElicitRequest` and `mcp:ElicitResult`.
+
+On a legacy call, `onCallTool` receives neither `inputResponses` nor `requestState`.
+
+### Request state
+
+The service signs every request state a handler returns (HMAC-SHA256) and verifies it on the continuation before
+the handler runs, so handlers only ever see the plain text they returned. The signature binds the state to:
+
+- the tool name and the arguments of the call, regardless of key order;
+- the caller's `mcp:AuthContext` (its issuer, client and subject), or to having no auth context;
+- an expiry, renewed on every round.
+
+A continuation whose state is malformed, tampered with, expired, or issued for another call or caller is rejected
+with JSON-RPC `-32602` "Invalid or expired requestState" and `data.reason` `invalid_request_state`. The specific
+reason is logged at debug level on the server only.
+
+Request state is signed, not encrypted: the client can read it, so do not put secrets in it.
+
+Configure signing with `requestState` on `@mcp:StreamableHttpServiceConfig`:
+
+```ballerina
+configurable string requestStateKey = ?;
+configurable string previousRequestStateKey = ?;
+
+@mcp:StreamableHttpServiceConfig {
+    info: {name: "files", version: "1.0.0"},
+    requestState: {keys: [requestStateKey, previousRequestStateKey], ttl: 300}
+}
+service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9090) {
+}
+```
+
+- `keys` are secrets of at least 32 bytes. The first signs and all verify, so rotate a key by putting its
+  replacement first and removing the old key once its state has expired.
+- `ttl` is how long, in seconds, a request state stays valid (default 600). It bounds the idle time of each round,
+  not the length of a whole flow.
+
+Services that share `keys` accept each other's request state for the same tool, arguments and caller, so give
+unrelated services their own keys. Without `keys`, each service generates a random key of its own when it is
+attached. Its state does not survive a restart and is not accepted by other services or replicas, so deployments with
+more than one replica must configure the same `keys` on each.
+Invalid keys or a non-positive `ttl` fail when the service is attached.
 
 ## Server authorization
 
@@ -348,10 +570,7 @@ public function main() returns error? {
         protocolMode = "auto"
     );
 
-    mcp:ConnectionInfo connection = check client->connect(
-        {name: "example-client", version: "2.0.0"},
-        {elicitation: {form: {}}}
-    );
+    mcp:ConnectionInfo connection = check client->connect({name: "example-client", version: "2.0.0"});
     io:println("Using MCP ", connection.protocolVersion);
 
     mcp:ListToolsResult listed = check client->listTools();
@@ -442,16 +661,20 @@ function needsReauthentication(error err) returns boolean {
 ```
 
 `callTool()` is the main API. When a modern server returns `InputRequiredResult`, it calls the configured
-`inputHandler`, echoes the opaque request state, and continues until the call completes or `maxInputRounds` is
-reached.
+`elicitationHandler` once for each input request, one at a time and in the order the server listed them. It then
+echoes the opaque request state and continues until the call completes or `maxInputRounds` is reached.
 
 ```ballerina
 mcp:StreamableHttpClientConfig config = {
     protocolMode: "auto",
     maxInputRounds: 4,
-    inputHandler: isolated function (mcp:InputRequest request)
-            returns mcp:InputResponse|mcp:ClientError {
-        return {action: "accept"};
+    elicitationHandler: isolated function (mcp:ElicitRequest request)
+            returns mcp:ElicitResult|mcp:ClientError {
+        mcp:FormElicitationParams|mcp:UrlElicitationParams params = request.params;
+        if params is mcp:UrlElicitationParams {
+            return {action: "decline"};
+        }
+        return {action: "accept", content: {confirmed: true}};
     },
     httpConfig: {timeout: 30}
 };
@@ -462,6 +685,19 @@ HTTP settings go under `httpConfig`, an `mcp:HttpClientConfig` with the fields a
 `http:ClientConfiguration`, except that `auth` also accepts `mcp:OAuthConfig`. With `mcp:OAuthConfig`, redirects are
 not followed and `init` returns an error if `followRedirects` enables them; the metadata and token endpoint requests
 reuse `secureSocket` and `proxy`.
+
+Configuring `elicitationHandler` advertises the `elicitation` capability with form and URL modes on every modern
+request, merged with the capabilities passed to `connect()`. The client does not validate answers against the
+form schema; the handler is responsible for that. Before a continuation, it removes `content` from URL-mode answers
+and from any decline or cancel answer, so only an accepted form sends what the user submitted.
+
+The module never opens, fetches or follows the URL of a URL elicitation; the handler presents it. A handler should:
+
+- show the full URL, with its domain highlighted, and warn about suspicious ones such as Punycode domains;
+- open the URL only after the user explicitly agrees, and never fetch it beforehand;
+- open it in the system browser or another context that the client and the model cannot inspect;
+- return `accept` once the user agrees to open it, without waiting for them to finish. The server asks again until
+  the out-of-band step is done, so return `cancel` when the user gives up.
 
 Use `callToolOnce()` when the application needs to handle each continuation itself. It returns
 `CallToolResult|InputRequiredResult` after one logical request. On a legacy connection it delegates to

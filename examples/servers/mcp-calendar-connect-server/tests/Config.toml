@@ -1,0 +1,2 @@
+[mcp_examples.calendar_connect]
+tokenSecret = "test-only-secret-for-the-calendar-connect-example"

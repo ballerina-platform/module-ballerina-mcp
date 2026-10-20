@@ -79,6 +79,7 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
 isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
         StreamableHttpServiceConfiguration serviceConfig, SubscriptionRegistry subscriptions,
+        RequestStateSigner requestStateSigner,
         ServerAuthenticator? authenticator = (), readonly & AuthContext? authContext = ())
         returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:InternalServerError|http:Response {
     string requestedVersion = getProtocolVersionFromHeaders(requestHeaders) ?: "";
@@ -197,6 +198,25 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if headerError is Error {
         return modernError(HEADER_MISMATCH, headerError.message(), requestMessage.id);
     }
+    string? requestState = callParams.requestState;
+    if requestState is string {
+        string|error verifiedState = requestStateSigner.verify(requestState, callParams, authContext);
+        if verifiedState is error {
+            log:printDebug("Rejected request state", verifiedState, toolName = callParams.name);
+            return <http:Ok>{
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: requestMessage.id,
+                    'error: {
+                        code: INVALID_PARAMS,
+                        message: "Invalid or expired requestState",
+                        data: {reason: "invalid_request_state"}
+                    }
+                }
+            };
+        }
+        callParams.requestState = verifiedState;
+    }
     CallToolResult|InputRequiredResult|error callResult = callProtocolTool(mcpService, callParams,
             httpRequest, requestHeaders, serviceConfig, authContext);
     if callResult is InsufficientScopeError {
@@ -224,6 +244,14 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
                 };
             }
             return createJsonRpcErrorResponse(INTERNAL_ERROR, inputError.message(), requestMessage.id);
+        }
+        string? returnedState = callResult.requestState;
+        if returnedState is string {
+            string|error signedState = requestStateSigner.sign(returnedState, callParams, authContext);
+            if signedState is error {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, "Failed to sign request state", requestMessage.id);
+            }
+            callResult.requestState = signedState;
         }
     }
     if callResult is CallToolResult && callResult.isError != true {
@@ -339,10 +367,11 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
             callResult = advancedResult.cloneWithType();
         }
     } else if mcpService is StreamableHttpService {
-        CallToolResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
+        Context toolContext = new ((callParams.inputResponses ?: {}).cloneReadOnly(), callParams.requestState);
+        CallToolResult|InputRequiredResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
                 applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
-                authContext);
+                authContext, toolContext);
         if structuredResult is InsufficientScopeError || structuredResult is ParameterBindingError {
             return structuredResult;
         }
@@ -362,26 +391,94 @@ isolated function validateInputRequired(InputRequiredResult inputResult, ClientC
         return error("Input-required result must contain inputRequests or requestState");
     }
     foreach InputRequest inputRequest in (inputResult.inputRequests ?: {}).toArray() {
-        string capabilityName = inputRequest.method == "elicitation/create" ? "elicitation" :
-                inputRequest.method == "sampling/createMessage" ? "sampling" : "roots";
-        if !clientCapabilities.hasKey(capabilityName) {
-            return error("Client did not declare the required capability: " + capabilityName,
-                    requiredCapabilities = {[capabilityName]: {}});
+        FormElicitationParams|UrlElicitationParams inputParams = inputRequest.params;
+        if !clientCapabilities.hasKey("elicitation") {
+            return error("Client did not declare the required capability: elicitation",
+                    requiredCapabilities = {elicitation: {[inputParams.mode]: {}}});
         }
-        if inputRequest.method == "elicitation/create" {
-            RequestParams inputParams = inputRequest.params ?: {};
-            anydata inputMode = inputParams["mode"] ?: "form";
-            if inputMode != "form" && inputMode != "url" {
-                return error("Invalid elicitation mode");
-            }
-            record {} elicitationCapabilities = clientCapabilities.elicitation ?: {};
-            boolean supportedMode = inputMode == "form" ?
-                    (elicitationCapabilities.length() == 0 || elicitationCapabilities.hasKey("form")) :
-                    elicitationCapabilities.hasKey("url");
-            if !supportedMode {
-                return error("Client did not declare the required elicitation mode",
-                        requiredCapabilities = {elicitation: {[<string>inputMode]: {}}});
-            }
+        record {} elicitationCapabilities = clientCapabilities.elicitation ?: {};
+        boolean supportedMode = inputParams.mode == "form" ?
+                (elicitationCapabilities.length() == 0 || elicitationCapabilities.hasKey("form")) :
+                elicitationCapabilities.hasKey("url");
+        if !supportedMode {
+            return error("Client did not declare the required elicitation mode",
+                    requiredCapabilities = {elicitation: {[inputParams.mode]: {}}});
+        }
+        if inputParams is FormElicitationParams {
+            check validateFormElicitation(inputParams);
+        } else {
+            check validateUrlElicitation(inputParams);
         }
     }
+}
+
+isolated function validateUrlElicitation(UrlElicitationParams urlParams) returns Error? {
+    if urlParams.message.trim().length() == 0 {
+        return error("URL elicitation must have a message");
+    }
+    // A scheme and a host, so the client can open the link without a base URL.
+    if !re `[A-Za-z][A-Za-z0-9+.\-]*://([^\s/?#@]*@)?(\[[0-9A-Fa-f:.]+\]|[^\s/?#@:\[\]]+)(:[0-9]*)?([/?#]\S*)?`
+            .isFullMatch(urlParams.url) {
+        return error("URL elicitation must have an absolute URL");
+    }
+}
+
+isolated function validateFormElicitation(FormElicitationParams formParams) returns Error? {
+    if formParams.message.trim().length() == 0 {
+        return error("Form elicitation must have a message");
+    }
+    map<FormFieldSchema> properties = formParams.requestedSchema.properties;
+    foreach string fieldName in formParams.requestedSchema.required ?: [] {
+        if !properties.hasKey(fieldName) {
+            return error(string `Form schema requires undeclared field '${fieldName}'`);
+        }
+    }
+    foreach [string, FormFieldSchema] [fieldName, fieldSchema] in properties.entries() {
+        // MCP keeps the enumNames shape only so clients can read older servers.
+        if fieldSchema is LegacyTitledEnumFieldSchema {
+            return error(string `Form schema field '${fieldName}' uses enumNames; use oneOf with titles`);
+        }
+        if !isValidFormField(fieldSchema) {
+            return error(string `Form schema field '${fieldName}' is outside the allowed subset`);
+        }
+    }
+}
+
+// The types fix each field's shape; this checks the constraints types cannot express.
+isolated function isValidFormField(FormFieldSchema fieldSchema) returns boolean {
+    if fieldSchema is StringFieldSchema {
+        return isValidRange(fieldSchema.minLength, fieldSchema.maxLength);
+    }
+    if fieldSchema is NumberFieldSchema {
+        decimal? minimum = fieldSchema.minimum;
+        decimal? maximum = fieldSchema.maximum;
+        return minimum is () || maximum is () || minimum <= maximum;
+    }
+    if fieldSchema is EnumFieldSchema {
+        return isValidSelection(fieldSchema.'enum, fieldSchema.default);
+    }
+    if fieldSchema is TitledEnumFieldSchema {
+        return isValidSelection(fieldSchema.oneOf.map(option => option.'const), fieldSchema.default);
+    }
+    if fieldSchema is MultiSelectEnumFieldSchema {
+        return isValidRange(fieldSchema.minItems, fieldSchema.maxItems) &&
+                isValidSelection(fieldSchema.items.'enum, ...fieldSchema.default ?: []);
+    }
+    if fieldSchema is TitledMultiSelectEnumFieldSchema {
+        return isValidRange(fieldSchema.minItems, fieldSchema.maxItems) &&
+                isValidSelection(fieldSchema.items.anyOf.map(option => option.'const), ...fieldSchema.default ?: []);
+    }
+    return true;
+}
+
+isolated function isValidRange(int? minimum, int? maximum) returns boolean =>
+    (minimum ?: 0) >= 0 && (maximum ?: 0) >= 0 && (minimum is () || maximum is () || minimum <= maximum);
+
+isolated function isValidSelection(string[] options, string?... selected) returns boolean {
+    foreach string? selectedValue in selected {
+        if selectedValue is string && options.indexOf(selectedValue) is () {
+            return false;
+        }
+    }
+    return options.length() > 0;
 }

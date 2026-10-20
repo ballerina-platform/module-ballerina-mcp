@@ -43,15 +43,15 @@ isolated function listProtocolToolsForRemoteFunctions(StreamableHttpService 'ser
 
 isolated function callToolForRemoteFunctions(StreamableHttpService 'service, CallToolParams params,
         HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
-        boolean treatNilableAsOptional, AuthContext? authContext, typedesc<CallToolResult> t = <>)
-        returns t|error = @java:Method {
+        boolean treatNilableAsOptional, AuthContext? authContext, Context toolContext,
+        typedesc<CallToolResult> t = CallToolResult) returns CallToolResult|InputRequiredResult|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
 isolated function callProtocolToolForRemoteFunctions(StreamableHttpService 'service, CallToolParams params,
         HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
-        boolean treatNilableAsOptional, AuthContext? authContext, typedesc<CallToolResult> t = <>)
-        returns t|error = @java:Method {
+        boolean treatNilableAsOptional, AuthContext? authContext, Context toolContext,
+        typedesc<CallToolResult> t = CallToolResult) returns CallToolResult|InputRequiredResult|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
