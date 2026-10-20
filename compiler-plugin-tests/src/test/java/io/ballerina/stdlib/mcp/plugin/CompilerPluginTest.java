@@ -317,9 +317,10 @@ public class CompilerPluginTest {
     @Test
     public void testFormSchemaTypeMustBeStaticRecordType() {
         DiagnosticResult result = compile("sample_package_35");
-        Assert.assertEquals(errorCount(result), 2L, result.diagnostics().toString());
+        Assert.assertEquals(errorCount(result), 3L, result.diagnostics().toString());
         assertError(result, 0, "must be a form schema value or a named record type", "MCP_120");
         assertError(result, 1, "must be a form schema value or a named record type", "MCP_120");
+        assertError(result, 2, "must be a form schema value or a named record type", "MCP_120");
     }
 
     private static String elicitFormSchemaArgument(BuildProject project) {

@@ -28,6 +28,7 @@ import io.ballerina.compiler.api.symbols.TypeDefinitionSymbol;
 import io.ballerina.compiler.api.symbols.TypeDescKind;
 import io.ballerina.compiler.api.symbols.TypeReferenceTypeSymbol;
 import io.ballerina.compiler.api.symbols.TypeSymbol;
+import io.ballerina.compiler.api.symbols.UnionTypeSymbol;
 import io.ballerina.compiler.syntax.tree.ExpressionNode;
 import io.ballerina.compiler.syntax.tree.FunctionArgumentNode;
 import io.ballerina.compiler.syntax.tree.FunctionCallExpressionNode;
@@ -73,7 +74,7 @@ public class ElicitFormAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisCo
         }
         Optional<ExpressionNode> schemaArgument = getSchemaArgument(call.arguments(),
                 getSchemaParameterPosition(elicitForm.get()));
-        if (schemaArgument.isEmpty() || !isTypedesc(semanticModel, schemaArgument.get())) {
+        if (schemaArgument.isEmpty() || !mayHoldTypedesc(semanticModel, schemaArgument.get())) {
             return;
         }
         ExpressionNode argument = schemaArgument.get();
@@ -129,10 +130,17 @@ public class ElicitFormAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisCo
         return Optional.empty();
     }
 
-    private static boolean isTypedesc(SemanticModel semanticModel, ExpressionNode argument) {
-        return semanticModel.typeOf(argument)
-                .map(type -> Utils.getRawType(type).typeKind() == TypeDescKind.TYPEDESC)
-                .orElse(false);
+    // A union such as `FormSchema|typedesc<record {}>` may hold a type at runtime, so it needs a named type too.
+    private static boolean mayHoldTypedesc(SemanticModel semanticModel, ExpressionNode argument) {
+        return semanticModel.typeOf(argument).map(ElicitFormAnalysisTask::mayHoldTypedesc).orElse(false);
+    }
+
+    private static boolean mayHoldTypedesc(TypeSymbol type) {
+        TypeSymbol rawType = Utils.getRawType(type);
+        if (rawType instanceof UnionTypeSymbol union) {
+            return union.memberTypeDescriptors().stream().anyMatch(ElicitFormAnalysisTask::mayHoldTypedesc);
+        }
+        return rawType.typeKind() == TypeDescKind.TYPEDESC;
     }
 
     // Only a reference to a record type definition names a type known at compile time.
