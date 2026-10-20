@@ -252,6 +252,22 @@ public class CompilerPluginTest {
     }
 
     @Test
+    public void testAdvancedHandlersBindHttpValuesAndCursor() {
+        DiagnosticResult result = compile("advanced_handler_http_parameters");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testAdvancedHandlerUnsupportedParameters() {
+        DiagnosticResult result = compile("advanced_handler_unsupported_parameters");
+        Assert.assertEquals(errorCount(result), 3L, result.diagnostics().toString());
+        assertError(result, 0, "Parameter 'session' in function 'onSubscribe' has an unsupported type", MCP_102);
+        assertError(result, 1, "'onSubscribe'", MCP_111);
+        assertError(result, 1, "must declare exactly one parameter of type mcp:SubscriptionFilter", MCP_111);
+        assertError(result, 2, "Parameter 'cursor' in function 'onListTools' has an unsupported type", MCP_102);
+    }
+
+    @Test
     public void testMcpArgumentHeaderAnnotation() {
         DiagnosticResult result = compile("sample_package_26");
         Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());

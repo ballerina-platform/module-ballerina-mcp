@@ -17,8 +17,8 @@
 import ballerina/http;
 import ballerina/jballerina.java;
 
-isolated function invokeAdvancedOnListTools(StreamableHttpAdvancedService 'service, http:Headers headers,
-        http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional,
+isolated function invokeAdvancedOnListTools(StreamableHttpAdvancedService 'service, Cursor? cursor,
+        http:Headers headers, http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional,
         AuthContext? authContext)
         returns ListToolsResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"

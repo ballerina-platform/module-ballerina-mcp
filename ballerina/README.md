@@ -208,8 +208,23 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
 
 `onListTools` and `onCallTool` are required. `onCallTool` may return `InputRequiredResult` for a modern
 continuation. An optional `onSubscribe(mcp:SubscriptionFilter)` method may return
-`stream<mcp:JsonRpcNotification, error?>|mcp:ServerError` for change notifications. Advanced handlers can bind the
-same HTTP request values as basic tools; `onCallTool` reads request metadata from `CallToolParams._meta`.
+`stream<mcp:JsonRpcNotification, error?>|mcp:ServerError` for change notifications. All three handlers can bind the
+same HTTP request values as basic tools (`http:Headers`, `http:Request`, `@http:Header` and `mcp:AuthContext`);
+`onSubscribe` binds them from the `subscriptions/listen` request, so a service whose tool list varies by caller can
+scope its notifications to that caller. `onCallTool` reads request metadata from `CallToolParams._meta`.
+
+`onListTools` may declare an `mcp:Cursor?` parameter to return its tools in pages. It receives the request's cursor,
+or `()` for the first page, and sets `nextCursor` on every page but the last. A basic service always returns all of
+its tools in one page.
+
+```ballerina
+remote isolated function onListTools(mcp:Cursor? cursor) returns mcp:ListToolsResult|mcp:ServerError {
+    if cursor is () {
+        return {tools: firstPage, nextCursor: "page-2"};
+    }
+    return {tools: secondPage};
+}
+```
 
 ## Server authorization
 
@@ -288,7 +303,7 @@ service mcp:StreamableHttpService /files on mcpListener {
   ```
 - `offline_access` cannot be used in `requiredScopes`, `scopesSupported`, or tool `scopes`. It asks the authorization
   server for a refresh token rather than granting access to this server, so clients request it themselves.
-- Declare an `mcp:AuthContext` parameter on a tool, or on `onListTools`/`onCallTool` of an advanced service, to
+- Declare an `mcp:AuthContext` parameter on a tool, or on a handler of an advanced service, to
   receive the authenticated caller. Declare it as `mcp:AuthContext?` on services without an `mcp:OAuthProtectedResourceConfig`.
 - A tool or an advanced handler that decides at runtime that more scopes are needed returns
   `error mcp:InsufficientScopeError("...", scopes = ["admin"])`; the server answers with the `403` challenge.

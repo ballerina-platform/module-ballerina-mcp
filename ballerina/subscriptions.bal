@@ -17,8 +17,9 @@
 import ballerina/http;
 import ballerina/jballerina.java;
 
-isolated function invokeOnSubscribe(StreamableHttpAdvancedService mcpService, SubscriptionFilter notifications)
-        returns stream<JsonRpcNotification, error?>|ServerError = @java:Method {
+isolated function invokeOnSubscribe(StreamableHttpAdvancedService mcpService, SubscriptionFilter notifications,
+        http:Headers headers, http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional,
+        AuthContext? authContext) returns stream<JsonRpcNotification, error?>|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 

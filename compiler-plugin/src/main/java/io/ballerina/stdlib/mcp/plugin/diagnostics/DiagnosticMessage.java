@@ -36,7 +36,7 @@ public enum DiagnosticMessage {
             "the above types."),
     ERROR_110("A service of type 'mcp:StreamableHttpAdvancedService' must define a remote method ''{0}''."),
     ERROR_111("Remote method ''{0}'' in an 'mcp:StreamableHttpAdvancedService' must declare exactly one " +
-            "parameter of type 'mcp:CallToolParams'."),
+            "parameter of type {1}."),
     ERROR_112("Remote method ''{0}'' in an 'mcp:StreamableHttpAdvancedService' must return ''{1}''."),
     ERROR_113("Remote method ''{0}'' is not supported in an 'mcp:StreamableHttpAdvancedService'. " +
             "Only 'onListTools' and 'onCallTool' are allowed."),

@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/log;
 
 isolated function isModernRequest(JsonRpcRequest|JsonRpcNotification requestMessage, http:Headers requestHeaders) returns boolean {
     // initialize always belongs to the legacy handshake, including older clients with a version header.
@@ -124,9 +125,14 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
             return createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid subscription filter", requestMessage.id);
         }
         SubscriptionFilter acceptedFilter = {toolsListChanged: requestedFilter.toolsListChanged};
-        var eventSource = trap invokeOnSubscribe(mcpService, acceptedFilter);
+        var eventSource = trap invokeOnSubscribe(mcpService, acceptedFilter, requestHeaders, httpRequest,
+                extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional, authContext);
+        if eventSource is InsufficientScopeError {
+            return insufficientScopeFor(authenticator, eventSource);
+        }
         if eventSource is error {
-            return createJsonRpcErrorResponse(INTERNAL_ERROR, eventSource.message(), requestMessage.id);
+            int errorCode = eventSource is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
+            return createJsonRpcErrorResponse(errorCode, toSubscribeError(eventSource).message(), requestMessage.id);
         }
         ServerSubscriptionStream streamIterator = new (eventSource, requestMessage.id, acceptedFilter);
         stream<http:SseEvent, error?> responseStream = new (streamIterator);
@@ -138,25 +144,18 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if requestMessage.method != REQUEST_LIST_TOOLS && requestMessage.method != REQUEST_CALL_TOOL {
         return <http:NotFound>{body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", requestMessage.id)};
     }
-    ListToolsResult|error toolList = listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig,
-            authContext);
-    // The tool list also resolves `tools/call`, so a listing that needs more scope challenges both.
-    if toolList is InsufficientScopeError {
-        return insufficientScopeFor(authenticator, toolList);
-    }
-    if toolList is error {
-        int errorCode = toolList is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
-        return createJsonRpcErrorResponse(errorCode, toolList.message(), requestMessage.id);
-    }
-    foreach ToolDefinition toolInfo in toolList.tools {
-        _ = toolInfo.removeIfHasKey("execution");
-        var headerDefinition = toolParameterHeaders(toolInfo.inputSchema, {});
-        if headerDefinition is Error {
-            return createJsonRpcErrorResponse(INTERNAL_ERROR, headerDefinition.message(), requestMessage.id);
+    Cursor? cursor = ();
+    if requestMessage.method == REQUEST_LIST_TOOLS {
+        anydata cursorValue = (requestMessage.params ?: {})["cursor"];
+        if cursorValue !is Cursor? {
+            return createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid cursor", requestMessage.id);
         }
+        cursor = cursorValue;
     }
-    if toolList.ttlMs is int && toolList.ttlMs < 0 {
-        return createJsonRpcErrorResponse(INTERNAL_ERROR, "ttlMs must be non-negative", requestMessage.id);
+    ListToolsResult|error toolList = listCheckedProtocolTools(mcpService, httpRequest, requestHeaders,
+            serviceConfig, authContext, cursor);
+    if toolList is error {
+        return listingFailureResponse(toolList, authenticator, requestMessage.id);
     }
     if requestMessage.method == REQUEST_LIST_TOOLS {
         toolList.tools = toolList.tools.sort(key = isolated function(ToolDefinition toolInfo) returns string => toolInfo.name);
@@ -174,12 +173,19 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if decodedName is Error || decodedName != callParams.name {
         return modernError(HEADER_MISMATCH, "Mcp-Name must match the tool name", requestMessage.id);
     }
-    ToolDefinition? selectedTool = ();
-    foreach ToolDefinition toolInfo in toolList.tools {
-        if toolInfo.name == callParams.name {
-            selectedTool = toolInfo;
-            break;
+    // A paginating service may list the tool on a later page.
+    ToolDefinition? selectedTool = findTool(toolList, callParams.name);
+    map<boolean> visitedCursors = {};
+    Cursor? nextCursor = toolList.nextCursor;
+    while selectedTool is () && nextCursor is Cursor && !visitedCursors.hasKey(nextCursor) {
+        visitedCursors[nextCursor] = true;
+        ListToolsResult|error page = listCheckedProtocolTools(mcpService, httpRequest, requestHeaders,
+                serviceConfig, authContext, nextCursor);
+        if page is error {
+            return listingFailureResponse(page, authenticator, requestMessage.id);
         }
+        selectedTool = findTool(page, callParams.name);
+        nextCursor = page.nextCursor;
     }
     if selectedTool is () {
         return createJsonRpcErrorResponse(INVALID_PARAMS, "Unknown tool name", requestMessage.id);
@@ -239,13 +245,61 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     return modernResult(callResult, serviceConfig.info, requestMessage.id);
 }
 
+# Lists one page of a service's tools for a modern request.
+isolated function listCheckedProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
+        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig,
+        readonly & AuthContext? authContext, Cursor? cursor) returns ListToolsResult|error {
+    ListToolsResult toolList = check listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig,
+            authContext, cursor);
+    foreach ToolDefinition toolInfo in toolList.tools {
+        _ = toolInfo.removeIfHasKey("execution");
+        var headerDefinition = toolParameterHeaders(toolInfo.inputSchema, {});
+        // An invalid header declaration is a defect in the service, never the caller's invalid params.
+        if headerDefinition is Error {
+            return error ServerError(headerDefinition.message());
+        }
+    }
+    if toolList.ttlMs is int && toolList.ttlMs < 0 {
+        return error ServerError("ttlMs must be non-negative");
+    }
+    return toolList;
+}
+
+isolated function listingFailureResponse(error failure, ServerAuthenticator? authenticator, RequestId requestId)
+        returns http:Ok|http:Forbidden|http:InternalServerError {
+    // The tool list also resolves `tools/call`, so a listing that needs more scope challenges both.
+    if failure is InsufficientScopeError {
+        return insufficientScopeFor(authenticator, failure);
+    }
+    int errorCode = failure is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
+    return createJsonRpcErrorResponse(errorCode, failure.message(), requestId);
+}
+
+isolated function findTool(ListToolsResult toolList, string toolName) returns ToolDefinition? {
+    foreach ToolDefinition toolInfo in toolList.tools {
+        if toolInfo.name == toolName {
+            return toolInfo;
+        }
+    }
+    return ();
+}
+
+# Reports a failed `onSubscribe` call, logging the detail of an unexpected failure.
+isolated function toSubscribeError(error cause) returns ServerError {
+    if cause is ServerError {
+        return cause;
+    }
+    log:printError("Subscription failed", cause);
+    return error ServerError("Subscribing failed unexpectedly.");
+}
+
 isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig,
-        readonly & AuthContext? authContext) returns ListToolsResult|error {
+        readonly & AuthContext? authContext, Cursor? cursor = ()) returns ListToolsResult|error {
     ListToolsResult|Error listResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
         ListToolsResult|error advancedResult =
-                trap invokeAdvancedOnListTools(mcpService, requestHeaders, httpRequest,
+                trap invokeAdvancedOnListTools(mcpService, cursor, requestHeaders, httpRequest,
                     extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
                     authContext);
         if advancedResult is error {

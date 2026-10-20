@@ -101,6 +101,8 @@ public final class McpServiceMethodHelper {
     // Advanced service remote method names
     private static final String ON_CALL_TOOL_METHOD = "onCallTool";
     private static final String ON_LIST_TOOLS_METHOD = "onListTools";
+    private static final String ON_SUBSCRIBE_METHOD = "onSubscribe";
+    private static final String SUBSCRIPTION_FILTER_TYPE_NAME = "SubscriptionFilter";
 
     // HTTP Headers-related constants
     private static final String HTTP_PACKAGE_NAME = "http";
@@ -118,12 +120,37 @@ public final class McpServiceMethodHelper {
 
     private McpServiceMethodHelper() {}
 
-    public static Object invokeOnSubscribe(Environment env, BObject mcpService, BMap<?, ?> notifications) {
-        return env.getRuntime().callMethod(mcpService, "onSubscribe", null, notifications);
+    /**
+     * Invoke the 'onSubscribe' remote method of a Streamable HTTP advanced service, binding the
+     * SubscriptionFilter and the HTTP request values of the 'subscriptions/listen' request.
+     *
+     * @param env                    The Ballerina runtime environment.
+     * @param mcpService             The MCP service object.
+     * @param notifications          The accepted subscription filter.
+     * @param headers                The HTTP headers of the request.
+     * @param request                The HTTP request.
+     * @param headerValues           Header values keyed by lower-cased name, for '@http:Header' binding.
+     * @param treatNilableAsOptional Whether a missing header binds a nilable '@http:Header' param to nil.
+     * @param authContext            The authenticated caller (or null without an mcp:OAuthProtectedResourceConfig).
+     * @return                       Result of remote method invocation, or a binding error.
+     */
+    public static Object invokeOnSubscribe(Environment env, BObject mcpService, BMap<?, ?> notifications,
+                                           BObject headers, BObject request, BMap<?, ?> headerValues,
+                                           boolean treatNilableAsOptional, Object authContext) {
+        Optional<RemoteMethodType> method = getRemoteMethod(mcpService, ON_SUBSCRIBE_METHOD);
+        if (method.isEmpty()) {
+            return ModuleUtils.createServerError("Remote method '" + ON_SUBSCRIBE_METHOD + "' not found");
+        }
+        Object argsOrError = buildAdvancedArgs(method.get(), notifications, null, null, headers, request,
+                headerValues, treatNilableAsOptional, authContext);
+        if (argsOrError instanceof BError) {
+            return argsOrError;
+        }
+        return env.getRuntime().callMethod(mcpService, ON_SUBSCRIBE_METHOD, null, (Object[]) argsOrError);
     }
 
     public static boolean hasSubscriptionHandler(BObject mcpService) {
-        return getRemoteMethod(mcpService, "onSubscribe").isPresent();
+        return getRemoteMethod(mcpService, ON_SUBSCRIBE_METHOD).isPresent();
     }
 
     /** Returns whether a service has a session parameter that cannot receive nil. */
@@ -196,7 +223,7 @@ public final class McpServiceMethodHelper {
         if (method.isEmpty()) {
             return ModuleUtils.createServerError("Remote method '" + ON_CALL_TOOL_METHOD + "' not found");
         }
-        Object argsOrError = buildAdvancedArgs(method.get(), params, session, headers, request, headerValues,
+        Object argsOrError = buildAdvancedArgs(method.get(), params, session, null, headers, request, headerValues,
                 treatNilableAsOptional, authContext);
         if (argsOrError instanceof BError) {
             return argsOrError;
@@ -206,11 +233,12 @@ public final class McpServiceMethodHelper {
 
     /**
      * Invoke the 'onListTools' remote method of a Streamable HTTP advanced service. The method's
-     * declared parameters are inspected and bound flexibly (AuthContext, http:Headers, http:Request, and
-     * '@http:Header' parameters).
+     * declared parameters are inspected and bound flexibly (Cursor?, AuthContext, http:Headers, http:Request,
+     * and '@http:Header' parameters).
      *
      * @param env                    The Ballerina runtime environment.
      * @param mcpService             The MCP service object.
+     * @param cursor                 The cursor of the request (or null for the first page).
      * @param headers                The HTTP headers of the request.
      * @param request                The HTTP request.
      * @param headerValues           Header values keyed by lower-cased name, for '@http:Header' binding.
@@ -218,14 +246,14 @@ public final class McpServiceMethodHelper {
      * @param authContext            The authenticated caller (or null without an mcp:OAuthProtectedResourceConfig).
      * @return                       Result of remote method invocation, or a binding error.
      */
-    public static Object invokeAdvancedOnListTools(Environment env, BObject mcpService, BObject headers,
-                                                   BObject request, BMap<?, ?> headerValues,
+    public static Object invokeAdvancedOnListTools(Environment env, BObject mcpService, Object cursor,
+                                                   BObject headers, BObject request, BMap<?, ?> headerValues,
                                                    boolean treatNilableAsOptional, Object authContext) {
         Optional<RemoteMethodType> method = getRemoteMethod(mcpService, ON_LIST_TOOLS_METHOD);
         if (method.isEmpty()) {
             return ModuleUtils.createServerError("Remote method '" + ON_LIST_TOOLS_METHOD + "' not found");
         }
-        Object argsOrError = buildAdvancedArgs(method.get(), null, null, headers, request, headerValues,
+        Object argsOrError = buildAdvancedArgs(method.get(), null, null, cursor, headers, request, headerValues,
                 treatNilableAsOptional, authContext);
         if (argsOrError instanceof BError) {
             return argsOrError;
@@ -381,12 +409,12 @@ public final class McpServiceMethodHelper {
     }
 
     /**
-     * Builds the argument array for an advanced service remote method ('onCallTool'/'onListTools') by
-     * inspecting its declared parameters and injecting the matching value. 'callToolParams' is null
-     * for 'onListTools' (which has no CallToolParams parameter).
+     * Builds the argument array for an advanced service remote method by inspecting its declared parameters
+     * and injecting the matching value. 'methodParams' is the method's own parameter: the CallToolParams of
+     * 'onCallTool' or the SubscriptionFilter of 'onSubscribe'.
      */
-    private static Object buildAdvancedArgs(RemoteMethodType method, Object callToolParams, Object session,
-                                            Object headers, Object request, BMap<?, ?> headerValues,
+    private static Object buildAdvancedArgs(RemoteMethodType method, Object methodParams, Object session,
+                                            Object cursor, Object headers, Object request, BMap<?, ?> headerValues,
                                             boolean treatNilableAsOptional, Object authContext) {
         List<Parameter> params = List.of(method.getParameters());
         Object[] args = new Object[params.size()];
@@ -394,8 +422,8 @@ public final class McpServiceMethodHelper {
             Parameter param = params.get(i);
             BMap<?, ?> headerAnnotation = getHeaderAnnotation(method, param.name);
 
-            if (isCallToolParamsParameter(param)) {
-                args[i] = callToolParams;
+            if (isCallToolParamsParameter(param) || isMcpType(param.type, SUBSCRIPTION_FILTER_TYPE_NAME)) {
+                args[i] = methodParams;
             } else if (isSessionParameter(param)) {
                 args[i] = session;
             } else if (isAuthContextParameter(param)) {
@@ -411,6 +439,8 @@ public final class McpServiceMethodHelper {
                     return headerValueOrError;
                 }
                 args[i] = headerValueOrError;
+            } else if (isCursorParameter(param)) {
+                args[i] = cursor;
             } else {
                 // The compiler plugin rejects any other parameter shape; guard defensively.
                 return ModuleUtils.createError("Unsupported parameter '" + param.name + "' in method '"
@@ -575,6 +605,18 @@ public final class McpServiceMethodHelper {
 
     private static boolean isInsufficientScopeError(BError error) {
         return INSUFFICIENT_SCOPE_ERROR.equals(error.getType().getName());
+    }
+
+    // 'mcp:Cursor' is a string alias, so a 'Cursor?' parameter is recognised by its nilable string shape.
+    private static boolean isCursorParameter(Parameter param) {
+        if (!(TypeUtils.getImpliedType(param.type) instanceof UnionType unionType)) {
+            return false;
+        }
+        List<Type> nonNilMembers = unionType.getMemberTypes().stream()
+                .map(TypeUtils::getImpliedType)
+                .filter(member -> member.getTag() != TypeTags.NULL_TAG)
+                .toList();
+        return nonNilMembers.size() == 1 && nonNilMembers.get(0).getTag() == TypeTags.STRING_TAG;
     }
 
     private static boolean isHeadersParameter(Parameter param) {

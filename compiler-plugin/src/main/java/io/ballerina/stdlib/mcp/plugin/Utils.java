@@ -85,6 +85,7 @@ public class Utils {
     public static final String LIST_TOOLS_RESULT_TYPE_NAME = "ListToolsResult";
     public static final String INPUT_REQUIRED_RESULT_TYPE_NAME = "InputRequiredResult";
     public static final String SUBSCRIPTION_FILTER_TYPE_NAME = "SubscriptionFilter";
+    public static final String CURSOR_TYPE_NAME = "Cursor";
     public static final String HTTP_PACKAGE_NAME = "http";
     public static final String HEADERS_TYPE_NAME = "Headers";
     public static final String REQUEST_TYPE_NAME = "Request";
@@ -104,7 +105,10 @@ public class Utils {
                     + "or an '@http:Header' parameter";
     // 'onListTools' does not accept 'mcp:CallToolParams' or 'mcp:HttpSession'.
     public static final String ADVANCED_LIST_TOOLS_SUPPORTED_PARAM_TYPES =
-            "'mcp:AuthContext', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
+            "'mcp:Cursor?', 'mcp:AuthContext', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
+    public static final String ADVANCED_SUBSCRIBE_SUPPORTED_PARAM_TYPES =
+            "'mcp:SubscriptionFilter', 'mcp:AuthContext', 'http:Headers', 'http:Request', "
+                    + "or an '@http:Header' parameter";
 
     public enum HttpSessionMode {
         STATEFUL("stateful"),
@@ -416,6 +420,29 @@ public class Utils {
         }
         return typeSymbol instanceof TypeReferenceTypeSymbol reference
                 && isAuthContextType(reference.typeDescriptor());
+    }
+
+    /**
+     * Check if a TypeSymbol is a nilable {@code mcp:Cursor?}. The first page is listed without a cursor,
+     * so a non-nilable cursor is not accepted.
+     *
+     * @param typeSymbol The type symbol to check
+     * @return true if the type is {@code mcp:Cursor?}
+     */
+    static boolean isOptionalCursorType(TypeSymbol typeSymbol) {
+        if (typeSymbol.typeKind() == TypeDescKind.TYPE_REFERENCE
+                && typeSymbol instanceof TypeReferenceTypeSymbol reference) {
+            return isOptionalCursorType(reference.typeDescriptor());
+        }
+        if (typeSymbol.typeKind() != TypeDescKind.UNION) {
+            return false;
+        }
+        List<TypeSymbol> members = ((UnionTypeSymbol) typeSymbol).memberTypeDescriptors();
+        List<TypeSymbol> nonNilMembers = members.stream()
+                .filter(member -> member.typeKind() != TypeDescKind.NIL).toList();
+        return nonNilMembers.size() == 1 && nonNilMembers.size() < members.size()
+                && CURSOR_TYPE_NAME.equals(nonNilMembers.get(0).getName().orElse(""))
+                && isMcpModuleSymbol(nonNilMembers.get(0));
     }
 
     static boolean isCallToolParamsType(TypeSymbol typeSymbol) {

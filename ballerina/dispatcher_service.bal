@@ -344,7 +344,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }
             }
 
-            ListToolsResult|error listToolsResult = self.executeOnListTools(headers, httpRequest,
+            anydata cursorValue = (request.params ?: {})["cursor"];
+            if cursorValue !is Cursor? {
+                return createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid cursor", request.id);
+            }
+            ListToolsResult|error listToolsResult = self.executeOnListTools(cursorValue, headers, httpRequest,
                     serviceConfig.httpConfig.treatNilableAsOptional, authContext);
             if listToolsResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, listToolsResult);
@@ -444,13 +448,13 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             };
         }
 
-        private isolated function executeOnListTools(http:Headers headers, http:Request httpRequest,
+        private isolated function executeOnListTools(Cursor? cursor, http:Headers headers, http:Request httpRequest,
                 boolean treatNilableAsOptional, readonly & AuthContext? authContext) returns ListToolsResult|Error {
             StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
                 ListToolsResult|error advancedResult =
-                        trap invokeAdvancedOnListTools(mcpService, headers, httpRequest,
+                        trap invokeAdvancedOnListTools(mcpService, cursor, headers, httpRequest,
                             extractHeaderValues(headers), treatNilableAsOptional, authContext);
                 if advancedResult is error {
                     return trapListToolsFailure(advancedResult);
