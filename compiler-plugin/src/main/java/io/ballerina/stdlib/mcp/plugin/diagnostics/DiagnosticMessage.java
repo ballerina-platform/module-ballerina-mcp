@@ -47,6 +47,7 @@ public enum DiagnosticMessage {
     ERROR_116("Invalid MCP argument header name ''{2}'' on parameter ''{1}'' in function ''{0}''."),
     ERROR_117("Duplicate MCP argument header name ''{2}'' on parameter ''{1}'' in function ''{0}''."),
     ERROR_118("Function ''{0}'' cannot combine '@mcp:Argument' with an explicitly supplied '@mcp:Tool.schema'."),
+    ERROR_119("Function ''{0}'' cannot combine ''structuredOutput: false'' with an explicit ''outputSchema''."),
     WARNING_102("Required HttpSession parameter ''{0}'' restricts this service to legacy MCP in auto protocol mode."),
     WARNING_103("HttpSession parameter ''{0}'' is always nil for modern MCP requests. " +
             "Remove it or migrate session-dependent behavior to explicit application state."),

@@ -38,6 +38,7 @@ public enum DiagnosticCode {
     MCP_116,
     MCP_117,
     MCP_118,
+    MCP_119,
     MCP_WARNING_102,
     MCP_WARNING_103,
     MCP_WARNING_104,

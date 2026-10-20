@@ -284,4 +284,17 @@ public class CompilerPluginTest {
         Assert.assertEquals(errorCount(conflictingBinding), 1L);
         assertError(conflictingBinding, 0, "cannot use @mcp:Argument", "MCP_115");
     }
+
+    @Test
+    public void testUnstructuredOutputWithExplicitOutputSchema() {
+        DiagnosticResult result = compile("unstructured_output_with_output_schema");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "cannot combine 'structuredOutput: false'", "MCP_119");
+    }
+
+    @Test
+    public void testUnstructuredOutputSkipsReturnSchemaGeneration() {
+        DiagnosticResult result = compile("unstructured_unmappable_return");
+        Assert.assertEquals(result.diagnostics().size(), 0, result.diagnostics().toString());
+    }
 }

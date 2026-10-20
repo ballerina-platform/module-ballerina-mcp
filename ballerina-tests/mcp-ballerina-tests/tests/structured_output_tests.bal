@@ -19,6 +19,8 @@ import ballerina/test;
 
 listener mcp:StreamableHttpListener structuredListener = check new (8789);
 
+final mcp:ProtocolMode[] & readonly PROTOCOL_MODES = ["modern", "legacy"];
+
 type Person record {|
     string name;
     int age;
@@ -36,6 +38,15 @@ service mcp:StreamableHttpService /structuredHttp on structuredListener {
 
     @mcp:Tool {structuredOutput: false}
     remote isolated function textOnlyValue() returns string => "text only";
+
+    remote isolated function noReturnValue() {
+    }
+
+    remote isolated function errorOrNilValue() returns error? {
+    }
+
+    remote isolated function escapedPersonValue() returns Person =>
+        {name: string `Al "the pal" \ O'Neil` + "\nsecond line", age: 40};
 }
 
 @mcp:StreamableHttpServiceConfig {info: {name: "structured-generic", version: "1.0.0"}}
@@ -102,6 +113,58 @@ function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
     mcp:CallToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
     assertStructuredValue(booleanResult, true);
     check genericClient->close();
+}
+
+@test:Config {}
+function testNilOnlyReturnsAreUnstructured() returns error? {
+    mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+            protocolMode = "modern");
+    _ = check httpClient->connect();
+    mcp:ListToolsResult listedTools = check httpClient->listTools();
+    foreach mcp:ToolDefinition toolInfo in listedTools.tools {
+        if toolInfo.name == "noReturnValue" || toolInfo.name == "errorOrNilValue" {
+            test:assertEquals(toolInfo.outputSchema, (), toolInfo.name);
+        }
+    }
+
+    foreach string toolName in ["noReturnValue", "errorOrNilValue"] {
+        mcp:CallToolResult result = check httpClient->callTool({name: toolName});
+        test:assertFalse(result.hasKey("structuredContent"), toolName);
+        test:assertEquals(result.isError, (), toolName);
+    }
+    check httpClient->close();
+}
+
+@test:Config {}
+function testNilResultHasNoTextContent() returns error? {
+    foreach mcp:ProtocolMode mode in PROTOCOL_MODES {
+        mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+                protocolMode = mode);
+        _ = check httpClient->connect();
+        foreach string toolName in ["nullableValue", "noReturnValue"] {
+            mcp:CallToolResult result = check httpClient->callTool({name: toolName});
+            test:assertEquals(result.content.length(), 0, string `${mode} ${toolName}`);
+        }
+        check httpClient->close();
+    }
+}
+
+@test:Config {}
+function testStructuredTextContentIsJson() returns error? {
+    json expected = {name: string `Al "the pal" \ O'Neil` + "\nsecond line", age: 40};
+    foreach mcp:ProtocolMode mode in PROTOCOL_MODES {
+        mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+                protocolMode = mode);
+        _ = check httpClient->connect();
+        mcp:CallToolResult result = check httpClient->callTool({name: "escapedPersonValue"});
+        test:assertEquals(result.content.length(), 1);
+        mcp:TextContent textContent = check result.content[0].ensureType();
+        test:assertEquals(check textContent.text.fromJsonString(), expected, mode);
+        if mode == "modern" {
+            assertStructuredValue(result, expected);
+        }
+        check httpClient->close();
+    }
 }
 
 @test:Config {}

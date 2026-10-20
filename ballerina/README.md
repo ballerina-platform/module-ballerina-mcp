@@ -85,8 +85,9 @@ may omit it.
 
 ### Structured tool output
 
-Basic tools may return records, scalars, arrays, or other `anydata` values. The library always creates a text content
-block. For a modern request it also:
+Basic tools may return records, scalars, arrays, or other `anydata` values. The library builds the text content from
+the return value: a `string` is used as is, `()` produces no content block, and any other value becomes its JSON
+serialization. For a modern request it also:
 
 - advertises a generated `outputSchema`;
 - preserves the raw return value in `structuredContent`;
@@ -116,6 +117,11 @@ remote isolated function balances(string accountId) returns decimal[] {
     return [12.50d, 30.00d];
 }
 ```
+
+Set `structuredOutput: false` in `@mcp:Tool` to make a tool's output unstructured on both protocols: the compiler
+generates no `outputSchema`, and results carry only the text content. It cannot be combined with an explicit
+`outputSchema`. A tool with no return type, or one that can only return `()` apart from `error`, such as `error?`, is
+unstructured in the same way.
 
 `InputSchema` enforces an object root. `OutputSchema` allows any JSON Schema root. Both are open records and accept
 JSON Schema keywords that the module does not declare. Until Ballerina provides native JSON Schema evaluation, these

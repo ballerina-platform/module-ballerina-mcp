@@ -32,6 +32,7 @@ import io.ballerina.runtime.api.types.ServiceType;
 import io.ballerina.runtime.api.types.Type;
 import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.types.UnionType;
+import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.utils.TypeUtils;
 import io.ballerina.runtime.api.utils.ValueUtils;
 import io.ballerina.runtime.api.values.BArray;
@@ -799,13 +800,18 @@ public final class McpServiceMethodHelper {
     }
 
     private static String stringifyToolResult(Object result) {
-        if (result == null) {
-            return "";
-        }
         if (result instanceof BError error) {
             return errorMessage(error);
         }
-        return result.toString();
+        if (result instanceof BString || result instanceof String) {
+            return result.toString();
+        }
+        try {
+            return StringUtils.getJsonString(result);
+        } catch (BError notJson) {
+            // Only reachable for values outside anydata, which have no JSON form.
+            return result.toString();
+        }
     }
 
     /**
@@ -886,11 +892,13 @@ public final class McpServiceMethodHelper {
             return ModuleUtils
                     .createError("No member type named 'TextContent' found in content union type.");
         }
-        RecordType textContentRecordType = (RecordType) TypeUtils.getImpliedType(textContentTypeOpt.get());
-        BMap<BString, Object> textContent = ValueCreator.createRecordValue(textContentRecordType);
-        textContent.put(fromString(TYPE_FIELD_NAME), fromString(TEXT_VALUE_NAME));
-        textContent.put(fromString(TEXT_FIELD_NAME), fromString(stringifyToolResult(result)));
-        contentArray.append(textContent);
+        if (result != null) {
+            RecordType textContentRecordType = (RecordType) TypeUtils.getImpliedType(textContentTypeOpt.get());
+            BMap<BString, Object> textContent = ValueCreator.createRecordValue(textContentRecordType);
+            textContent.put(fromString(TYPE_FIELD_NAME), fromString(TEXT_VALUE_NAME));
+            textContent.put(fromString(TEXT_FIELD_NAME), fromString(stringifyToolResult(result)));
+            contentArray.append(textContent);
+        }
 
         callToolResult.put(fromString(CONTENT_FIELD_NAME), contentArray);
         if (result instanceof BError) {
