@@ -26,13 +26,11 @@ isolated function isModernRequest(JsonRpcRequest|JsonRpcNotification requestMess
         return true;
     }
     string? headerVersion = getProtocolVersionFromHeaders(requestHeaders);
-    foreach string legacyVersion in ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"] {
-        if legacyVersion == headerVersion {
-            return false;
-        }
-    }
-    return headerVersion is string;
+    return headerVersion is string && !isLegacyProtocolVersion(headerVersion);
 }
+
+isolated function advertisedProtocolVersions(StreamableHttpServiceConfiguration serviceConfig) returns string[] =>
+    serviceConfig.protocolMode == "modern" ? MODERN_PROTOCOL_VERSIONS : SUPPORTED_PROTOCOL_VERSIONS;
 
 isolated function unsupportedProtocolResponse(string requestedVersion, string[] supportedVersions, RequestId? requestId)
         returns http:BadRequest => {
@@ -97,9 +95,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     }
     string requestedVersion = getProtocolVersionFromHeaders(requestHeaders) ?: "";
     if serviceConfig.protocolMode == "legacy" || requiresLegacySession(mcpService) {
-        return unsupportedProtocolResponse(requestedVersion,
-                SUPPORTED_PROTOCOL_VERSIONS.filter(versionValue => versionValue != MODERN_PROTOCOL_VERSION),
-                requestMessage.id);
+        return unsupportedProtocolResponse(requestedVersion, LEGACY_PROTOCOL_VERSIONS, requestMessage.id);
     }
     ModernRequestMeta|error requestMeta = requestMessage.params?._meta.cloneWithType();
     if requestMeta is error {
@@ -110,9 +106,8 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
             requestedVersion == "" {
         return modernError(HEADER_MISMATCH, "MCP-Protocol-Version must match request metadata", requestMessage.id);
     }
-    if requestedVersion != MODERN_PROTOCOL_VERSION {
-        return unsupportedProtocolResponse(requestedVersion,
-                    serviceConfig.protocolMode == "modern" ? [MODERN_PROTOCOL_VERSION] : SUPPORTED_PROTOCOL_VERSIONS,
+    if !isModernProtocolVersion(requestedVersion) {
+        return unsupportedProtocolResponse(requestedVersion, advertisedProtocolVersions(serviceConfig),
                 requestMessage.id);
     }
     string|error methodHeader = requestHeaders.getHeader(METHOD_HEADER);
@@ -122,7 +117,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if requestMessage.method == "server/discover" {
         CacheHint discoverHint = serviceConfig.cacheHints.discover ?: {};
         DiscoverResult discoverResult = {
-            supportedVersions: serviceConfig.protocolMode == "modern" ? [MODERN_PROTOCOL_VERSION] : SUPPORTED_PROTOCOL_VERSIONS,
+            supportedVersions: advertisedProtocolVersions(serviceConfig),
             capabilities: modernCapabilities(serviceConfig,
                 mcpService is StreamableHttpAdvancedService && hasSubscriptionHandler(mcpService)),
             ttlMs: discoverHint.ttlMs ?: 0,

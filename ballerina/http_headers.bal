@@ -50,7 +50,7 @@ isolated function prepareProtocolRequestHeaders(JsonRpcRequest requestMessage, m
     map<string|string[]> requestHeaders = {
         [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: protocolVersionFromMeta(requestMessage),
         [METHOD_HEADER]: requestMessage.method
     };
     if requestMessage.method == REQUEST_CALL_TOOL {
@@ -78,3 +78,9 @@ isolated function prepareProtocolRequestHeaders(JsonRpcRequest requestMessage, m
 
 isolated function hasAuthorizationHeader(map<string|string[]> headers) returns boolean =>
     headers.keys().some(headerName => headerName.equalsIgnoreCaseAscii(AUTHORIZATION_HEADER));
+
+// The header must repeat the version in the request metadata, which the client sets per request.
+isolated function protocolVersionFromMeta(JsonRpcRequest requestMessage) returns string {
+    anydata metaVersion = requestMessage.params?._meta[PROTOCOL_META_KEY];
+    return metaVersion is string ? metaVersion : LATEST_PROTOCOL_VERSION;
+}

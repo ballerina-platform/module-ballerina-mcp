@@ -14,6 +14,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
+# Picks the newest modern revision that the server lists.
+#
+# + offeredVersions - The versions listed by the server
+# + return - The selected modern version, or nil if none is listed
+isolated function selectModernProtocolVersion(string[] offeredVersions) returns string? {
+    foreach string modernVersion in MODERN_PROTOCOL_VERSIONS {
+        if offeredVersions.some(offeredVersion => offeredVersion == modernVersion) {
+            return modernVersion;
+        }
+    }
+    return ();
+}
+
 // Adds the configured MCP authorization extension to the advertised capabilities.
 isolated function withOAuthExtensionCapability(ClientCapabilities capabilities, string? extension)
         returns ClientCapabilities {
@@ -111,13 +124,14 @@ public distinct isolated client class StreamableHttpClient {
         if self.protocolMode != "legacy" {
             DiscoverResult|ClientError discovered = self.discoverModern(headers);
             if discovered is DiscoverResult {
-                if discovered.supportedVersions.some(versionValue => versionValue == MODERN_PROTOCOL_VERSION) {
+                string? modernVersion = selectModernProtocolVersion(discovered.supportedVersions);
+                if modernVersion is string {
                     DiscoverResult & readonly discoveredInfo = discovered.cloneReadOnly();
                     lock {
                         self.modernSelected = true;
                         self.connected = true;
-                        self.negotiatedProtocolVersion = MODERN_PROTOCOL_VERSION;
-                        self.transport.setProtocolVersion(MODERN_PROTOCOL_VERSION);
+                        self.negotiatedProtocolVersion = modernVersion;
+                        self.transport.setProtocolVersion(modernVersion);
                         self.discovery = discoveredInfo;
                         self.serverCapabilities = discoveredInfo.capabilities;
                         self.serverInfo = discoveredInfo._meta?.serverInfo;
@@ -177,11 +191,11 @@ public distinct isolated client class StreamableHttpClient {
 
         // Validate protocol compatibility.
         final string protocolVersion = response.protocolVersion;
-        if (protocolVersion == MODERN_PROTOCOL_VERSION || !SUPPORTED_PROTOCOL_VERSIONS.some(v => v == protocolVersion)) {
+        if !isLegacyProtocolVersion(protocolVersion) {
             return error ProtocolVersionError(
                     string `Server protocol version '${
                         protocolVersion}' is not supported. Supported versions: ${
-                        SUPPORTED_PROTOCOL_VERSIONS.toString()}.`
+                        LEGACY_PROTOCOL_VERSIONS.toString()}.`
                 );
         }
 
@@ -369,7 +383,7 @@ public distinct isolated client class StreamableHttpClient {
                 params: {
                     "notifications": notifications.cloneReadOnly(),
                     _meta: {
-                        [PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION,
+                        [PROTOCOL_META_KEY]: self.negotiatedProtocolVersion ?: LATEST_PROTOCOL_VERSION,
                         [CLIENT_INFO_META_KEY]: self.clientInfo.cloneReadOnly(),
                         [CAPABILITIES_META_KEY]: self.clientCapabilities.cloneReadOnly()
                     }
@@ -395,7 +409,8 @@ public distinct isolated client class StreamableHttpClient {
     public isolated function adoptDiscovery(DiscoverResult discovered,
             Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}) returns ConnectionInfo|ClientError {
-        if !discovered.supportedVersions.some(versionValue => versionValue == MODERN_PROTOCOL_VERSION) {
+        string? modernVersion = selectModernProtocolVersion(discovered.supportedVersions);
+        if modernVersion is () {
             return error ProtocolVersionError("Discovery result does not advertise the modern protocol version");
         }
         Implementation? discoveredServerInfo = discovered._meta?.serverInfo;
@@ -409,8 +424,8 @@ public distinct isolated client class StreamableHttpClient {
             self.clientCapabilities = advertisedCapabilities.cloneReadOnly();
             self.modernSelected = true;
             self.connected = true;
-            self.negotiatedProtocolVersion = MODERN_PROTOCOL_VERSION;
-            self.transport.setProtocolVersion(MODERN_PROTOCOL_VERSION);
+            self.negotiatedProtocolVersion = modernVersion;
+            self.transport.setProtocolVersion(modernVersion);
             self.discovery = discovered.cloneReadOnly();
             self.serverCapabilities = discovered.capabilities.cloneReadOnly();
             self.serverInfo = discoveredServerInfo is Implementation ? discoveredServerInfo.cloneReadOnly() : ();
@@ -550,7 +565,10 @@ public distinct isolated client class StreamableHttpClient {
             self.requestId += 1;
             RequestParams wireParams = {...requestParams.cloneReadOnly()};
             RequestMeta requestMeta = {...(wireParams._meta ?: {})};
-            requestMeta[PROTOCOL_META_KEY] = MODERN_PROTOCOL_VERSION;
+            // Discovery runs before a version is negotiated, so it offers the newest one.
+            string? negotiatedVersion = self.negotiatedProtocolVersion;
+            requestMeta[PROTOCOL_META_KEY] = self.modernSelected && negotiatedVersion is string
+                ? negotiatedVersion : LATEST_PROTOCOL_VERSION;
             requestMeta[CLIENT_INFO_META_KEY] = self.clientInfo;
             requestMeta[CAPABILITIES_META_KEY] = self.clientCapabilities;
             wireParams._meta = requestMeta;

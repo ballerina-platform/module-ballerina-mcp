@@ -42,7 +42,7 @@ isolated function nextMockCall(string scenario) returns int {
     }
 }
 
-isolated function mockDiscoverResult(RequestId requestId, string[] supportedVersions = [MODERN_PROTOCOL_VERSION],
+isolated function mockDiscoverResult(RequestId requestId, string[] supportedVersions = [LATEST_PROTOCOL_VERSION],
         boolean includeWireDefaults = true, string? instructions = ()) returns http:Response {
     map<json> resultValue = {
         "supportedVersions": supportedVersions,
@@ -149,6 +149,9 @@ service /mock on new http:Listener(3210) {
                 "legacyOnly" => {
                     return mockDiscoverResult(requestId, [LATEST_LEGACY_PROTOCOL_VERSION]);
                 }
+                "mixedVersions" => {
+                    return mockDiscoverResult(requestId, ["2099-01-01", LATEST_LEGACY_PROTOCOL_VERSION, "2026-07-28"]);
+                }
                 "nonJson" => {
                     http:Response textResponse = new;
                     textResponse.setTextPayload("not json at all");
@@ -188,7 +191,7 @@ service /mock on new http:Listener(3210) {
                         "",
                         string `{"jsonrpc":"2.0","method":"notifications/progress"}`,
                         string `{"jsonrpc":"2.0","id":${requestId.toString()},"result":{"resultType":"complete","ttlMs":0,` +
-                            string `"cacheScope":"private","supportedVersions":["${MODERN_PROTOCOL_VERSION}"],"capabilities":{}}}`
+                            string `"cacheScope":"private","supportedVersions":["${LATEST_PROTOCOL_VERSION}"],"capabilities":{}}}`
                     ]);
                 }
                 "sseMalformedEvent" => {
@@ -473,13 +476,36 @@ function testModernClientRejectsInvalidDiscovery() returns error? {
     }
 }
 
+@test:Config {}
+function testAutoClientPicksTheModernVersionTheServerLists() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("mixedVersions"), protocolMode = "auto");
+    ConnectionInfo connection = check mockClient->connect();
+    test:assertEquals(connection.protocolVersion, "2026-07-28");
+    check mockClient->close();
+
+    StreamableHttpClient adoptingClient = check new (mockUrl("ok"), protocolMode = "modern");
+    ConnectionInfo adopted = check adoptingClient.adoptDiscovery({
+        supportedVersions: ["2099-01-01", LATEST_LEGACY_PROTOCOL_VERSION, "2026-07-28"],
+        capabilities: {}
+    });
+    test:assertEquals(adopted.protocolVersion, "2026-07-28");
+}
+
+@test:Config {}
+function testAutoClientFallsBackWhenDiscoveryListsNoModernVersion() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("legacyOnly"), protocolMode = "auto");
+    ConnectionInfo connection = check mockClient->connect();
+    test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
+    check mockClient->close();
+}
+
 // resultType, ttlMs and cacheScope are required on the wire, but a discovery result that lists a modern
 // version still identifies a modern server, so auto mode must not fall back to initialize.
 @test:Config {}
 function testAutoClientStaysModernWithoutDiscoveryWireDefaults() returns error? {
     StreamableHttpClient mockClient = check new (mockUrl("noWireDefaults"), protocolMode = "auto");
     ConnectionInfo connection = check mockClient->connect();
-    test:assertEquals(connection.protocolVersion, MODERN_PROTOCOL_VERSION);
+    test:assertEquals(connection.protocolVersion, LATEST_PROTOCOL_VERSION);
 
     DiscoverResult discovered = check mockClient->discover();
     test:assertEquals(discovered.ttlMs, 0);
@@ -497,7 +523,7 @@ function testAdoptDiscoveryValidation() returns error? {
     StreamableHttpClient modernClient = check new (mockUrl("ok"), protocolMode = "modern");
     _ = check modernClient->connect();
     var reAdoptResult = modernClient.adoptDiscovery({
-        supportedVersions: [MODERN_PROTOCOL_VERSION],
+        supportedVersions: [LATEST_PROTOCOL_VERSION],
         capabilities: {}
     });
     test:assertTrue(reAdoptResult is ClientInitializationError);
@@ -533,7 +559,7 @@ function testModernClientRejectsMalformedHttpResponses() returns error? {
 function testModernClientSkipsNotificationsInSseResponses() returns error? {
     StreamableHttpClient mockClient = check new (mockUrl("sseNotificationThenResult"), protocolMode = "modern");
     DiscoverResult discovered = check mockClient->discover();
-    test:assertEquals(discovered.supportedVersions, [MODERN_PROTOCOL_VERSION]);
+    test:assertEquals(discovered.supportedVersions, [LATEST_PROTOCOL_VERSION]);
 }
 
 @test:Config {}

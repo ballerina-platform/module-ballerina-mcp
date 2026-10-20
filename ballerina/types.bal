@@ -19,16 +19,6 @@ import ballerina/http;
 # Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 public type JsonRpcMessage JsonRpcRequest|JsonRpcNotification|JsonRpcError|JsonRpcResponse;
 
-public const LATEST_PROTOCOL_VERSION = "2026-07-28";
-public const SUPPORTED_PROTOCOL_VERSIONS = [
-    LATEST_PROTOCOL_VERSION,
-    LATEST_LEGACY_PROTOCOL_VERSION,
-    "2025-06-18",
-    "2025-03-26",
-    "2024-11-05",
-    "2024-10-07"
-];
-
 public const JSONRPC_VERSION = "2.0";
 
 # Standard JSON-RPC request methods supported by the MCP protocol

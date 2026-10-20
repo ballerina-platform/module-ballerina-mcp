@@ -232,12 +232,7 @@ isolated function validateRequiredHeaders(http:Headers headers) returns http:Not
 # + requestedVersion - The protocol version requested by the client
 # + return - The negotiated protocol version
 isolated function selectProtocolVersion(string requestedVersion) returns string {
-    foreach string supportedVersion in SUPPORTED_PROTOCOL_VERSIONS {
-        if supportedVersion == requestedVersion && supportedVersion != MODERN_PROTOCOL_VERSION {
-            return requestedVersion;
-        }
-    }
-    return LATEST_LEGACY_PROTOCOL_VERSION;
+    return isLegacyProtocolVersion(requestedVersion) ? requestedVersion : LATEST_LEGACY_PROTOCOL_VERSION;
 }
 
 # Extracts the `MCP-Protocol-Version` header value from the request headers, if present.
@@ -260,13 +255,17 @@ isolated function validateProtocolVersionHeader(string? protocolVersion) returns
     if protocolVersion is () {
         return;
     }
-    foreach string supportedVersion in SUPPORTED_PROTOCOL_VERSIONS {
-        if supportedVersion == protocolVersion {
-            return;
-        }
+    if isLegacyProtocolVersion(protocolVersion) {
+        return;
     }
     return <http:BadRequest>{
         body: createJsonRpcError(INVALID_REQUEST,
                 string `Unsupported MCP-Protocol-Version header: ${protocolVersion}`)
     };
 }
+
+isolated function isLegacyProtocolVersion(string? protocolVersion) returns boolean =>
+    LEGACY_PROTOCOL_VERSIONS.some(versionValue => versionValue == protocolVersion);
+
+isolated function isModernProtocolVersion(string? protocolVersion) returns boolean =>
+    MODERN_PROTOCOL_VERSIONS.some(versionValue => versionValue == protocolVersion);

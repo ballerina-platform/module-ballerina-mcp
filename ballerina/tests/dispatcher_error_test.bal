@@ -184,7 +184,7 @@ service StreamableHttpService /panicTool on dispatcherErrorListener {
 final http:Client dispatcherErrorClient = check new ("http://localhost:3211");
 
 isolated function dispatcherPost(string servicePath, string methodName, RequestParams requestParams = {},
-        map<string|string[]> extraHeaders = {}, string protocolVersion = MODERN_PROTOCOL_VERSION,
+        map<string|string[]> extraHeaders = {}, string protocolVersion = LATEST_PROTOCOL_VERSION,
         string? metaProtocolVersion = (), boolean includeCapabilities = true,
         ClientCapabilities capabilities = {}) returns http:Response|error {
     RequestMeta requestMeta = {};
@@ -275,8 +275,14 @@ function testDispatcherValidatesProtocolNegotiation() returns error? {
     test:assertEquals(legacyError.'error.code, UNSUPPORTED_PROTOCOL_VERSION);
     record {|string[] supported; string requested;|} errorData =
             check (legacyError.'error?.data).cloneWithType();
-    test:assertFalse(errorData.supported.some(v => v == MODERN_PROTOCOL_VERSION));
-    test:assertTrue(errorData.supported.some(v => v == LATEST_LEGACY_PROTOCOL_VERSION));
+    test:assertEquals(errorData.supported, ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"]);
+
+    http:Response legacyDiscover = check dispatcherPost("/legacyMode", "server/discover");
+    test:assertEquals(legacyDiscover.statusCode, 400);
+    JsonRpcError discoverError = check (check legacyDiscover.getJsonPayload()).cloneWithType();
+    record {|string[] supported; string requested;|} discoverData =
+            check (discoverError.'error?.data).cloneWithType();
+    test:assertEquals(discoverData.supported, ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"]);
 }
 
 @test:Config {}

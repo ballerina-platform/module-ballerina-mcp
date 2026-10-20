@@ -113,13 +113,13 @@ service StreamableHttpService /generic on structuredOutputListener {
 isolated function modernPost(string methodName, RequestParams requestParams = {}, map<string|string[]> extraHeaders = {})
         returns http:Response|error {
     requestParams._meta = {
-        [PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION,
         [CAPABILITIES_META_KEY]: {}
     };
     map<string|string[]> requestHeaders = {
         [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
         [METHOD_HEADER]: methodName,
         ...extraHeaders
     };
@@ -143,7 +143,7 @@ function testClientCanDiscoverAndAdoptModernConnection() returns error? {
     StreamableHttpClient discoveryClient = check new ("http://localhost:3205/mcp", protocolMode = "modern");
     DiscoverResult discovered = check discoveryClient->discover();
     ConnectionInfo connection = check discoveryClient.adoptDiscovery(discovered);
-    test:assertEquals(connection.protocolVersion, MODERN_PROTOCOL_VERSION);
+    test:assertEquals(connection.protocolVersion, LATEST_PROTOCOL_VERSION);
     test:assertEquals(connection.serverInfo?.name, "modern-test");
     ListToolsResult tools = check discoveryClient->listTools();
     test:assertEquals(tools.tools.length(), 6);
@@ -217,7 +217,7 @@ function testModernOriginAndDelete() returns error? {
     http:Response originResponse = check modernPost("server/discover", {}, {"origin": "https://untrusted.example"});
     test:assertEquals(originResponse.statusCode, 403);
     http:Response deleteResponse = check modernHttpClient->delete("/mcp", headers = {
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION
     });
     test:assertEquals(deleteResponse.statusCode, 405);
 }
@@ -315,7 +315,7 @@ function testModernRejectsLegacyInitializedNotification() returns error? {
     JsonRpcNotification notificationValue = {jsonrpc: JSONRPC_VERSION, method: NOTIFICATION_INITIALIZED};
     http:Response responseValue = check modernHttpClient->post("/mcp", notificationValue, headers = {
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION
     });
     test:assertEquals(responseValue.statusCode, 400);
 }

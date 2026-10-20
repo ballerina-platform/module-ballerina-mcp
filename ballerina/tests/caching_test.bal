@@ -63,11 +63,11 @@ isolated function cachingPost(string servicePath, string methodName) returns map
         jsonrpc: JSONRPC_VERSION,
         id: 300,
         method: methodName,
-        params: {_meta: {[PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
+        params: {_meta: {[PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
     };
     http:Response response = check cachingHttpClient->post(servicePath, requestMessage, headers = {
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
         [METHOD_HEADER]: methodName
     });
     WireResponse payload = check (check response.getJsonPayload()).cloneWithType();

@@ -47,7 +47,7 @@ function testModernRequestsSurfaceAuthorizationError() returns error? {
     var connectResult = mcpClient->connect();
     assertAuthorizationFailure(connectResult);
 
-    _ = check mcpClient.adoptDiscovery({supportedVersions: [MODERN_PROTOCOL_VERSION], capabilities: {}});
+    _ = check mcpClient.adoptDiscovery({supportedVersions: [LATEST_PROTOCOL_VERSION], capabilities: {}});
     var listenResult = mcpClient->listen();
     assertAuthorizationFailure(listenResult);
 }

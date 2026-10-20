@@ -163,13 +163,13 @@ isolated function serverAuthToken(string scope = "mcp:tools", string subject = "
 isolated function protectedModernPost(string servicePath, string methodName, RequestParams requestParams = {},
         string? token = ()) returns http:Response|error {
     requestParams._meta = {
-        [PROTOCOL_META_KEY]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION,
         [CAPABILITIES_META_KEY]: {}
     };
     map<string|string[]> requestHeaders = {
         [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: MODERN_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
         [METHOD_HEADER]: methodName
     };
     anydata toolName = requestParams["name"];

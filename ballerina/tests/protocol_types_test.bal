@@ -125,7 +125,7 @@ function testClientCapabilityExtensions() {
 @test:Config {}
 function testLegacyFallbackHonoursAdvertisedVersions() {
     // A peer that still advertises the modern revision is not worth downgrading for.
-    test:assertFalse(shouldUseLegacy(unsupportedVersionError([MODERN_PROTOCOL_VERSION, "2025-06-18"])));
+    test:assertFalse(shouldUseLegacy(unsupportedVersionError([LATEST_PROTOCOL_VERSION, "2025-06-18"])));
 
     // A peer that advertises only legacy revisions we support is.
     test:assertTrue(shouldUseLegacy(unsupportedVersionError([LATEST_LEGACY_PROTOCOL_VERSION])));
@@ -166,6 +166,6 @@ isolated function unsupportedVersionError(string[] supportedVersions) returns Cl
         'error: {
             code: UNSUPPORTED_PROTOCOL_VERSION,
             message: "Unsupported protocol version",
-            data: {"supported": supportedVersions, "requested": MODERN_PROTOCOL_VERSION}
+            data: {"supported": supportedVersions, "requested": LATEST_PROTOCOL_VERSION}
         }
     });

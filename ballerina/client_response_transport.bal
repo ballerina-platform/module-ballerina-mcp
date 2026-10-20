@@ -152,17 +152,8 @@ isolated function shouldUseLegacy(ClientError probeError) returns boolean {
             if errorData is map<anydata> {
                 anydata supportedVersions = errorData["supported"];
                 if supportedVersions is string[] {
-                    if supportedVersions.some(versionValue => versionValue == MODERN_PROTOCOL_VERSION) {
-                        return false;
-                    }
-                    foreach string versionValue in supportedVersions {
-                        foreach string supportedVersion in SUPPORTED_PROTOCOL_VERSIONS {
-                            if versionValue == supportedVersion {
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
+                    return !supportedVersions.some(isModernProtocolVersion) &&
+                            supportedVersions.some(isLegacyProtocolVersion);
                 }
             }
             return false;

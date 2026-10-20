@@ -47,19 +47,20 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             } else {
                 http:authenticateResource(self, "delete", []);
             }
-            http:BadRequest? protocolVersionError =
-                    validateProtocolVersionHeader(getProtocolVersionFromHeaders(headers));
-            if protocolVersionError !is () {
-                return protocolVersionError;
-            }
             StreamableHttpServiceConfiguration|Error config = self.getCachedServiceConfiguration();
             if config is Error {
                 return <http:InternalServerError>{
                     body: createJsonRpcError(INTERNAL_ERROR, config.message())
                 };
             }
-            if config.protocolMode == "modern" || getProtocolVersionFromHeaders(headers) == MODERN_PROTOCOL_VERSION {
+            string? protocolVersion = getProtocolVersionFromHeaders(headers);
+            // Modern requests have no sessions to delete, so the legacy header check does not apply to them.
+            if config.protocolMode == "modern" || isModernProtocolVersion(protocolVersion) {
                 return http:METHOD_NOT_ALLOWED;
+            }
+            http:BadRequest? protocolVersionError = validateProtocolVersionHeader(protocolVersion);
+            if protocolVersionError !is () {
+                return protocolVersionError;
             }
             HttpSessionMode sessionMode = config.sessionMode;
 
@@ -147,7 +148,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             }
             if routeConfig.protocolMode == "modern" {
                 return unsupportedProtocolResponse(getProtocolVersionFromHeaders(headers) ?: "legacy",
-                        [MODERN_PROTOCOL_VERSION], request is JsonRpcRequest ? request.id : ());
+                        MODERN_PROTOCOL_VERSIONS, request is JsonRpcRequest ? request.id : ());
             }
 
             // The MCP-Protocol-Version header is required on all requests after initialization. The
