@@ -83,6 +83,9 @@ public distinct isolated client class StreamableHttpClient {
         if config.protocolMode == "modern" && config.sessionId is string {
             return error ClientInitializationError("A legacy session ID cannot be used in modern protocol mode");
         }
+        if config.httpConfig.auth is OAuthConfig && config.httpConfig.followRedirects?.enabled == true {
+            return error ClientInitializationError("Redirects cannot be enabled with MCP authorization");
+        }
         self.protocolMode = config.sessionId is string ? "legacy" : config.protocolMode;
         self.maxInputRounds = config.maxInputRounds;
         self.inputHandler = config.inputHandler;

@@ -17,9 +17,25 @@
 import ballerina/http;
 import ballerina/log;
 
-# Configuration options for the Streamable HTTP client transport. The HTTP fields mirror
-# `http:ClientConfiguration`, and are enumerated because `auth` also accepts `OAuthConfig`.
+# Configuration options for the Streamable HTTP client transport.
 public type StreamableHttpClientConfig record {|
+    # Auto probes discovery and falls back to the legacy handshake.
+    ProtocolMode protocolMode = "auto";
+    # HTTP transport settings, including authorization
+    HttpClientConfig httpConfig = {};
+    # Reuse of modern results while their caching hints keep them fresh. `()` disables reuse.
+    ResultCacheConfig? resultCache = {};
+    # Optional application callback for embedded input requests.
+    InputHandler inputHandler?;
+    # Maximum number of input-required continuations per call.
+    int maxInputRounds = 8;
+    # Legacy session to resume; cannot be combined with `"modern"`.
+    string sessionId?;
+|};
+
+# HTTP settings of the client. The fields mirror `http:ClientConfiguration`, and are copied
+# because `auth` also accepts `OAuthConfig`.
+public type HttpClientConfig record {|
     # HTTP protocol version supported by the client
     http:HttpVersion httpVersion = http:HTTP_2_0;
     # HTTP/1.x specific settings
@@ -30,7 +46,8 @@ public type StreamableHttpClientConfig record {|
     decimal timeout = 30;
     # Controls the `Forwarded` and `X-Forwarded-For` headers when acting as a proxy
     string forwarded = "disable";
-    # HTTP redirect handling. Defaults to enabled without MCP OAuth and disabled with it
+    # HTTP redirect handling. `()` follows redirects, except with `OAuthConfig`, which
+    # cannot be combined with enabled redirects
     http:FollowRedirects? followRedirects = ();
     # Request connection pool configuration
     http:PoolConfiguration? poolConfig = ();
@@ -49,7 +66,7 @@ public type StreamableHttpClientConfig record {|
     http:CookieConfig? cookieConfig = ();
     # Response size and header limits
     http:ResponseLimitConfigs responseLimits = {};
-    # Proxy server configuration
+    # Proxy server configuration, also used for authorization requests
     http:ProxyConfig? proxy = ();
     # Enables payload validation against constraints
     boolean validation = true;
@@ -57,24 +74,14 @@ public type StreamableHttpClientConfig record {|
     http:ClientSocketConfig socketConfig = {};
     # Enables relaxed response data binding
     boolean laxDataBinding = false;
-    # SSL/TLS configuration
+    # SSL/TLS configuration, also used for authorization requests
     http:ClientSecureSocket? secureSocket = ();
-    # Optional session identifier for continued interactions.
-    string sessionId?;
-    # Auto probes discovery and falls back to the legacy handshake.
-    ProtocolMode protocolMode = "auto";
-    # Maximum number of input-required continuations per call.
-    int maxInputRounds = 8;
-    # Optional application callback for embedded input requests.
-    InputHandler inputHandler?;
-    # Reuse of modern results while their caching hints keep them fresh. `()` disables reuse.
-    ResultCacheConfig? resultCache = {};
 |};
 
 # Configures how the client reuses modern results that carry caching hints. Each client keeps its own
-# cache and is treated as a single authorization context, so configure credentials through `auth`
-# rather than per-call headers, or use a separate client for each user. A call that passes its own
-# `Authorization` header bypasses the cache.
+# cache and is treated as a single authorization context, so configure credentials through
+# `httpConfig.auth` rather than per-call headers, or use a separate client for each user. A call
+# that passes its own `Authorization` header bypasses the cache.
 public type ResultCacheConfig record {|
     # Upper bound, in milliseconds, on how long a result is treated as fresh
     int maxTtlMs = 86400000;
@@ -91,9 +98,9 @@ public type CacheMode "use"|"refresh"|"bypass";
 # Derives the HTTP settings for metadata and token endpoint requests. The trust store and
 # proxy are carried over from the transport configuration; other settings use OAuth defaults.
 #
-# + config - The transport configuration
+# + config - The HTTP settings of the transport
 # + return - HTTP settings for authorization requests
-isolated function deriveAuthClientConfig(StreamableHttpClientConfig config)
+isolated function deriveAuthClientConfig(HttpClientConfig config)
         returns AuthHttpConfig {
     AuthHttpConfig derived = {};
     http:ClientSecureSocket? secureSocket = config.secureSocket;
@@ -128,10 +135,10 @@ isolated class StreamableHttpClientTransport {
             returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
 
-        // Neither is an `http:Client` setting: `auth` may hold an `OAuthConfig`, which is
-        // handled by this module rather than by the HTTP client.
-        StreamableHttpClientConfig {sessionId, protocolMode: _, maxInputRounds: _,
-            inputHandler: _, resultCache: cacheConfig, auth: authConfig, ...rest} = config;
+        // `auth` may hold an `OAuthConfig`, which is handled by this module rather than by
+        // the HTTP client.
+        HttpClientConfig httpConfig = config.httpConfig;
+        HttpClientConfig {auth: authConfig, ...rest} = httpConfig;
         http:ClientConfiguration clientConfig = {...rest};
 
         OAuthConfig? oauth =
@@ -140,14 +147,12 @@ isolated class StreamableHttpClientTransport {
             clientConfig.auth = authConfig;
         }
 
+        // Redirects stay disabled with MCP authorization (`StreamableHttpClient` rejects
+        // enabling them): the token is attached here rather than by the HTTP client, so it is
+        // not covered by the `allowAuthHeaders` guard, and a redirect could hide the challenge.
         if oauth is () {
             clientConfig.followRedirects = clientConfig.followRedirects ?: {enabled: true};
-        } else {
-            clientConfig.followRedirects = ();
         }
-        // Redirects are left disabled with MCP authorization configured: the token is
-        // attached here rather than by the HTTP client, so it is not covered by the
-        // `allowAuthHeaders` guard, and a redirect could hide the challenge.
         do {
             self.httpClient = check new (serverUrl, clientConfig);
         } on fail error e {
@@ -158,7 +163,7 @@ isolated class StreamableHttpClientTransport {
             self.oauthProvider = ();
         } else {
             ClientOAuthProvider|Error provider =
-                new (serverUrl, oauth, deriveAuthClientConfig(config));
+                new (serverUrl, oauth, deriveAuthClientConfig(httpConfig));
             if provider is Error {
                 return error AuthorizationError(
                     string `Invalid authorization configuration for '${serverUrl}': ${provider.message()}`,
@@ -166,8 +171,8 @@ isolated class StreamableHttpClientTransport {
             }
             self.oauthProvider = provider;
         }
-        self.sessionId = sessionId;
-        self.resultCache = new (cacheConfig);
+        self.sessionId = config.sessionId;
+        self.resultCache = new (config.resultCache);
     }
 
     isolated function cache() returns ResultCache => self.resultCache;

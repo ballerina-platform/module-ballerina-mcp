@@ -1143,8 +1143,8 @@ service StreamableHttpService /mcp on e2eMcpListener {
 
 @test:Config {}
 function testClientAuthorizesAgainstProtectedServer() returns error? {
-    StreamableHttpClient mcpClient = check new (E2E_RESOURCE,
-        auth = {
+    StreamableHttpClient mcpClient = check new (E2E_RESOURCE, httpConfig = {
+        auth: {
             grant: {
                 clientConfig: {
                     clientId: E2E_CLIENT_ID,
@@ -1153,8 +1153,9 @@ function testClientAuthorizesAgainstProtectedServer() returns error? {
                 }
             }
         },
-        secureSocket = {cert: MTLS_RESOURCES + "server.crt"}
-    );
+        // Also trusted by the metadata and token requests to the authorization server.
+        secureSocket: {cert: MTLS_RESOURCES + "server.crt"}
+    });
     _ = check mcpClient->connect();
 
     CallToolResult whoami = check mcpClient->callTool({name: "whoami"});

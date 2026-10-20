@@ -43,7 +43,7 @@ function assertAuthorizationFailure(any|error result) {
 
 @test:Config {}
 function testModernRequestsSurfaceAuthorizationError() returns error? {
-    StreamableHttpClient mcpClient = check new (CHALLENGING_SERVER_URL, auth = preRegisteredConfig());
+    StreamableHttpClient mcpClient = check new (CHALLENGING_SERVER_URL, httpConfig = {auth: preRegisteredConfig()});
     var connectResult = mcpClient->connect();
     assertAuthorizationFailure(connectResult);
 
@@ -54,7 +54,7 @@ function testModernRequestsSurfaceAuthorizationError() returns error? {
 
 @test:Config {}
 function testLegacyRequestsSurfaceAuthorizationError() returns error? {
-    StreamableHttpClient mcpClient = check new (CHALLENGING_SERVER_URL, auth = preRegisteredConfig(),
+    StreamableHttpClient mcpClient = check new (CHALLENGING_SERVER_URL, httpConfig = {auth: preRegisteredConfig()},
         sessionId = "legacy-session");
     _ = check mcpClient->connect();
     var listResult = mcpClient->listTools();

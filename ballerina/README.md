@@ -360,16 +360,18 @@ isolated function provideIdJag(mcp:IdentityAssertionContext context)
 
 final mcp:StreamableHttpClient client = check new (
     "https://tools.example.com/mcp",
-    auth = {
-        grant: {
-            clientConfig: {
-                clientId: "mcp-host-at-resource-as",
-                issuer: "https://resource-auth.example.com",
-                clientAuth: {clientSecret: resourceAsClientSecret}
+    httpConfig = {
+        auth: {
+            grant: {
+                clientConfig: {
+                    clientId: "mcp-host-at-resource-as",
+                    issuer: "https://resource-auth.example.com",
+                    clientAuth: {clientSecret: resourceAsClientSecret}
+                },
+                assertionProvider: provideIdJag
             },
-            assertionProvider: provideIdJag
-        },
-        scopes: ["tools:read"]
+            scopes: ["tools:read"]
+        }
     }
 );
 ```
@@ -414,10 +416,15 @@ mcp:StreamableHttpClientConfig config = {
             returns mcp:InputResponse|mcp:ClientError {
         return {action: "accept"};
     },
-    timeout: 30
+    httpConfig: {timeout: 30}
 };
 final mcp:StreamableHttpClient client = check new ("http://localhost:9090/mcp", config);
 ```
+
+HTTP settings go under `httpConfig`, an `mcp:HttpClientConfig` with the fields and defaults of
+`http:ClientConfiguration`, except that `auth` also accepts `mcp:OAuthConfig`. With `mcp:OAuthConfig`, redirects are
+not followed and `init` returns an error if `followRedirects` enables them; the metadata and token endpoint requests
+reuse `secureSocket` and `proxy`.
 
 Use `callToolOnce()` when the application needs to handle each continuation itself. It returns
 `CallToolResult|InputRequiredResult` after one logical request. On a legacy connection it delegates to
@@ -454,9 +461,9 @@ An advanced service may also set `ttlMs` or `cacheScope` on the `ListToolsResult
 field set there takes precedence over the configured hint. Hints are only sent to modern clients.
 
 The client reuses a `tools/list` result while it is fresh, caching each page by its cursor. Each client keeps its own
-cache and represents a single authorization context: configure credentials through `auth`, and use a separate client
-for each user rather than passing different credentials as per-call headers. A call that passes its own `Authorization`
-header bypasses the cache. A `notifications/tools/list_changed`
+cache and represents a single authorization context: configure credentials through `httpConfig.auth`, and use a
+separate client for each user rather than passing different credentials as per-call headers. A call that passes its own
+`Authorization` header bypasses the cache. A `notifications/tools/list_changed`
 notification read from `listen()` drops the cached list. Pass `cacheMode = "refresh"` to `listTools()` to fetch and
 re-cache the list, or `cacheMode = "bypass"` to fetch without touching the cache. Set `resultCache = ()` in the client
 configuration to disable reuse, or adjust `maxTtlMs` and `maxEntries` in `resultCache` to bound it.
@@ -475,6 +482,7 @@ Version 2.0 removes deprecated transport-neutral aliases and gives Streamable HT
 | `mcp:SessionMode` | `mcp:HttpSessionMode` |
 | `mcp:Meta` | `mcp:RequestMeta` |
 | `mcp:StreamableHttpClientTransportConfig` | `mcp:StreamableHttpClientConfig` |
+| `http:ClientConfiguration` fields at the top level of the client configuration | The same fields under `httpConfig`, an `mcp:HttpClientConfig` |
 | An `http:HttpServiceConfig` value for `httpConfig` | `mcp:HttpServiceConfig`: the same fields, with `auth` also accepting `mcp:OAuthProtectedResourceConfig` |
 | `initialize()` | `connect()` or `initializeLegacy()` |
 | `callToolWithResult()` | `callToolOnce()` |
