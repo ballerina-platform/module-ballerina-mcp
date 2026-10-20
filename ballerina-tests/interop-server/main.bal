@@ -54,7 +54,7 @@ service mcp:StreamableHttpService /elicitation on interopListener {
     // The module signs the request state, so getting the name back shows the client echoed it unchanged.
     remote isolated function bookTable(string name, mcp:Context context)
             returns string|mcp:InputRequiredResult|error {
-        mcp:InputResponse? answer = context.elicitResult("seats");
+        mcp:ElicitResult? answer = context.elicitResult("seats");
         string? state = context.requestState();
         if answer is () || state is () {
             return {

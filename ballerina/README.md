@@ -205,7 +205,7 @@ type, is a compile error. The record type must be named at the call site; a `typ
 
 - `acceptedContent(key, T)` returns the submitted content as `T`. It returns `()` when the input request was not
   answered, was declined or cancelled, or its content does not convert to `T`, so treat `()` as "ask again".
-- `elicitResult(key)` returns the raw `mcp:InputResponse`, to tell a decline from a cancel or to read the answer to
+- `elicitResult(key)` returns the raw `mcp:ElicitResult`, to tell a decline from a cancel or to read the answer to
   a URL elicitation (see [Completing a URL elicitation](#completing-a-url-elicitation)).
 - `requestState()` returns the request state the tool returned in the previous round.
 
@@ -236,8 +236,8 @@ remote isolated function listEvents(mcp:AuthContext auth, mcp:Context context)
     if isConnected(subject) {
         return fetchEvents(subject);
     }
-    mcp:InputResponse? answer = context.elicitResult("connect");
-    if answer is mcp:InputResponse && answer.action != "accept" {
+    mcp:ElicitResult? answer = context.elicitResult("connect");
+    if answer is mcp:ElicitResult && answer.action != "accept" {
         return error("The calendar is not connected");
     }
     // Reuse the previous round's link, whose id the request state carries, or issue a new one.
@@ -342,7 +342,7 @@ to ask is repeated on every round.
 ```ballerina
 remote isolated function onCallTool(mcp:CallToolParams params)
         returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
-    mcp:InputResponse? answer = (params.inputResponses ?: {})["confirm"];
+    mcp:ElicitResult? answer = (params.inputResponses ?: {})["confirm"];
     if answer is () {
         return {
             inputRequests: {
@@ -377,6 +377,9 @@ Before sending an input-required result, the service checks it:
   with `-32603`. `http` URLs are allowed.
 - An elicitation in a mode the client did not declare is rejected with the missing-capability error, whose
   `requiredCapabilities` names the mode. A client that declares an empty `elicitation` capability supports form.
+
+`inputRequests` and `inputResponses` hold `mcp:InputRequest` and `mcp:InputResponse` values. Elicitation is the only
+kind of input request, so these are `mcp:ElicitRequest` and `mcp:ElicitResult`.
 
 On a legacy call, `onCallTool` receives neither `inputResponses` nor `requestState`.
 
@@ -623,8 +626,8 @@ echoes the opaque request state and continues until the call completes or `maxIn
 mcp:StreamableHttpClientConfig config = {
     protocolMode: "auto",
     maxInputRounds: 4,
-    elicitationHandler: isolated function (mcp:InputRequest request)
-            returns mcp:InputResponse|mcp:ClientError {
+    elicitationHandler: isolated function (mcp:ElicitRequest request)
+            returns mcp:ElicitResult|mcp:ClientError {
         mcp:FormElicitationParams|mcp:UrlElicitationParams params = request.params;
         if params is mcp:UrlElicitationParams {
             return {action: "decline"};

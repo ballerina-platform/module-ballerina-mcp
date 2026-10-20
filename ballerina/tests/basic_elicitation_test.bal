@@ -39,7 +39,7 @@ service StreamableHttpService /basic on new StreamableHttpListener(3250) {
     @Tool {description: "Describes the answer it received", schema: {'type: "object"}}
     remote isolated function inspectAnswer(Context context) returns string {
         DeleteConfirmation? confirmation = context.acceptedContent("confirm");
-        InputResponse? answer = context.elicitResult("confirm");
+        ElicitResult? answer = context.elicitResult("confirm");
         return string `${confirmation is () ? "nil" : confirmation.confirmed.toString()}|${
             answer is () ? "none" : answer.action}`;
     }

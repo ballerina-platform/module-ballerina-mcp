@@ -809,8 +809,11 @@ public type ConnectionInfo record {|
     string instructions?;
 |};
 
+# An input request a server embeds in an input-required result. Elicitation is the only kind supported.
+public type InputRequest ElicitRequest;
+
 # An elicitation the server embeds in an input-required result. Only declared elicitation modes may be requested.
-public type InputRequest record {|
+public type ElicitRequest record {|
     # The elicitation method.
     "elicitation/create" method = "elicitation/create";
     # A form elicitation or a URL elicitation.
@@ -990,8 +993,11 @@ public type InputRequiredResult record {
     string requestState?;
 };
 
+# The client's answer to an input request, sent back on the continuation.
+public type InputResponse ElicitResult;
+
 # The user's answer to an elicitation.
-public type InputResponse record {
+public type ElicitResult record {
     *ResultFields;
     # Whether the user submitted the form or opened the URL, declined, or dismissed the elicitation.
     "accept"|"decline"|"cancel" action;
@@ -1004,7 +1010,7 @@ public type ElicitationValue string|int|float|decimal|boolean|string[];
 
 # Answers elicitations for the client. It is invoked once per input request, outside client locks.
 # The client does not validate the answer against the form schema.
-public type ElicitationHandler isolated function (InputRequest inputRequest) returns InputResponse|ClientError;
+public type ElicitationHandler isolated function (ElicitRequest elicitRequest) returns ElicitResult|ClientError;
 
 # Selects change notifications for a subscription.
 public type SubscriptionFilter record {|

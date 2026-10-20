@@ -167,7 +167,7 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
         }
         if callParams.name == "dropState" {
             // Round one sends state, round two none; round three reports what it received.
-            InputRequest confirm = {params: {message: "Confirm", requestedSchema: {properties: {confirmed: {'type: "boolean"}}}}};
+            ElicitRequest confirm = {params: {message: "Confirm", requestedSchema: {properties: {confirmed: {'type: "boolean"}}}}};
             if callParams.inputResponses is () {
                 return {requestState: "first", inputRequests: {"one": confirm}};
             }
@@ -472,7 +472,7 @@ function testModernErrorWithoutIdDoesNotTriggerLegacyFallback() returns error? {
     }
 }
 
-isolated function confirmTestElicitation(InputRequest inputRequest) returns InputResponse|ClientError {
+isolated function confirmTestElicitation(ElicitRequest inputRequest) returns ElicitResult|ClientError {
     return {action: "accept", content: {confirmed: true}};
 }
 
@@ -489,7 +489,7 @@ function testHandlerCompletesFormElicitation() returns error? {
 
 isolated string[] handledMessages = [];
 
-isolated function recordTestElicitation(InputRequest inputRequest) returns InputResponse|ClientError {
+isolated function recordTestElicitation(ElicitRequest inputRequest) returns ElicitResult|ClientError {
     lock {
         handledMessages.push(inputRequest.params.message);
     }
@@ -525,7 +525,7 @@ function testHandlerCapabilityMergesWithConnectCapabilities() returns error? {
 
 isolated string[] openedUrls = [];
 
-isolated function openTestUrl(InputRequest inputRequest) returns InputResponse|ClientError {
+isolated function openTestUrl(ElicitRequest inputRequest) returns ElicitResult|ClientError {
     FormElicitationParams|UrlElicitationParams params = inputRequest.params;
     if params !is UrlElicitationParams {
         return error ClientError("Expected a URL elicitation");
@@ -566,7 +566,7 @@ function testFormOnlyClientCannotReceiveUrlElicitation() returns error? {
 }
 
 // Answers every elicitation with content, even where the user submitted none.
-isolated function overshareTestElicitation(InputRequest inputRequest) returns InputResponse|ClientError {
+isolated function overshareTestElicitation(ElicitRequest inputRequest) returns ElicitResult|ClientError {
     string message = inputRequest.params.message;
     "accept"|"decline"|"cancel" action = message == "decline" ? "decline" : message == "cancel" ? "cancel" : "accept";
     return {action, content: {confirmed: true}};

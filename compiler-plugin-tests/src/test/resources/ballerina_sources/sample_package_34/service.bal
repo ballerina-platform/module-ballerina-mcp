@@ -24,7 +24,7 @@ type Contact record {|
     string? phone;
 |};
 
-isolated function elicitations() returns mcp:InputRequest[] => [
+isolated function elicitations() returns mcp:ElicitRequest[] => [
     mcp:elicitForm("Where to?", Shipping),
     mcp:elicitForm("Any notes?", Note),
     mcp:elicitForm("Which stops?", Delivery),

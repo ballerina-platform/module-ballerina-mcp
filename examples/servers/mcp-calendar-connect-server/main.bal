@@ -69,8 +69,8 @@ service mcp:StreamableHttpService /mcp on mcpListener {
         if isConnected(subject) {
             return ["09:30 Standup", "14:00 Design review"];
         }
-        mcp:InputResponse? answer = context.elicitResult("connect");
-        if answer is mcp:InputResponse && answer.action != "accept" {
+        mcp:ElicitResult? answer = context.elicitResult("connect");
+        if answer is mcp:ElicitResult && answer.action != "accept" {
             return error("The calendar is not connected");
         }
         // Accepting only means the user agreed to open the link. Until the connect page records the

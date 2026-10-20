@@ -57,7 +57,7 @@ function verifyFormElicitation() returns error? {
     io:println("modern form elicitation PASS");
 }
 
-isolated function answerSeats(mcp:InputRequest inputRequest) returns mcp:InputResponse|mcp:ClientError {
+isolated function answerSeats(mcp:ElicitRequest inputRequest) returns mcp:ElicitResult|mcp:ClientError {
     mcp:FormElicitationParams|mcp:UrlElicitationParams params = inputRequest.params;
     if params !is mcp:FormElicitationParams || !params.requestedSchema.properties.hasKey("seats") {
         return error mcp:ClientError("Expected a form asking for seats");

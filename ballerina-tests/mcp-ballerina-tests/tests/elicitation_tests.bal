@@ -42,7 +42,7 @@ service mcp:StreamableHttpService /elicitation on new mcp:StreamableHttpListener
     }
 }
 
-isolated function confirmDeletion(mcp:InputRequest inputRequest) returns mcp:InputResponse|mcp:ClientError =>
+isolated function confirmDeletion(mcp:ElicitRequest inputRequest) returns mcp:ElicitResult|mcp:ClientError =>
     {action: "accept", content: {confirmed: true}};
 
 @test:Config
@@ -94,7 +94,7 @@ service mcp:StreamableHttpService /booking on new mcp:StreamableHttpListener(879
     }
 }
 
-isolated function fillBooking(mcp:InputRequest inputRequest) returns mcp:InputResponse|mcp:ClientError =>
+isolated function fillBooking(mcp:ElicitRequest inputRequest) returns mcp:ElicitResult|mcp:ClientError =>
     {action: "accept", content: {name: "Ada", guests: 2, seating: "patio"}};
 
 @test:Config

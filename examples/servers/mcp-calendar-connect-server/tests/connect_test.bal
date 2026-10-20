@@ -87,7 +87,7 @@ function userClient(string subject) returns mcp:StreamableHttpClient|error {
         protocolMode = "modern",
         auth = {token: check userToken(subject)},
         // Advertises URL-mode elicitation; callToolOnce never invokes it.
-        elicitationHandler = isolated function(mcp:InputRequest request) returns mcp:InputResponse|mcp:ClientError =>
+        elicitationHandler = isolated function(mcp:ElicitRequest request) returns mcp:ElicitResult|mcp:ClientError =>
             error mcp:ClientError("Not called by callToolOnce")
     );
     _ = check mcpClient->connect();
@@ -107,7 +107,7 @@ isolated function connectUrl(mcp:InputRequiredResult result) returns string {
     return (<mcp:UrlElicitationParams>request.params).url;
 }
 
-isolated function continuation(mcp:InputRequiredResult result, mcp:InputResponse answer = {action: "accept"})
+isolated function continuation(mcp:InputRequiredResult result, mcp:ElicitResult answer = {action: "accept"})
         returns mcp:CallToolParams => {
     name: "listEvents",
     inputResponses: {"connect": answer},

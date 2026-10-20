@@ -44,11 +44,11 @@ isolated function withElicitationCapability(ClientCapabilities capabilities) ret
 }
 
 // Only an accepted form carries what the user submitted; a URL answer has nothing to submit.
-isolated function withSubmittedContentOnly(InputRequest inputRequest, InputResponse answer) returns InputResponse {
-    if answer.action == "accept" && inputRequest.params is FormElicitationParams {
+isolated function withSubmittedContentOnly(ElicitRequest elicitRequest, ElicitResult answer) returns ElicitResult {
+    if answer.action == "accept" && elicitRequest.params is FormElicitationParams {
         return answer;
     }
-    InputResponse stripped = answer.clone();
+    ElicitResult stripped = answer.clone();
     _ = stripped.removeIfHasKey("content");
     return stripped;
 }

@@ -33,11 +33,11 @@ public readonly class Context {
     # + return - The request state, as the plain text the tool wrote, or `()` if there is none
     public isolated function requestState() returns string? => self.state;
 
-    # Returns the answer to an input request.
+    # Returns the user's answer to an elicitation.
     #
     # + key - The key of the input request
-    # + return - The answer, or `()` if the input request was not answered
-    public isolated function elicitResult(string key) returns InputResponse? => self.inputResponses[key];
+    # + return - The answer, or `()` if the elicitation was not answered
+    public isolated function elicitResult(string key) returns ElicitResult? => self.inputResponses[key];
 
     # Returns the content the user submitted for a form elicitation.
     #
@@ -57,7 +57,7 @@ public readonly class Context {
 # + schema - The form schema describing the fields to collect, or a record type whose form schema is
 # generated at compile time from its fields and their doc comments
 # + return - The input request
-public isolated function elicitForm(string message, FormSchema|typedesc<record {}> schema) returns InputRequest {
+public isolated function elicitForm(string message, FormSchema|typedesc<record {}> schema) returns ElicitRequest {
     // The compiler plugin replaces a record type with its form schema, so a typedesc never arrives here.
     if schema is typedesc {
         panic error Error("The form schema of a record type is generated at compile time");
@@ -71,5 +71,5 @@ public isolated function elicitForm(string message, FormSchema|typedesc<record {
 # + message - The message to show the user
 # + url - The absolute URL the user should open
 # + return - The input request
-public isolated function elicitUrl(string message, string url) returns InputRequest =>
+public isolated function elicitUrl(string message, string url) returns ElicitRequest =>
     {params: {mode: "url", message, url}};

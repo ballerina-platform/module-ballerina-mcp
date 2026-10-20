@@ -47,7 +47,7 @@ public function main() returns error? {
 }
 
 // Plays Alice. A real client shows the URL, asks for consent and opens it in a browser.
-isolated function handleElicitation(mcp:InputRequest request) returns mcp:InputResponse|mcp:ClientError {
+isolated function handleElicitation(mcp:ElicitRequest request) returns mcp:ElicitResult|mcp:ClientError {
     mcp:FormElicitationParams|mcp:UrlElicitationParams params = request.params;
     if params is mcp:FormElicitationParams {
         return {action: "decline"};

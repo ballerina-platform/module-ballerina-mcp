@@ -5,7 +5,7 @@ import ballerina/mcp;
 
 type Labels map<string>;
 
-isolated function elicitWith(typedesc<record {}> formType) returns mcp:InputRequest =>
+isolated function elicitWith(typedesc<record {}> formType) returns mcp:ElicitRequest =>
     mcp:elicitForm("Fill in the form", formType);
 
-isolated function elicitLabels() returns mcp:InputRequest => mcp:elicitForm("Add labels", schema = Labels);
+isolated function elicitLabels() returns mcp:ElicitRequest => mcp:elicitForm("Add labels", schema = Labels);
