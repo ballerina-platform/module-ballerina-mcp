@@ -130,10 +130,9 @@ public distinct isolated client class StreamableHttpClient {
     isolated remote function connect(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
             returns ConnectionInfo|ClientError {
-        ClientCapabilities & readonly advertisedCapabilities =
-            withOAuthExtensionCapability(capabilities, self.transport.oauthExtension()).cloneReadOnly();
-        ClientCapabilities & readonly modernCapabilities =
-            self.withHandlerCapabilities(advertisedCapabilities).cloneReadOnly();
+        ClientCapabilities withExtension = withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
+        ClientCapabilities & readonly advertisedCapabilities = withExtension.cloneReadOnly();
+        ClientCapabilities & readonly modernCapabilities = self.withHandlerCapabilities(withExtension).cloneReadOnly();
         Implementation & readonly connectingClient = clientInfo.cloneReadOnly();
         map<string|string[]> & readonly requestHeaders = headers.cloneReadOnly();
         // Held through the handshake, so a concurrent first connect() waits and reuses its result.
