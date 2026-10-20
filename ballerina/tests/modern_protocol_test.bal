@@ -523,6 +523,32 @@ function testHandlerCapabilityMergesWithConnectCapabilities() returns error? {
     check modernClient->close();
 }
 
+isolated string[] failedPrompts = [];
+
+isolated function failTestElicitation(ElicitRequest inputRequest) returns ElicitResult|ClientError {
+    lock {
+        failedPrompts.push(inputRequest.params.message);
+    }
+    return error ClientError("The user closed the client");
+}
+
+@test:Config {}
+function testHandlerErrorEndsTheCallWithoutAContinuation() returns error? {
+    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+        elicitationHandler = failTestElicitation);
+    _ = check modernClient->connect();
+    CallToolResult|ClientError callResult = modernClient->callTool({name: "count"});
+    if callResult !is ClientError {
+        test:assertFail("Expected the handler's error");
+    }
+    test:assertEquals(callResult.message(), "The user closed the client");
+    // A continuation would have reached round 2 and asked the handler again.
+    lock {
+        test:assertEquals(failedPrompts, ["1"]);
+    }
+    check modernClient->close();
+}
+
 isolated string[] openedUrls = [];
 
 isolated function openTestUrl(ElicitRequest inputRequest) returns ElicitResult|ClientError {
