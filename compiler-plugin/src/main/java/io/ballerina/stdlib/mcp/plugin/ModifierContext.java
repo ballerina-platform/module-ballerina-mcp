@@ -18,6 +18,7 @@
 
 package io.ballerina.stdlib.mcp.plugin;
 
+import io.ballerina.compiler.syntax.tree.ExpressionNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
 
 import java.util.HashMap;
@@ -25,6 +26,8 @@ import java.util.Map;
 
 public class ModifierContext {
     private final Map<FunctionDefinitionNode, ToolAnnotationConfig> annotationConfigMap = new HashMap<>();
+    // Record type arguments of `mcp:elicitForm` calls, mapped to their generated form schemas.
+    private final Map<ExpressionNode, String> formSchemaMap = new HashMap<>();
 
     void add(FunctionDefinitionNode node, ToolAnnotationConfig config) {
         annotationConfigMap.put(node, config);
@@ -32,6 +35,14 @@ public class ModifierContext {
 
     Map<FunctionDefinitionNode, ToolAnnotationConfig> getAnnotationConfigMap() {
         return annotationConfigMap;
+    }
+
+    void addFormSchema(ExpressionNode recordTypeArgument, String formSchema) {
+        formSchemaMap.put(recordTypeArgument, formSchema);
+    }
+
+    Map<ExpressionNode, String> getFormSchemaMap() {
+        return formSchemaMap;
     }
 }
 

@@ -49,6 +49,10 @@ const DEFAULT_HTTP_SERVICE_HOST = "b7a.default";
 const INSUFFICIENT_SCOPE = "insufficient_scope";
 const OAUTH_CLIENT_CREDENTIALS_EXTENSION = "io.modelcontextprotocol/oauth-client-credentials";
 const ENTERPRISE_MANAGED_AUTHORIZATION_EXTENSION = "io.modelcontextprotocol/enterprise-managed-authorization";
+const INPUT_REQUIRED_ON_LEGACY = "Input-required tool calls require modern MCP";
+// Seconds to wait before retrying a state-only input-required round, doubling up to the cap.
+const decimal STATE_ONLY_RETRY_DELAY = 0.05;
+const decimal STATE_ONLY_RETRY_MAX_DELAY = 0.25;
 
 # The HTTP method of an outbound transport request.
 enum OutboundMethod {

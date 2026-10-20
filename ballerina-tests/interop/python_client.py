@@ -4,6 +4,7 @@ import sys
 import anyio
 from fastmcp import Client as FastMCPClient
 from mcp.client import Client as SDKClient
+from mcp_types import ElicitResult
 
 
 async def main():
@@ -43,6 +44,20 @@ async def main():
         assert cached[0].description == first[0].description, 'expected a cached tools/list'
         assert refreshed[0].description != first[0].description, 'expected a refetched tools/list'
         print('FastMCP cached tools/list PASS')
+    # The Ballerina tool signs its request state and checks it comes back as written.
+    seats_action = 'accept'
+
+    async def answer_seats(context, params):
+        assert params.message == 'How many seats for Ada?', params
+        return ElicitResult(action=seats_action, content={'seats': 4} if seats_action == 'accept' else None)
+
+    async with SDKClient(base_url + '/elicitation', mode='2026-07-28', elicitation_callback=answer_seats) as client:
+        result = await client.call_tool('bookTable', {'name': 'Ada'})
+        assert result.content[0].text == 'booked 4 for Ada', result
+        seats_action = 'decline'
+        result = await client.call_tool('bookTable', {'name': 'Ada'})
+        assert result.content[0].text == 'not booked: decline', result
+        print('Python SDK form elicitation accept and decline PASS')
 
 
 anyio.run(main)

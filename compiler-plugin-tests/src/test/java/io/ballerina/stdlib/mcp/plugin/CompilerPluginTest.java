@@ -18,7 +18,12 @@
 
 package io.ballerina.stdlib.mcp.plugin;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import io.ballerina.compiler.syntax.tree.FunctionCallExpressionNode;
+import io.ballerina.compiler.syntax.tree.NodeVisitor;
 import io.ballerina.projects.DiagnosticResult;
+import io.ballerina.projects.Module;
 import io.ballerina.projects.Package;
 import io.ballerina.projects.ProjectEnvironmentBuilder;
 import io.ballerina.projects.directory.BuildProject;
@@ -26,11 +31,15 @@ import io.ballerina.projects.environment.Environment;
 import io.ballerina.projects.environment.EnvironmentBuilder;
 import io.ballerina.tools.diagnostics.Diagnostic;
 import io.ballerina.tools.diagnostics.DiagnosticSeverity;
+import io.swagger.v3.core.util.Json;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Tests for the MCP compiler plugin diagnostics on '@http:Header' and 'http:Headers' tool parameters.
@@ -256,5 +265,78 @@ public class CompilerPluginTest {
         DiagnosticResult conflictingBinding = compile("sample_package_31");
         Assert.assertEquals(errorCount(conflictingBinding), 1L);
         assertError(conflictingBinding, 0, "cannot use @mcp:Argument", "MCP_115");
+    }
+
+    @Test
+    public void testContextAndInputRequiredResultStayOutOfToolSchemas() {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve("sample_package_32"));
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+
+        Module module = project.currentPackage().getDefaultModule();
+        String source = module.documentIds().stream()
+                .map(documentId -> module.document(documentId).syntaxTree().toSourceCode())
+                .collect(Collectors.joining());
+        Assert.assertTrue(source.contains("\"required\":[\"path\"]"), source);
+        Assert.assertFalse(source.contains("\"context\""), source);
+        Assert.assertTrue(source.contains("outputSchema:{\"type\":\"string\"}"), source);
+    }
+
+    @Test
+    public void testRecordTypeFormSchema() throws JsonProcessingException {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve("sample_package_33"));
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+
+        JsonNode expected = Json.mapper().readTree("""
+                {"type": "object",
+                 "properties": {
+                   "name": {"type": "string", "description": "The guest's name"},
+                   "guests": {"type": "integer", "description": "How many people are coming"},
+                   "outdoor": {"type": "boolean", "description": "Whether to sit outside"},
+                   "area": {"type": "string", "description": "The seating area", "enum": ["indoor", "patio"]},
+                   "diets": {"type": "array", "description": "Dietary needs",
+                             "items": {"type": "string", "enum": ["vegan", "gluten-free"]}},
+                   "deposit": {"type": "number", "description": "The deposit to hold"}},
+                 "required": ["name", "guests", "area", "diets", "deposit"]}""");
+        Assert.assertEquals(Json.mapper().readTree(elicitFormSchemaArgument(project)), expected);
+        DiagnosticResult compilation = project.currentPackage().getCompilation().diagnosticResult();
+        Assert.assertEquals(compilation.errorCount(), 0, compilation.errors().toString());
+    }
+
+    @Test
+    public void testUnsupportedFormFieldTypes() {
+        DiagnosticResult result = compile("sample_package_34");
+        Assert.assertEquals(errorCount(result), 4L, result.diagnostics().toString());
+        assertError(result, 0, "Field 'address' of record type 'Shipping'", "MCP_119");
+        assertError(result, 1, "Field 'details' of record type 'Note'", "MCP_119");
+        assertError(result, 2, "Field 'stops' of record type 'Delivery'", "MCP_119");
+        assertError(result, 3, "Field 'phone' of record type 'Contact'", "MCP_119");
+    }
+
+    @Test
+    public void testFormSchemaTypeMustBeStaticRecordType() {
+        DiagnosticResult result = compile("sample_package_35");
+        Assert.assertEquals(errorCount(result), 3L, result.diagnostics().toString());
+        assertError(result, 0, "must be a form schema value or a named record type", "MCP_120");
+        assertError(result, 1, "must be a form schema value or a named record type", "MCP_120");
+        assertError(result, 2, "must be a form schema value or a named record type", "MCP_120");
+    }
+
+    private static String elicitFormSchemaArgument(BuildProject project) {
+        Module module = project.currentPackage().getDefaultModule();
+        List<String> arguments = new ArrayList<>();
+        NodeVisitor visitor = new NodeVisitor() {
+            @Override
+            public void visit(FunctionCallExpressionNode call) {
+                if (call.functionName().toSourceCode().trim().equals("mcp:elicitForm")) {
+                    arguments.add(call.arguments().get(1).toSourceCode().trim());
+                }
+                super.visit(call);
+            }
+        };
+        module.documentIds().forEach(id -> module.document(id).syntaxTree().rootNode().accept(visitor));
+        Assert.assertEquals(arguments.size(), 1, arguments.toString());
+        return arguments.get(0);
     }
 }

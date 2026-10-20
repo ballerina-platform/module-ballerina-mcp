@@ -110,21 +110,84 @@ service StreamableHttpAdvancedService /failCall on dispatcherErrorListener {
         error ServerError("tool execution is unavailable");
 }
 
+// Form elicitations the types accept but the form schema subset or the spec does not.
+final readonly & map<FormElicitationParams> badForms = {
+    blankMessage: {message: " ", requestedSchema: {properties: {}}},
+    undeclaredRequired: {message: "?", requestedSchema: {properties: {}, required: ["name"]}},
+    invertedLength: {
+        message: "?",
+        requestedSchema: {properties: {name: {'type: "string", minLength: 5, maxLength: 2}}}
+    },
+    negativeLength: {message: "?", requestedSchema: {properties: {name: {'type: "string", minLength: -1}}}},
+    invertedNumberRange: {
+        message: "?",
+        requestedSchema: {properties: {age: {'type: "integer", minimum: 10, maximum: 1}}}
+    },
+    emptyEnum: {message: "?", requestedSchema: {properties: {color: {'type: "string", 'enum: []}}}},
+    legacyEnumNames: {
+        message: "?",
+        requestedSchema: {properties: {color: {'type: "string", 'enum: ["red"], enumNames: ["Red"]}}}
+    },
+    foreignDefault: {
+        message: "?",
+        requestedSchema: {properties: {color: {'type: "string", 'enum: ["red"], default: "blue"}}}
+    },
+    foreignTitledDefault: {
+        message: "?",
+        requestedSchema: {
+            properties: {size: {'type: "string", oneOf: [{'const: "s", title: "Small"}], default: "xl"}}
+        }
+    },
+    foreignMultiDefault: {
+        message: "?",
+        requestedSchema: {
+            properties: {tags: {'type: "array", items: {'enum: ["a"]}, default: ["a", "b"]}}
+        }
+    },
+    invertedItemRange: {
+        message: "?",
+        requestedSchema: {
+            properties: {
+                tags: {'type: "array", minItems: 2, maxItems: 1, items: {anyOf: [{'const: "a", title: "A"}]}}
+            }
+        }
+    }
+};
+
+// URL elicitations the types accept but the spec does not.
+final readonly & map<UrlElicitationParams> badUrls = {
+    blankUrlMessage: {mode: "url", message: " ", url: "https://example.com/connect"},
+    relativeUrl: {mode: "url", message: "Connect", url: "/connect"},
+    schemelessUrl: {mode: "url", message: "Connect", url: "example.com/connect"},
+    hostlessUrl: {mode: "url", message: "Connect", url: "https://"},
+    portOnlyUrl: {mode: "url", message: "Connect", url: "https://:443/connect"},
+    userinfoOnlyUrl: {mode: "url", message: "Connect", url: "https://user@/connect"},
+    spacedUrl: {mode: "url", message: "Connect", url: "https://exa mple.com/connect"}
+};
+
 @StreamableHttpConfig {info: {name: "bad-input-required", version: "1"}}
 service StreamableHttpAdvancedService /badInputRequired on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
-        tools: [{name: "ask", inputSchema: {'type: "object"}}, {name: "badMode", inputSchema: {'type: "object"}}]
+        tools: from string toolName in ["ask", "openLink", "openLocalLink", ...badForms.keys(), ...badUrls.keys()]
+            select {name: toolName, inputSchema: {'type: "object"}}
     };
 
     remote isolated function onCallTool(CallToolParams callParams) returns InputRequiredResult {
-        if callParams.name == "badMode" {
+        FormElicitationParams? badForm = badForms[callParams.name];
+        if badForm is FormElicitationParams {
+            return {inputRequests: {"answer": {params: badForm}}};
+        }
+        UrlElicitationParams? badUrl = badUrls[callParams.name];
+        if badUrl is UrlElicitationParams {
+            return {inputRequests: {"connect": {params: badUrl}}};
+        }
+        if callParams.name == "openLocalLink" {
+            return {inputRequests: {"connect": {params: {mode: "url", message: "Connect", url: "http://localhost:9090/connect"}}}};
+        }
+        if callParams.name == "openLink" {
             return {
-                requestState: "state",
                 inputRequests: {
-                    "answer": {
-                        method: "elicitation/create",
-                        params: {"mode": "telepathy", "message": "?"}
-                    }
+                    "connect": {params: {mode: "url", message: "Connect", url: "https://example.com/connect"}}
                 }
             };
         }
@@ -305,13 +368,54 @@ function testDispatcherValidatesInputRequiredResults() returns error? {
             "Input-required result must contain inputRequests or requestState");
 
     http:Response missingCapability = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL,
-            {"name": "badMode"}, {[NAME_HEADER]: "badMode"});
-    check assertJsonRpcError(missingCapability, 400, MISSING_REQUIRED_CLIENT_CAPABILITY,
-            "Client did not declare the required capability: elicitation");
+            {"name": "openLink"}, {[NAME_HEADER]: "openLink"});
+    check assertMissingCapability(missingCapability, "Client did not declare the required capability: elicitation",
+            {elicitation: {url: {}}});
 
-    http:Response badMode = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL, {"name": "badMode"},
-            {[NAME_HEADER]: "badMode"}, capabilities = {elicitation: {form: {}}});
-    check assertJsonRpcError(badMode, 200, INTERNAL_ERROR, "Invalid elicitation mode");
+    string formTool = badForms.keys()[0];
+    http:Response missingFormCapability = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL,
+            {"name": formTool}, {[NAME_HEADER]: formTool});
+    check assertMissingCapability(missingFormCapability,
+            "Client did not declare the required capability: elicitation", {elicitation: {form: {}}});
+
+    http:Response missingMode = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL, {"name": "openLink"},
+            {[NAME_HEADER]: "openLink"}, capabilities = {elicitation: {form: {}}});
+    check assertMissingCapability(missingMode, "Client did not declare the required elicitation mode",
+            {elicitation: {url: {}}});
+}
+
+@test:Config {}
+function testDispatcherRejectsMalformedFormElicitations() returns error? {
+    foreach string toolName in badForms.keys() {
+        http:Response response = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL, {"name": toolName},
+                {[NAME_HEADER]: toolName}, capabilities = {elicitation: {form: {}}});
+        check assertJsonRpcError(response, 200, INTERNAL_ERROR, "Form ");
+    }
+}
+
+@test:Config {}
+function testDispatcherRejectsMalformedUrlElicitations() returns error? {
+    foreach string toolName in badUrls.keys() {
+        http:Response response = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL, {"name": toolName},
+                {[NAME_HEADER]: toolName}, capabilities = {elicitation: {url: {}}});
+        check assertJsonRpcError(response, 200, INTERNAL_ERROR, "URL elicitation");
+    }
+}
+
+@test:Config {}
+function testDispatcherAllowsHttpUrlElicitations() returns error? {
+    http:Response response = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL, {"name": "openLocalLink"},
+            {[NAME_HEADER]: "openLocalLink"}, capabilities = {elicitation: {url: {}}});
+    test:assertEquals(response.statusCode, 200);
+    json body = check response.getJsonPayload();
+    test:assertEquals(check body.result.resultType, "input_required", body.toJsonString());
+}
+
+isolated function assertMissingCapability(http:Response response, string expectedMessage,
+        json expectedCapabilities) returns error? {
+    check assertJsonRpcError(response, 400, MISSING_REQUIRED_CLIENT_CAPABILITY, expectedMessage);
+    json errorBody = check response.getJsonPayload();
+    test:assertEquals(check errorBody.'error.data.requiredCapabilities, expectedCapabilities);
 }
 
 @test:Config {}

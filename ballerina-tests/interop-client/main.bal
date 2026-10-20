@@ -40,6 +40,29 @@ public function main() returns error? {
         check peerClient->close();
         io:println(protocolMode, " HTTP/SSE add and mirrored-header echo PASS");
     }
+    check verifyFormElicitation();
+}
+
+// The peer's bookTable tool asks for the seat count and checks its request state came back intact.
+function verifyFormElicitation() returns error? {
+    mcp:StreamableHttpClient peerClient = check new (interopUrl, protocolMode = "modern",
+        elicitationHandler = answerSeats);
+    _ = check peerClient->connect();
+    mcp:CallToolResult bookResult = check peerClient->callTool({name: "bookTable", arguments: {"name": "Ada"}});
+    mcp:TextContent bookText = check bookResult.content[0].ensureType();
+    if bookText.text != "booked 4 for Ada" {
+        return error(string `Unexpected booking result: ${bookText.text}`);
+    }
+    check peerClient->close();
+    io:println("modern form elicitation PASS");
+}
+
+isolated function answerSeats(mcp:ElicitRequest inputRequest) returns mcp:ElicitResult|mcp:ClientError {
+    mcp:FormElicitationParams|mcp:UrlElicitationParams params = inputRequest.params;
+    if params !is mcp:FormElicitationParams || !params.requestedSchema.properties.hasKey("seats") {
+        return error mcp:ClientError("Expected a form asking for seats");
+    }
+    return {action: "accept", content: {seats: 4}};
 }
 
 // A listing within the peer's hinted TTL must not reach the peer; a peer that sends no TTL is listed every time.

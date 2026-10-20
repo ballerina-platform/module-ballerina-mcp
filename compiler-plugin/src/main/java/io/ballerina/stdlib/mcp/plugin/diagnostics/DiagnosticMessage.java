@@ -48,6 +48,9 @@ public enum DiagnosticMessage {
     ERROR_116("Invalid MCP argument header name ''{2}'' on parameter ''{1}'' in function ''{0}''."),
     ERROR_117("Duplicate MCP argument header name ''{2}'' on parameter ''{1}'' in function ''{0}''."),
     ERROR_118("Function ''{0}'' cannot combine '@mcp:Argument' with an explicitly supplied '@mcp:Tool.schema'."),
+    ERROR_119("Field ''{1}'' of record type ''{0}'' cannot be a form field. Form fields must be a string, int, " +
+            "float, decimal or boolean, a union of string constants, or an array of a union of string constants."),
+    ERROR_120("The schema passed to `mcp:elicitForm` must be a form schema value or a named record type."),
     WARNING_102("Required HttpSession parameter ''{0}'' restricts this service to legacy MCP in auto protocol mode."),
     WARNING_103("HttpSession parameter ''{0}'' is always nil for modern MCP requests. " +
             "Remove it or migrate session-dependent behavior to explicit application state."),

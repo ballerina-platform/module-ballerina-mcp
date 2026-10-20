@@ -81,6 +81,7 @@ public class Utils {
     public static final String META_TYPE_NAME = "RequestMetaObject";
     public static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
     public static final String AUTH_CONTEXT_TYPE_NAME = "AuthContext";
+    public static final String CONTEXT_TYPE_NAME = "Context";
     public static final String CALL_TOOL_RESULT_TYPE_NAME = "CallToolResult";
     public static final String LIST_TOOLS_RESULT_TYPE_NAME = "ListToolsResult";
     public static final String INPUT_REQUIRED_RESULT_TYPE_NAME = "InputRequiredResult";
@@ -98,7 +99,8 @@ public class Utils {
     public static final String BASIC_TOOL_SUPPORTED_PARAM_TYPES =
             "'anydata' tool parameters, a first 'mcp:HttpSession' parameter, an optional "
                     + "'mcp:RequestMetaObject' parameter, an 'mcp:AuthContext' parameter, "
-                    + "an 'http:Headers' parameter, an 'http:Request' parameter, or '@http:Header' parameters";
+                    + "an 'mcp:Context' parameter, an 'http:Headers' parameter, an 'http:Request' parameter, "
+                    + "or '@http:Header' parameters";
     public static final String ADVANCED_SUPPORTED_PARAM_TYPES =
             "'mcp:CallToolParams', 'mcp:HttpSession', 'mcp:AuthContext', 'http:Headers', 'http:Request', "
                     + "or an '@http:Header' parameter";
@@ -251,6 +253,7 @@ public class Utils {
         boolean hasHeadersParam = false;
         boolean hasRequestParam = false;
         boolean hasAuthContextParam = false;
+        boolean hasContextParam = false;
         Set<String> argumentHeaderNames = new HashSet<>();
 
         for (int i = 0; i < parameterSymbolList.size(); i++) {
@@ -261,10 +264,12 @@ public class Utils {
             boolean isSessionType = isSessionType(parameterType);
             boolean isMetaParam = isMetaParameter(parameterType);
             boolean isAuthContextParam = isAuthContextType(parameterType);
+            boolean isContextParam = isContextType(parameterType);
             boolean hasMcpArgument = hasMcpArgumentAnnotation(parameterSymbol);
 
             if (hasMcpArgument) {
                 if (hasHttpHeaderAnnotation(parameterSymbol) || isSessionType || isMetaParam || isAuthContextParam
+                        || isContextParam
                         || isHttpHeadersType(parameterType) || isHttpRequestType(parameterType)
                         || !isValidMcpHeaderArgumentType(parameterType, context)) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
@@ -334,6 +339,16 @@ public class Utils {
                     return false;
                 }
                 hasAuthContextParam = true;
+            } else if (isContextParam) {
+                if (hasContextParam) {
+                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                            CompilationDiagnostic.DUPLICATE_PARAMETER,
+                            parameterSymbol.getLocation().orElse(alternativeLocation),
+                            functionName, parameterName, MCP_PACKAGE_NAME + ":" + CONTEXT_TYPE_NAME);
+                    context.reportDiagnostic(diagnostic);
+                    return false;
+                }
+                hasContextParam = true;
             } else if (isSessionType) {
                 if (hasSessionParam) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
@@ -425,6 +440,34 @@ public class Utils {
         }
         return typeSymbol instanceof TypeReferenceTypeSymbol reference
                 && isAuthContextType(reference.typeDescriptor());
+    }
+
+    /**
+     * Check if a TypeSymbol is {@code mcp:Context}.
+     *
+     * @param typeSymbol The type symbol to check
+     * @return true if the type is the injected tool call context
+     */
+    static boolean isContextType(TypeSymbol typeSymbol) {
+        return isMcpTypeReference(typeSymbol, CONTEXT_TYPE_NAME);
+    }
+
+    /**
+     * Check if a TypeSymbol is {@code mcp:InputRequiredResult}.
+     *
+     * @param typeSymbol The type symbol to check
+     * @return true if the type is the input-required result
+     */
+    static boolean isInputRequiredResultType(TypeSymbol typeSymbol) {
+        return isMcpTypeReference(typeSymbol, INPUT_REQUIRED_RESULT_TYPE_NAME);
+    }
+
+    private static boolean isMcpTypeReference(TypeSymbol typeSymbol, String typeName) {
+        if (typeName.equals(typeSymbol.getName().orElse("")) && isMcpModuleSymbol(typeSymbol)) {
+            return true;
+        }
+        return typeSymbol instanceof TypeReferenceTypeSymbol reference
+                && isMcpTypeReference(reference.typeDescriptor(), typeName);
     }
 
     static boolean isCallToolParamsType(TypeSymbol typeSymbol) {
@@ -608,7 +651,7 @@ public class Utils {
         return nonNilMembers.size() == 1 ? nonNilMembers.get(0) : typeSymbol;
     }
 
-    private static TypeSymbol getRawType(TypeSymbol typeSymbol) {
+    static TypeSymbol getRawType(TypeSymbol typeSymbol) {
         if (typeSymbol.typeKind() == TypeDescKind.INTERSECTION) {
             return getRawType(((IntersectionTypeSymbol) typeSymbol).effectiveTypeDescriptor());
         }

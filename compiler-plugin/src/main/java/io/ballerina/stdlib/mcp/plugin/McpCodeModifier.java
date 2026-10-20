@@ -25,6 +25,7 @@ import io.ballerina.projects.plugins.CodeModifierContext;
 import java.util.HashMap;
 import java.util.Map;
 
+import static io.ballerina.compiler.syntax.tree.SyntaxKind.FUNCTION_CALL;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.OBJECT_METHOD_DEFINITION;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.SERVICE_DECLARATION;
 
@@ -41,6 +42,7 @@ public class McpCodeModifier extends CodeModifier {
     public void init(CodeModifierContext codeModifierContext) {
         codeModifierContext.addSyntaxNodeAnalysisTask(new RemoteFunctionAnalysisTask(modifierContextMap),
                 OBJECT_METHOD_DEFINITION);
+        codeModifierContext.addSyntaxNodeAnalysisTask(new ElicitFormAnalysisTask(modifierContextMap), FUNCTION_CALL);
         codeModifierContext.addSyntaxNodeAnalysisTask(new AdvancedServiceAnalysisTask(), SERVICE_DECLARATION);
         codeModifierContext.addSyntaxNodeAnalysisTask(new ProtocolSessionAnalysisTask(), SERVICE_DECLARATION);
         codeModifierContext.addSourceModifierTask(new McpSourceModifier(modifierContextMap));

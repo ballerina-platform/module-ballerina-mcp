@@ -94,6 +94,8 @@ public final class McpServiceMethodHelper {
     private static final String META_FIELD_NAME = "_meta";
     private static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
     private static final String AUTH_CONTEXT_TYPE_NAME = "AuthContext";
+    private static final String CONTEXT_TYPE_NAME = "Context";
+    private static final String INPUT_REQUIRED_RESULT_TYPE_NAME = "InputRequiredResult";
     private static final String INSUFFICIENT_SCOPE_ERROR = "InsufficientScopeError";
     private static final String SCOPES_FIELD_NAME = "scopes";
 
@@ -280,23 +282,24 @@ public final class McpServiceMethodHelper {
     public static Object callToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
                                                     Object session, BObject headers, BObject request,
                                                     BMap<?, ?> headerValues, boolean treatNilableAsOptional,
-                                                    Object authContext, BTypedesc typed) {
+                                                    Object authContext, BObject toolContext, BTypedesc typed) {
         return callToolForRemoteFunctions(env, mcpService, params, session, headers, request, headerValues,
-                treatNilableAsOptional, authContext, typed, false);
+                treatNilableAsOptional, authContext, toolContext, typed, false);
     }
 
     public static Object callProtocolToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
                                                             Object session, BObject headers, BObject request,
                                                             BMap<?, ?> headerValues, boolean treatNilableAsOptional,
-                                                            Object authContext, BTypedesc typed) {
+                                                            Object authContext, BObject toolContext,
+                                                            BTypedesc typed) {
         return callToolForRemoteFunctions(env, mcpService, params, session, headers, request, headerValues,
-                treatNilableAsOptional, authContext, typed, true);
+                treatNilableAsOptional, authContext, toolContext, typed, true);
     }
 
     private static Object callToolForRemoteFunctions(Environment env, BObject mcpService, BMap<?, ?> params,
                                                      Object session, BObject headers, BObject request,
                                                      BMap<?, ?> headerValues, boolean treatNilableAsOptional,
-                                                     Object authContext, BTypedesc typed,
+                                                     Object authContext, BObject toolContext, BTypedesc typed,
                                                      boolean structuredResult) {
         BString toolName = (BString) params.get(fromString(NAME_FIELD_NAME));
 
@@ -313,7 +316,8 @@ public final class McpServiceMethodHelper {
 
         Object argsOrError =
                 buildArgsForMethod(env, method.get(), (BMap<?, ?>) params.get(fromString(ARGUMENTS_FIELD_NAME)),
-                        session, meta, headers, request, headerValues, treatNilableAsOptional, authContext);
+                        session, meta, headers, request, headerValues, treatNilableAsOptional, authContext,
+                        toolContext);
 
         // Header binding failures are transport-level and stay protocol errors; anything else is an
         // invalid tool argument, which the spec reports as a tool execution error.
@@ -327,6 +331,9 @@ public final class McpServiceMethodHelper {
         // A tool asking for a step-up is answered with a 403 challenge, not a tool execution error.
         if (toolResult instanceof BError toolError && isInsufficientScopeError(toolError)) {
             return toolError;
+        }
+        if (isMcpType(TypeUtils.getType(toolResult), INPUT_REQUIRED_RESULT_TYPE_NAME)) {
+            return toolResult;
         }
         if (structuredResult && isStructuredOutputEnabled(method.get())) {
             return createStructuredCallToolResult(typed, toolResult);
@@ -457,7 +464,7 @@ public final class McpServiceMethodHelper {
     private static Object buildArgsForMethod(Environment env, RemoteMethodType method, BMap<?, ?> arguments,
                                              Object session, Object meta, Object headers, Object request,
                                              BMap<?, ?> headerValues, boolean treatNilableAsOptional,
-                                             Object authContext) {
+                                             Object authContext, BObject toolContext) {
         List<Parameter> params = List.of(method.getParameters());
         Object[] args = new Object[params.size()];
         for (int i = 0; i < params.size(); i++) {
@@ -468,6 +475,8 @@ public final class McpServiceMethodHelper {
                 args[i] = session;
             } else if (isAuthContextParameter(param)) {
                 args[i] = authContext;
+            } else if (isContextParameter(param)) {
+                args[i] = toolContext;
             } else if (isMetaParameter(param)) {
                 args[i] = meta;
             } else if (isHeadersParameter(param)) {
@@ -557,6 +566,10 @@ public final class McpServiceMethodHelper {
     private static boolean isAuthContextParameter(Parameter param) {
         // AuthContext is commonly declared nilable, so look through the union as well.
         return isMcpType(param.type, AUTH_CONTEXT_TYPE_NAME);
+    }
+
+    private static boolean isContextParameter(Parameter param) {
+        return isMcpType(param.type, CONTEXT_TYPE_NAME);
     }
 
     private static boolean isMcpType(Type type, String typeName) {

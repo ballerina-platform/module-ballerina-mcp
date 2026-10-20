@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/lang.runtime;
+
 // Adds the configured MCP authorization extension to the advertised capabilities.
 isolated function withOAuthExtensionCapability(ClientCapabilities capabilities, string? extension)
         returns ClientCapabilities {
@@ -31,6 +33,26 @@ isolated function withOAuthExtensionCapability(ClientCapabilities capabilities, 
     return advertised;
 }
 
+// Legacy initialize never carries this: the client cannot answer server-initiated elicitation.
+isolated function withElicitationCapability(ClientCapabilities capabilities) returns ClientCapabilities {
+    ClientCapabilities advertised = capabilities.clone();
+    record {map<anydata> form?; map<anydata> url?;} elicitation = {...(advertised.elicitation ?: {})};
+    elicitation.form = elicitation.form ?: {};
+    elicitation.url = elicitation.url ?: {};
+    advertised.elicitation = elicitation;
+    return advertised;
+}
+
+// Only an accepted form carries what the user submitted; a URL answer has nothing to submit.
+isolated function withSubmittedContentOnly(ElicitRequest elicitRequest, ElicitResult answer) returns ElicitResult {
+    if answer.action == "accept" && elicitRequest.params is FormElicitationParams {
+        return answer;
+    }
+    ElicitResult stripped = answer.clone();
+    _ = stripped.removeIfHasKey("content");
+    return stripped;
+}
+
 # Represents an MCP client built on top of the Streamable HTTP transport.
 public distinct isolated client class StreamableHttpClient {
     # Transport for communication with the MCP server.
@@ -43,7 +65,7 @@ public distinct isolated client class StreamableHttpClient {
     private int requestId = 0;
     private final ProtocolMode protocolMode;
     private final int maxInputRounds;
-    private final InputHandler? inputHandler;
+    private final ElicitationHandler? elicitationHandler;
     private boolean modernSelected = false;
     private boolean connected = false;
     private string? negotiatedProtocolVersion = ();
@@ -72,12 +94,16 @@ public distinct isolated client class StreamableHttpClient {
         }
         self.protocolMode = config.sessionId is string ? "legacy" : config.protocolMode;
         self.maxInputRounds = config.maxInputRounds;
-        self.inputHandler = config.inputHandler;
+        self.elicitationHandler = config.elicitationHandler;
         self.transport = check new (serverUrl, config);
         // discover() can run before connect(), so its first modern request must already
         // advertise the configured authorization extension.
-        self.clientCapabilities = withOAuthExtensionCapability({}, self.transport.oauthExtension());
+        self.clientCapabilities = self.withHandlerCapabilities(
+            withOAuthExtensionCapability({}, self.transport.oauthExtension()));
     }
+
+    private isolated function withHandlerCapabilities(ClientCapabilities capabilities) returns ClientCapabilities =>
+        self.elicitationHandler is () ? capabilities : withElicitationCapability(capabilities);
 
     # Connects to the MCP server and negotiates the protocol version.
     #
@@ -90,12 +116,13 @@ public distinct isolated client class StreamableHttpClient {
             returns ConnectionInfo|ClientError {
         ClientCapabilities advertisedCapabilities =
             withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
+        ClientCapabilities modernCapabilities = self.withHandlerCapabilities(advertisedCapabilities);
         lock {
             if self.connected {
                 return self.getConnectionInfo();
             }
             self.clientInfo = clientInfo.cloneReadOnly();
-            self.clientCapabilities = advertisedCapabilities.cloneReadOnly();
+            self.clientCapabilities = modernCapabilities.cloneReadOnly();
             string? sessionId = self.transport.getSessionId();
 
             // If a session ID exists, assume reconnection and skip initialization.
@@ -276,6 +303,7 @@ public distinct isolated client class StreamableHttpClient {
         check self.ensureConnected();
         if self.isModern() {
             CallToolParams currentParams = params.clone();
+            decimal stateOnlyDelay = STATE_ONLY_RETRY_DELAY;
             foreach int roundNumber in 0 ... self.maxInputRounds {
                 CallToolResult|InputRequiredResult callResult = check self->callToolOnce(currentParams, headers);
                 if callResult is CallToolResult {
@@ -287,14 +315,22 @@ public distinct isolated client class StreamableHttpClient {
                 InputRequiredResult inputResult = <InputRequiredResult>callResult;
                 map<InputResponse> inputResponses = {};
                 foreach var [inputId, inputRequest] in (inputResult.inputRequests ?: {}).entries() {
-                    InputHandler? inputHandler = self.inputHandler;
-                    if inputHandler is () {
-                        return error ToolCallError("Input handler is not configured; use callToolOnce() for manual continuation",
+                    ElicitationHandler? elicitationHandler = self.elicitationHandler;
+                    if elicitationHandler is () {
+                        return error ToolCallError("Elicitation handler is not configured; use callToolOnce() for manual continuation",
                                 inputRequired = callResult);
                     }
-                    inputResponses[inputId] = check inputHandler(inputRequest);
+                    inputResponses[inputId] = withSubmittedContentOnly(inputRequest,
+                            check elicitationHandler(inputRequest));
                 }
-                currentParams.inputResponses = inputResponses;
+                if inputResponses.length() > 0 {
+                    currentParams.inputResponses = inputResponses;
+                } else {
+                    _ = currentParams.removeIfHasKey("inputResponses");
+                    // Nothing for the user to answer, so pace the retries of a server shedding load.
+                    runtime:sleep(stateOnlyDelay);
+                    stateOnlyDelay = decimal:min(stateOnlyDelay * 2, STATE_ONLY_RETRY_MAX_DELAY);
+                }
                 if inputResult.requestState is string {
                     currentParams.requestState = inputResult.requestState;
                 } else {
@@ -401,12 +437,13 @@ public distinct isolated client class StreamableHttpClient {
         Implementation? discoveredServerInfo = discovered._meta?.serverInfo;
         ClientCapabilities advertisedCapabilities =
             withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
+        ClientCapabilities modernCapabilities = self.withHandlerCapabilities(advertisedCapabilities);
         lock {
             if self.connected {
                 return error ClientInitializationError("Client is already connected");
             }
             self.clientInfo = clientInfo.cloneReadOnly();
-            self.clientCapabilities = advertisedCapabilities.cloneReadOnly();
+            self.clientCapabilities = modernCapabilities.cloneReadOnly();
             self.modernSelected = true;
             self.connected = true;
             self.negotiatedProtocolVersion = MODERN_PROTOCOL_VERSION;
