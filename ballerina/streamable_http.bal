@@ -123,7 +123,6 @@ isolated class StreamableHttpClientTransport {
     private string? sessionId;
     # Protocol version negotiated during initialization, sent on all subsequent requests.
     private string? protocolVersion = ();
-    private map<ClientSubscriptionStream> activeSubscriptions = {};
     private final ResultCache resultCache;
 
     # Initializes the HTTP client transport with the provided server URL.
@@ -255,9 +254,6 @@ isolated class StreamableHttpClientTransport {
                 POST => {
                     return check self.httpClient->post("", message, headers = headers);
                 }
-                GET => {
-                    return check self.httpClient->get("", headers = headers);
-                }
                 _ => {
                     return check self.httpClient->delete("", headers = headers);
                 }
@@ -369,85 +365,6 @@ isolated class StreamableHttpClientTransport {
         map<string|string[]> requestHeaders = check prepareProtocolRequestHeaders(requestMessage, additionalHeaders, parameterHeaders);
         http:Response httpResponse = check self.execute(POST, requestHeaders, requestMessage);
         return readProtocolResponse(httpResponse, requestMessage.id, requireResultType);
-    }
-
-    isolated function openProtocolSubscription(JsonRpcRequest requestMessage, SubscriptionFilter requestedFilter,
-            map<string|string[]> additionalHeaders) returns stream<JsonRpcNotification, StreamError?>|ClientError {
-        map<string|string[]> requestHeaders = check prepareProtocolRequestHeaders(requestMessage, additionalHeaders);
-        http:Response|StreamableHttpTransportError httpResponse = self.execute(POST, requestHeaders, requestMessage);
-        if httpResponse is AuthorizationError {
-            return httpResponse;
-        }
-        if httpResponse is StreamableHttpTransportError {
-            return error SseStreamEstablishmentError(
-                string `Failed to open subscription: ${httpResponse.message()}`, httpResponse);
-        }
-        if httpResponse.statusCode != 200 || !httpResponse.getContentType().includes(CONTENT_TYPE_SSE) {
-            Result|ClientError resultValue = readProtocolResponse(httpResponse, requestMessage.id);
-            return resultValue is ClientError ? resultValue : error SseStreamEstablishmentError("Expected a subscription SSE stream");
-        }
-        var eventStream = httpResponse.getSseEventStream();
-        if eventStream is error {
-            return error SseStreamEstablishmentError(eventStream.message());
-        }
-        ProtocolMessageStream messageStream = new (eventStream);
-        ClientSubscriptionStream streamIterator = new (messageStream, requestMessage.id, requestedFilter, self);
-        lock {
-            self.activeSubscriptions[requestMessage.id.toString()] = streamIterator;
-        }
-        return new stream<JsonRpcNotification, StreamError?>(streamIterator);
-    }
-
-    isolated function removeSubscription(RequestId subscriptionId) {
-        lock {
-            _ = self.activeSubscriptions.removeIfHasKey(subscriptionId.toString());
-        }
-    }
-
-    isolated function closeSubscriptions() returns StreamError? {
-        string[] & readonly subscriptionIds;
-        lock {
-            subscriptionIds = self.activeSubscriptions.keys().cloneReadOnly();
-        }
-        StreamError? firstError = ();
-        foreach string subscriptionId in subscriptionIds {
-            ClientSubscriptionStream? eventSource;
-            lock {
-                eventSource = self.activeSubscriptions[subscriptionId];
-            }
-            if eventSource is ClientSubscriptionStream {
-                StreamError? closeError = eventSource.close();
-                if firstError is () {
-                    firstError = closeError;
-                }
-            }
-        }
-        return firstError;
-    }
-
-    # Establishes a Server-Sent Events (SSE) stream with the server.
-    #
-    # + return - A stream of JsonRpcMessages, or a StreamableHttpTransportError.
-    isolated function establishEventStream() returns stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError {
-        map<string> headers = self.prepareRequestHeaders();
-        headers[ACCEPT_HEADER] = CONTENT_TYPE_SSE;
-
-        do {
-            // Bound to an `http:Response` rather than directly to a stream, so that an
-            // authorization challenge is readable rather than an opaque binding failure.
-            http:Response response = check self.execute(GET, headers);
-            stream<http:SseEvent, error?> sseEventStream = check response.getSseEventStream();
-
-            JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
-            return new stream<JsonRpcMessage, StreamError?>(streamTransformer);
-        } on fail error e {
-            if e is AuthorizationError {
-                return e;
-            }
-            return error SseStreamEstablishmentError(
-                string `Failed to establish SSE connection with server: ${e.message()}`, e
-            );
-        }
     }
 
     # Terminates the current session with the server.

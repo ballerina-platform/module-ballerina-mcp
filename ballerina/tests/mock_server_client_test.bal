@@ -21,7 +21,6 @@ import ballerina/test;
 // A deliberately misbehaving peer. A conforming MCP server cannot produce these
 // responses, so the client-side rejection paths are only reachable through a mock.
 const MISBEHAVING_SERVER_URL = "http://localhost:3210/mock";
-const SUBSCRIPTION_ID_META_KEY = "io.modelcontextprotocol/subscriptionId";
 
 isolated function mockUrl(string scenario) returns string => string `${MISBEHAVING_SERVER_URL}/${scenario}`;
 
@@ -138,18 +137,6 @@ isolated function mockRawSse(string body) returns http:Response {
 
 const SSE_KEEP_ALIVE = ": keep-alive\n\n";
 
-isolated function mockAckEvent(RequestId subscriptionId, json acceptedFilter) returns string =>
-    string `{"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":` +
-        string `{"_meta":{"${SUBSCRIPTION_ID_META_KEY}":${subscriptionId.toString()}},` +
-        string `"notifications":${acceptedFilter.toJsonString()}}}`;
-
-isolated function mockNotificationEvent(string method, RequestId subscriptionId) returns string =>
-    string `{"jsonrpc":"2.0","method":"${method}","params":` +
-        string `{"_meta":{"${SUBSCRIPTION_ID_META_KEY}":${subscriptionId.toString()}}}}`;
-
-isolated function mockCompletionEvent(RequestId subscriptionId, string resultType = "complete") returns string =>
-    string `{"jsonrpc":"2.0","id":${subscriptionId.toString()},"result":{"resultType":"${resultType}"}}`;
-
 service /mock on new http:Listener(3210) {
 
     resource function post [string scenario](http:Request request) returns http:Response|error {
@@ -257,71 +244,6 @@ service /mock on new http:Listener(3210) {
             });
         }
 
-        if method == "subscriptions/listen" {
-            match scenario {
-                "sseKeepAlive" => {
-                    return mockRawSse(SSE_KEEP_ALIVE + "data: " + mockAckEvent(requestId, {"toolsListChanged": true}) +
-                        "\n\n" + SSE_KEEP_ALIVE + "data: " +
-                        mockNotificationEvent("notifications/tools/list_changed", requestId) + "\n\n" +
-                        SSE_KEEP_ALIVE + "data: " + mockCompletionEvent(requestId) + "\n\n");
-                }
-                "subNoAck" => {
-                    return mockSse([mockNotificationEvent("notifications/tools/list_changed", requestId)]);
-                }
-                "subBadFilter" => {
-                    return mockSse([mockAckEvent(requestId, {"promptsListChanged": true})]);
-                }
-                "subWrongId" => {
-                    return mockSse([
-                        mockAckEvent(requestId, {"toolsListChanged": true}),
-                        mockNotificationEvent("notifications/tools/list_changed", 9999)
-                    ]);
-                }
-                "subDisallowed" => {
-                    return mockSse([
-                        mockAckEvent(requestId, {"toolsListChanged": true}),
-                        mockNotificationEvent("notifications/prompts/list_changed", requestId)
-                    ]);
-                }
-                "subError" => {
-                    return mockSse([
-                        string `{"jsonrpc":"2.0","id":${requestId.toString()},` +
-                            string `"error":{"code":${INTERNAL_ERROR},"message":"subscription failed"}}`
-                    ]);
-                }
-                "subEarlyComplete" => {
-                    return mockSse([mockCompletionEvent(requestId)]);
-                }
-                "subBadComplete" => {
-                    return mockSse([
-                        mockAckEvent(requestId, {"toolsListChanged": true}),
-                        mockCompletionEvent(requestId, "partial")
-                    ]);
-                }
-                "subDisconnect" => {
-                    return mockSse([mockAckEvent(requestId, {"toolsListChanged": true})]);
-                }
-                "subUnexpected" => {
-                    return mockSse([string `{"jsonrpc":"2.0","id":7,"method":"ping"}`]);
-                }
-                "subComplete" => {
-                    return mockSse([
-                        mockAckEvent(requestId, {"toolsListChanged": true}),
-                        mockNotificationEvent("notifications/tools/list_changed", requestId),
-                        mockCompletionEvent(requestId)
-                    ]);
-                }
-                "subNotSse" => {
-                    return mockJson({
-                        "jsonrpc": JSONRPC_VERSION,
-                        "id": requestId,
-                        "error": {"code": INVALID_PARAMS, "message": "Invalid subscription filter"}
-                    }, 400);
-                }
-            }
-            return mockSse([mockAckEvent(requestId, {"toolsListChanged": true}), mockCompletionEvent(requestId)]);
-        }
-
         if method == REQUEST_LIST_TOOLS {
             match scenario {
                 "legacyErrorStatus" => {
@@ -347,6 +269,16 @@ service /mock on new http:Listener(3210) {
                     return mockSse([
                         string `{"jsonrpc":"2.0","id":${requestId.toString()},"result":{"tools":[]}}`
                     ]);
+                }
+                "sseMalformedStream" => {
+                    return mockSse(["{not-json"]);
+                }
+                "sseMissingData" => {
+                    MockEventOnlyIterator iterator = new;
+                    stream<http:SseEvent, error?> eventStream = new (iterator);
+                    http:Response sseResponse = new;
+                    sseResponse.setSseEventStream(eventStream);
+                    return sseResponse;
                 }
                 "noToolListCacheHints" => {
                     return mockToolListResult(requestId, [], includeCacheHints = false);
@@ -573,26 +505,6 @@ service /mock on new http:Listener(3210) {
             "id": requestId,
             "error": {"code": METHOD_NOT_FOUND, "message": "Method not found"}
         }, 404);
-    }
-
-    resource function get [string scenario]() returns http:Response {
-        if scenario == "sseMalformedStream" {
-            return mockSse(["{not-json"]);
-        }
-        if scenario == "sseKeepAlive" {
-            string notification = string `data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}` + "\n\n";
-            return mockRawSse(SSE_KEEP_ALIVE + notification + SSE_KEEP_ALIVE + notification + SSE_KEEP_ALIVE);
-        }
-        if scenario == "sseMissingData" {
-            MockEventOnlyIterator iterator = new;
-            stream<http:SseEvent, error?> eventStream = new (iterator);
-            http:Response sseResponse = new;
-            sseResponse.setSseEventStream(eventStream);
-            return sseResponse;
-        }
-        return mockSse([
-            string `{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}`
-        ]);
     }
 
     resource function delete [string scenario]() returns http:Response {
@@ -849,8 +761,6 @@ function testOperationsBeforeConnectAreRejected() returns error? {
     test:assertTrue(listResult is ClientInitializationError);
     var callResult = modernClient->callTool({name: "echo"});
     test:assertTrue(callResult is ClientInitializationError);
-    var listenResult = modernClient->listen();
-    test:assertTrue(listenResult is ClientInitializationError);
 }
 
 @test:Config {}
@@ -859,11 +769,7 @@ function testLegacySessionReconnectSkipsHandshake() returns error? {
     ConnectionInfo connection = check reconnectClient->connect();
     test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
 
-    // A legacy peer streams notifications over the GET event stream.
-    stream<JsonRpcMessage, StreamError?> eventStream = check reconnectClient->listen();
-    var firstEvent = check eventStream.next();
-    test:assertTrue(firstEvent is record {|JsonRpcMessage value;|});
-    check eventStream.close();
+    _ = check reconnectClient->listTools();
     check reconnectClient->close();
 }
 

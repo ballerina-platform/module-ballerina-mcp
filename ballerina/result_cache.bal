@@ -128,13 +128,6 @@ isolated class ResultCache {
         }
     }
 
-    // Drops the cached results that a change notification makes stale.
-    isolated function invalidateFor(JsonRpcNotification notification) {
-        if notification.method == "notifications/tools/list_changed" {
-            self.invalidate(REQUEST_LIST_TOOLS);
-        }
-    }
-
     isolated function clear() {
         lock {
             self.markInvalidated();

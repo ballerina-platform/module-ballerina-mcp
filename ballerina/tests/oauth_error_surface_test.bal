@@ -30,8 +30,6 @@ isolated function challengeResponse() returns http:Response {
 
 service /challenge on new http:Listener(3218) {
     resource function post .() returns http:Response => challengeResponse();
-
-    resource function get .() returns http:Response => challengeResponse();
 }
 
 function assertAuthorizationFailure(any|error result) {
@@ -48,8 +46,8 @@ function testModernRequestsSurfaceAuthorizationError() returns error? {
     assertAuthorizationFailure(connectResult);
 
     _ = check mcpClient.adoptDiscovery({supportedVersions: [LATEST_PROTOCOL_VERSION], capabilities: {}});
-    var listenResult = mcpClient->listen();
-    assertAuthorizationFailure(listenResult);
+    var listResult = mcpClient->listTools();
+    assertAuthorizationFailure(listResult);
 }
 
 @test:Config {}
@@ -59,6 +57,4 @@ function testLegacyRequestsSurfaceAuthorizationError() returns error? {
     _ = check mcpClient->connect();
     var listResult = mcpClient->listTools();
     assertAuthorizationFailure(listResult);
-    var listenResult = mcpClient->listen();
-    assertAuthorizationFailure(listenResult);
 }

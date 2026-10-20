@@ -201,16 +201,6 @@ service StreamableHttpAdvancedService /badInputRequired on dispatcherErrorListen
     }
 }
 
-@StreamableHttpServiceConfig {info: {name: "fail-subscribe", version: "1"}}
-service StreamableHttpAdvancedService /failSubscribe on dispatcherErrorListener {
-    remote isolated function onListTools() returns ListToolsResult => {tools: []};
-
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
-
-    remote isolated function onSubscribe(SubscriptionFilter notifications)
-            returns stream<JsonRpcNotification, error?>|ServerError => error ServerError("subscriptions are down");
-}
-
 @StreamableHttpServiceConfig {info: {name: "reject-params", version: "1"}, sessionMode: STATELESS}
 service StreamableHttpAdvancedService /rejectParams on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
@@ -219,10 +209,6 @@ service StreamableHttpAdvancedService /rejectParams on dispatcherErrorListener {
 
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InvalidParamsError =>
         error InvalidParamsError("city is required");
-
-    remote isolated function onSubscribe(SubscriptionFilter notifications)
-            returns stream<JsonRpcNotification, error?>|InvalidParamsError =>
-        error InvalidParamsError("unknown notification source");
 }
 
 @StreamableHttpServiceConfig {
@@ -425,10 +411,6 @@ function testHandlersRejectParamsWithTheirOwnMessage() returns error? {
     JsonRpcError modernError = check (check modernCall.getJsonPayload()).cloneWithType();
     test:assertEquals(modernError.'error.message, "city is required");
 
-    http:Response listen = check dispatcherPost("/rejectParams", "subscriptions/listen",
-            {"notifications": {"toolsListChanged": true}});
-    check assertJsonRpcError(listen, 200, INVALID_PARAMS, "unknown notification source");
-
     http:Response legacyCall = check legacyToolPost("/rejectParams", REQUEST_CALL_TOOL, {"name": "forecast"});
     check assertJsonRpcError(legacyCall, 200, INVALID_PARAMS, "city is required");
     JsonRpcError legacyError = check (check legacyCall.getJsonPayload()).cloneWithType();
@@ -494,27 +476,18 @@ isolated function assertMissingCapability(http:Response response, string expecte
 }
 
 @test:Config {}
-function testDispatcherReportsSubscriptionFailures() returns error? {
-    http:Response invalidFilter = check dispatcherPost("/failSubscribe", "subscriptions/listen",
-            {"notifications": {"toolsListChanged": "yes"}});
-    check assertJsonRpcError(invalidFilter, 200, INVALID_PARAMS, "Invalid subscription filter");
-
-    http:Response failingSource = check dispatcherPost("/failSubscribe", "subscriptions/listen",
+function testDispatcherRejectsSubscriptions() returns error? {
+    http:Response listen = check dispatcherPost("/tools", "subscriptions/listen",
             {"notifications": {"toolsListChanged": true}});
-    check assertJsonRpcError(failingSource, 200, INTERNAL_ERROR, "subscriptions are down");
+    check assertJsonRpcError(listen, 404, METHOD_NOT_FOUND, "Method not found");
 }
 
 @test:Config {}
-function testDispatcherAdvertisesInstructionsAndSubscriptionCapability() returns error? {
+function testDispatcherAdvertisesInstructionsAndToolCapability() returns error? {
     http:Response guided = check dispatcherPost("/guided", "server/discover");
     test:assertEquals(guided.statusCode, 200);
     WireResponse guidedBody = check (check guided.getJsonPayload()).cloneWithType();
     test:assertEquals(guidedBody.result["instructions"], "Call echo first.");
-
-    http:Response subscribable = check dispatcherPost("/failSubscribe", "server/discover");
-    WireResponse subscribableBody = check (check subscribable.getJsonPayload()).cloneWithType();
-    DiscoverResult discovered = check subscribableBody.result.cloneWithType();
-    test:assertEquals(discovered.capabilities.tools?.listChanged, true);
 
     http:Response plain = check dispatcherPost("/tools", "server/discover");
     WireResponse plainBody = check (check plain.getJsonPayload()).cloneWithType();

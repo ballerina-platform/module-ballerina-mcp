@@ -65,6 +65,5 @@ const decimal STATE_ONLY_RETRY_MAX_DELAY = 0.25;
 # The HTTP method of an outbound transport request.
 enum OutboundMethod {
     POST,
-    GET,
     DELETE
 }

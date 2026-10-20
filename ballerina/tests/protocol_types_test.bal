@@ -62,9 +62,9 @@ function testBaseMetadataAndIcons() {
 function testRequestAndNotificationShapes() {
     Notification notification = {
         method: "notifications/resources/updated",
-        params: {_meta: {subscriptionId: "sub-1"}}
+        params: {_meta: {"traceId": "trace-1"}}
     };
-    test:assertEquals(notification.params?._meta?.subscriptionId, "sub-1");
+    test:assertEquals(notification.params?._meta, {"traceId": "trace-1"});
 
     PaginatedRequest paginatedRequest = {params: {"cursor": "page-2"}};
     test:assertEquals(paginatedRequest.params["cursor"], "page-2");

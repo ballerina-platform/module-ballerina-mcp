@@ -83,7 +83,7 @@ public type Notification record {|
     string method;
     # Additional parameters for the notification
     record {
-        NotificationMeta _meta?;
+        record {} _meta?;
     } params?;
 |};
 
@@ -91,12 +91,6 @@ public type Notification record {|
 public type ResultMeta record {
     # Server implementation that produced the response.
     Implementation serverInfo?;
-};
-
-# Application-facing metadata attached to a notification.
-public type NotificationMeta record {
-    # Request identifier of the subscription that delivered the notification.
-    RequestId subscriptionId?;
 };
 
 # Fields shared by result records.
@@ -695,10 +689,9 @@ public type StreamableHttpService distinct service object {
 
 # Defines an MCP service interface exposed over the Streamable HTTP transport with manual control
 # over tool listing and invocation. Handlers return `ListToolsResult` and
-# `CallToolResult|InputRequiredResult`. An optional `onSubscribe` method publishes modern change
-# notifications. In addition to protocol parameters, handlers may bind transport-specific request
-# information via `@http:Header`, `http:Headers`, or `http:Request`. The compiler plugin validates
-# the method shapes.
+# `CallToolResult|InputRequiredResult`. In addition to protocol parameters, handlers may bind
+# transport-specific request information via `@http:Header`, `http:Headers`, or `http:Request`. The
+# compiler plugin validates the method shapes.
 public type StreamableHttpAdvancedService distinct service object {
 };
 
@@ -958,15 +951,3 @@ public type ElicitationValue string|int|float|decimal|boolean|string[];
 # Answers elicitations for the client. It is invoked once per input request, outside client locks.
 # The client does not validate the answer against the form schema.
 public type ElicitationHandler isolated function (ElicitRequest elicitRequest) returns ElicitResult|ClientError;
-
-# Selects change notifications for a subscription.
-public type SubscriptionFilter record {|
-    # Subscribe to tool list changes.
-    boolean toolsListChanged = false;
-    # Subscribe to prompt list changes when supported by the peer.
-    boolean promptsListChanged = false;
-    # Subscribe to resource list changes when supported by the peer.
-    boolean resourcesListChanged = false;
-    # Resource URIs whose changes should be observed.
-    string[] resourceSubscriptions = [];
-|};

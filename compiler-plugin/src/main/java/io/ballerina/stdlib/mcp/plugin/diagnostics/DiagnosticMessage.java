@@ -39,7 +39,7 @@ public enum DiagnosticMessage {
             "parameter of type {1}."),
     ERROR_112("Remote method ''{0}'' in an ''mcp:StreamableHttpAdvancedService'' must return ''{1}''."),
     ERROR_113("Remote method ''{0}'' is not supported in an ''mcp:StreamableHttpAdvancedService''. " +
-            "Only ''onListTools'', ''onCallTool'' and ''onSubscribe'' are allowed."),
+            "Only ''onListTools'' and ''onCallTool'' are allowed."),
     ERROR_114("Required HttpSession parameter ''{0}'' is not supported in modern protocol mode. " +
             "Use explicit application state or select legacy protocol mode."),
     ERROR_115("Parameter ''{1}'' in function ''{0}'' cannot use ''@mcp:Argument'': expected a non-nilable " +

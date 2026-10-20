@@ -17,47 +17,12 @@
 import ballerina/test;
 
 @test:Config {}
-function testSubscriptionSkipsKeepAliveComments() returns error? {
-    StreamableHttpClient modernClient = check new (mockUrl("sseKeepAlive"), protocolMode = "modern");
-    _ = check modernClient->connect();
-    stream<JsonRpcMessage, StreamError?> events = check modernClient->listen();
-    string[] methods = [];
-    check from JsonRpcMessage message in events
-        do {
-            if message is JsonRpcNotification {
-                methods.push(message.method);
-            }
-        };
-    test:assertEquals(methods, ["notifications/subscriptions/acknowledged", "notifications/tools/list_changed"]);
-    check modernClient->close();
-}
-
-@test:Config {}
 function testModernSseToolCallSkipsKeepAliveComments() returns error? {
     StreamableHttpClient modernClient = check new (mockUrl("sseKeepAlive"), protocolMode = "modern");
     _ = check modernClient->connect();
     CallToolResult result = check modernClient->callTool({name: "echo"});
     test:assertEquals(result.content, [{'type: "text", text: "after keep-alive"}]);
     check modernClient->close();
-}
-
-@test:Config {}
-function testLegacyEventStreamSkipsKeepAliveComments() returns error? {
-    StreamableHttpClient legacyClient = check legacyMockClient("sseKeepAlive");
-    stream<JsonRpcMessage, StreamError?> events = check legacyClient->listen();
-    foreach int _ in 0 ..< 2 {
-        var notification = check events.next();
-        test:assertTrue(notification is record {|JsonRpcMessage value;|});
-        if notification is record {|JsonRpcMessage value;|} {
-            JsonRpcMessage message = notification.value;
-            test:assertTrue(message is JsonRpcNotification);
-            if message is JsonRpcNotification {
-                test:assertEquals(message.method, "notifications/tools/list_changed");
-            }
-        }
-    }
-    test:assertEquals(check events.next(), ());
-    check events.close();
 }
 
 @test:Config {}

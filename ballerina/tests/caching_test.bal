@@ -184,12 +184,6 @@ service /cacheMock on new http:Listener(3223) {
             "server/discover" => {
                 return mockDiscoverResult(requestId);
             }
-            "subscriptions/listen" => {
-                return mockSse([
-                    mockAckEvent(requestId, {"toolsListChanged": true}),
-                    mockNotificationEvent("notifications/tools/list_changed", requestId)
-                ]);
-            }
             REQUEST_CALL_TOOL => {
                 recordCacheMockHit(hitKey + ":call");
                 int callNumber = cacheMockHitCount(scenario, testId + ":call");
@@ -356,26 +350,6 @@ function testPerCallAuthorizationBypassesCache() returns error? {
     _ = check sharedClient->callToolOnce({name: "echo"}, {"Authorization": "Bearer bob"});
     test:assertEquals(cacheMockHitCount("private", "perCallAuth"), 5,
             "a per-call credential must not use schemas listed for the client's own context");
-}
-
-@test:Config {}
-function testListChangedNotificationInvalidatesCachedList() returns error? {
-    StreamableHttpClient notifiedClient = check connectedCacheClient("private", "notified");
-    _ = check notifiedClient->listTools();
-    stream<JsonRpcMessage, StreamError?> eventStream = check notifiedClient->listen();
-    boolean sawListChanged = false;
-    while !sawListChanged {
-        record {|JsonRpcMessage value;|}? nextEvent = check eventStream.next();
-        if nextEvent is () {
-            break;
-        }
-        JsonRpcMessage eventMessage = nextEvent.value;
-        sawListChanged = eventMessage is JsonRpcNotification && eventMessage.method == "notifications/tools/list_changed";
-    }
-    check eventStream.close();
-    test:assertTrue(sawListChanged);
-    _ = check notifiedClient->listTools();
-    test:assertEquals(cacheMockHitCount("private", "notified"), 2);
 }
 
 @test:Config {}
@@ -573,7 +547,7 @@ function testResultCacheToolSchemas() {
     test:assertEquals(resultCache.toolSchema("first"), firstTool);
     test:assertEquals(resultCache.toolSchema("second"), secondTool, "recording a page must keep other pages' schemas");
 
-    resultCache.invalidateFor({jsonrpc: JSONRPC_VERSION, method: "notifications/tools/list_changed"});
+    resultCache.invalidate(REQUEST_LIST_TOOLS);
     test:assertEquals(resultCache.toolSchema("second"), ());
 
     int staleFetch = resultCache.beginFetch();

@@ -85,7 +85,6 @@ public class Utils {
     public static final String CALL_TOOL_RESULT_TYPE_NAME = "CallToolResult";
     public static final String LIST_TOOLS_RESULT_TYPE_NAME = "ListToolsResult";
     public static final String INPUT_REQUIRED_RESULT_TYPE_NAME = "InputRequiredResult";
-    public static final String SUBSCRIPTION_FILTER_TYPE_NAME = "SubscriptionFilter";
     public static final String CURSOR_TYPE_NAME = "Cursor";
     public static final String HTTP_PACKAGE_NAME = "http";
     public static final String HEADERS_TYPE_NAME = "Headers";
@@ -108,9 +107,6 @@ public class Utils {
     // 'onListTools' does not accept 'mcp:CallToolParams' or 'mcp:HttpSession'.
     public static final String ADVANCED_LIST_TOOLS_SUPPORTED_PARAM_TYPES =
             "'mcp:Cursor?', 'mcp:AuthContext', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
-    public static final String ADVANCED_SUBSCRIBE_SUPPORTED_PARAM_TYPES =
-            "'mcp:SubscriptionFilter', 'mcp:AuthContext', 'http:Headers', 'http:Request', "
-                    + "or an '@http:Header' parameter";
 
     public enum HttpSessionMode {
         STATEFUL("stateful"),

@@ -49,13 +49,13 @@ isolated function unsupportedProtocolResponse(string requestedVersion, string[] 
 isolated function modernError(int errorCode, string errorMessage, RequestId requestId)
         returns http:BadRequest => {body: createJsonRpcError(errorCode, errorMessage, requestId)};
 
-isolated function modernCapabilities(StreamableHttpServiceConfiguration serviceConfig, boolean supportsSubscriptions = false) returns ServerCapabilities {
+isolated function modernCapabilities(StreamableHttpServiceConfiguration serviceConfig) returns ServerCapabilities {
     ServerCapabilities serverCapabilities = {...(serviceConfig.options?.capabilities ?: {})};
     // No runtime for these optional capabilities is installed by this module.
     foreach string capabilityName in ["tasks", "logging", "prompts", "resources", "completions"] {
         _ = serverCapabilities.removeIfHasKey(capabilityName);
     }
-    serverCapabilities.tools = {listChanged: supportsSubscriptions};
+    serverCapabilities.tools = {listChanged: false};
     return serverCapabilities;
 }
 
@@ -78,8 +78,7 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
 
 isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpServiceConfiguration serviceConfig, SubscriptionRegistry subscriptions,
-        RequestStateSigner requestStateSigner,
+        StreamableHttpServiceConfiguration serviceConfig, RequestStateSigner requestStateSigner,
         ServerAuthenticator? authenticator = (), readonly & AuthContext? authContext = ())
         returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:InternalServerError|http:Response {
     string requestedVersion = getProtocolVersionFromHeaders(requestHeaders) ?: "";
@@ -107,8 +106,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
         CacheHint discoverHint = serviceConfig.cacheHints.discover ?: {};
         DiscoverResult discoverResult = {
             supportedVersions: advertisedProtocolVersions(serviceConfig),
-            capabilities: modernCapabilities(serviceConfig,
-                mcpService is StreamableHttpAdvancedService && hasSubscriptionHandler(mcpService)),
+            capabilities: modernCapabilities(serviceConfig),
             ttlMs: discoverHint.ttlMs ?: 0,
             cacheScope: discoverHint.cacheScope ?: "private"
         };
@@ -117,30 +115,6 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
             discoverResult.instructions = instructionsText;
         }
         return modernResult(discoverResult, serviceConfig.info, requestMessage.id, discoverHint);
-    }
-    if requestMessage.method == "subscriptions/listen" && mcpService is StreamableHttpAdvancedService &&
-            hasSubscriptionHandler(mcpService) {
-        RequestParams listenParams = requestMessage.params ?: {};
-        SubscriptionFilter|error requestedFilter = listenParams["notifications"].cloneWithType();
-        if requestedFilter is error {
-            return createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid subscription filter", requestMessage.id);
-        }
-        SubscriptionFilter acceptedFilter = {toolsListChanged: requestedFilter.toolsListChanged};
-        var eventSource = trap invokeOnSubscribe(mcpService, acceptedFilter, requestHeaders, httpRequest,
-                extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional, authContext);
-        if eventSource is InsufficientScopeError {
-            return insufficientScopeFor(authenticator, eventSource);
-        }
-        if eventSource is error {
-            return createJsonRpcErrorResponse(handlerErrorCode(eventSource), toSubscribeError(eventSource).message(),
-                    requestMessage.id);
-        }
-        ServerSubscriptionStream streamIterator = new (eventSource, requestMessage.id, acceptedFilter, subscriptions);
-        stream<http:SseEvent, error?> responseStream = new (streamIterator);
-        http:Response httpResponse = new;
-        httpResponse.setSseEventStream(responseStream);
-        httpResponse.setHeader("X-Accel-Buffering", "no");
-        return httpResponse;
     }
     if requestMessage.method != REQUEST_LIST_TOOLS && requestMessage.method != REQUEST_CALL_TOOL {
         return <http:NotFound>{body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", requestMessage.id)};
@@ -304,15 +278,6 @@ isolated function findTool(ListToolsResult toolList, string toolName) returns To
         }
     }
     return ();
-}
-
-# Reports a failed `onSubscribe` call, logging the detail of an unexpected failure.
-isolated function toSubscribeError(error cause) returns ServerError {
-    if cause is ServerError {
-        return cause;
-    }
-    log:printError("Subscription failed", cause);
-    return error ServerError("Subscribing failed unexpectedly.");
 }
 
 isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
