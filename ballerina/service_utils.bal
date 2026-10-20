@@ -122,6 +122,25 @@ isolated function createSessionNotFoundResponse(string sessionId, RequestId? id 
     body: createJsonRpcError(INVALID_REQUEST, string `Invalid session ID: ${sessionId}`, id)
 };
 
+# Rejects a request whose `Origin` is not in the service's CORS allow list. A request without an
+# `Origin` is accepted, since clients other than browsers do not send one.
+#
+# + headers - The request headers
+# + serviceConfig - The service configuration holding the allow list
+# + return - A `403 Forbidden` response, or `()` if the origin is allowed
+isolated function validateOrigin(http:Headers headers, StreamableHttpServiceConfiguration serviceConfig)
+        returns http:Forbidden? {
+    string|http:HeaderNotFoundError origin = headers.getHeader("origin");
+    if origin is http:HeaderNotFoundError {
+        return;
+    }
+    string[] allowedOrigins = serviceConfig.httpConfig.cors.allowOrigins;
+    if allowedOrigins.indexOf("*") is () && allowedOrigins.indexOf(origin) is () {
+        return <http:Forbidden>{body: createJsonRpcError(INVALID_REQUEST, "Origin is not allowed")};
+    }
+    return;
+}
+
 # Reports a failed tool invocation as a tool execution error. The failure detail is logged rather
 # than returned, since a panic carries text from wherever it originated, such as a database driver.
 #

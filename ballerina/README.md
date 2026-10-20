@@ -57,7 +57,8 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 ```
 
 The annotation has one `httpConfig` field for Ballerina HTTP service settings. Its CORS origin list is also used for
-the MCP transport's required inbound `Origin` validation.
+the MCP transport's required inbound `Origin` validation, on modern and legacy requests and before authentication. A
+request without an `Origin` header is accepted; one whose origin is not listed, or matched by `*`, gets `403 Forbidden`.
 
 ```ballerina
 @mcp:StreamableHttpServiceConfig {
@@ -493,6 +494,9 @@ Version 2.0 removes deprecated transport-neutral aliases and gives Streamable HT
 | `initialize()` | `connect()` or `initializeLegacy()` |
 | `callToolWithResult()` | `callToolOnce()` |
 | `subscribeToServerMessages()` | `listen()` |
+
+1.x did not validate `Origin`. A 2.0 service rejects browser requests from origins that are not listed in
+`httpConfig.cors.allowOrigins`, which is empty by default.
 
 The client no longer connects implicitly. Call `connect()` before operations that depend on negotiated server state.
 The public error hierarchy is `mcp:Error`, `mcp:ClientError`, `mcp:TransportError`, `mcp:ProtocolError`,

@@ -35,6 +35,16 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         isolated resource function delete .(http:Headers headers)
                 returns http:BadRequest|http:NotFound|http:InternalServerError|http:Ok|http:MethodNotAllowed|
                         http:Unauthorized|http:Forbidden|http:ServiceUnavailable {
+            StreamableHttpServiceConfiguration|Error config = self.getCachedServiceConfiguration();
+            if config is Error {
+                return <http:InternalServerError>{
+                    body: createJsonRpcError(INTERNAL_ERROR, config.message())
+                };
+            }
+            http:Forbidden? originError = validateOrigin(headers, config);
+            if originError is http:Forbidden {
+                return originError;
+            }
             readonly & AuthContext? authContext = ();
             ServerAuthenticator? authenticator = self.authenticator;
             if authenticator is ServerAuthenticator {
@@ -46,12 +56,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 authContext = authenticated;
             } else {
                 http:authenticateResource(self, "delete", []);
-            }
-            StreamableHttpServiceConfiguration|Error config = self.getCachedServiceConfiguration();
-            if config is Error {
-                return <http:InternalServerError>{
-                    body: createJsonRpcError(INTERNAL_ERROR, config.message())
-                };
             }
             string? protocolVersion = getProtocolVersionFromHeaders(headers);
             // Modern requests have no sessions to delete, so the legacy header check does not apply to them.
@@ -100,6 +104,15 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 returns http:BadRequest|http:NotAcceptable|http:UnsupportedMediaType|http:NotFound|
                         http:Accepted|http:Ok|http:Unauthorized|http:Forbidden|http:Response|http:ServiceUnavailable|
                         http:InternalServerError {
+            StreamableHttpServiceConfiguration|Error routeConfig = self.getCachedServiceConfiguration();
+            if routeConfig is Error {
+                return createJsonRpcErrorResponse(INTERNAL_ERROR, routeConfig.message());
+            }
+            // Origin is checked first, so a cross-origin request gets 403 with or without a token.
+            http:Forbidden? originError = validateOrigin(headers, routeConfig);
+            if originError is http:Forbidden {
+                return originError;
+            }
             // Authentication runs before any other validation, so an unauthenticated caller learns
             // nothing about the service beyond where to obtain a token.
             readonly & AuthContext? authContext = ();
@@ -124,10 +137,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 return request;
             }
 
-            StreamableHttpServiceConfiguration|Error routeConfig = self.getCachedServiceConfiguration();
-            if routeConfig is Error {
-                return createJsonRpcErrorResponse(INTERNAL_ERROR, routeConfig.message());
-            }
             if request is JsonRpcNotification && isModernRequest(request, headers) {
                 return <http:BadRequest>{
                     body: createJsonRpcError(INVALID_REQUEST,

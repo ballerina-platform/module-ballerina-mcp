@@ -80,19 +80,6 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
         StreamableHttpServiceConfiguration serviceConfig, ServerAuthenticator? authenticator = (),
         readonly & AuthContext? authContext = ())
         returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:InternalServerError|http:Response {
-    string|http:HeaderNotFoundError originHeader = requestHeaders.getHeader("origin");
-    if originHeader is string {
-        boolean allowedOrigin = false;
-        foreach string allowedValue in serviceConfig.httpConfig.cors.allowOrigins {
-            if allowedValue == "*" || allowedValue == originHeader {
-                allowedOrigin = true;
-                break;
-            }
-        }
-        if !allowedOrigin {
-            return <http:Forbidden>{body: createJsonRpcError(INVALID_REQUEST, "Origin is not allowed", requestMessage.id)};
-        }
-    }
     string requestedVersion = getProtocolVersionFromHeaders(requestHeaders) ?: "";
     if serviceConfig.protocolMode == "legacy" || requiresLegacySession(mcpService) {
         return unsupportedProtocolResponse(requestedVersion, LEGACY_PROTOCOL_VERSIONS, requestMessage.id);
@@ -158,7 +145,8 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
         return insufficientScopeFor(authenticator, toolList);
     }
     if toolList is error {
-        return createJsonRpcErrorResponse(INTERNAL_ERROR, toolList.message(), requestMessage.id);
+        int errorCode = toolList is ParameterBindingError ? INVALID_PARAMS : INTERNAL_ERROR;
+        return createJsonRpcErrorResponse(errorCode, toolList.message(), requestMessage.id);
     }
     foreach ToolDefinition toolInfo in toolList.tools {
         _ = toolInfo.removeIfHasKey("execution");
@@ -211,8 +199,13 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if callResult is InsufficientScopeError {
         return insufficientScopeFor(authenticator, callResult);
     }
+    if callResult is ParameterBindingError {
+        return createJsonRpcErrorResponse(INVALID_PARAMS,
+                string `Failed to call tool '${callParams.name}': ${callResult.message()}`, requestMessage.id);
+    }
     if callResult is error {
-        return createJsonRpcErrorResponse(INTERNAL_ERROR, callResult.message(), requestMessage.id);
+        return createJsonRpcErrorResponse(INTERNAL_ERROR, toServerError(callResult, callParams.name).message(),
+                requestMessage.id);
     }
     if callResult is InputRequiredResult {
         Error? inputError = validateInputRequired(callResult, requestMeta.io\.modelcontextprotocol\/clientCapabilities);
@@ -302,7 +295,7 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
                 applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
                 authContext);
-        if structuredResult is InsufficientScopeError {
+        if structuredResult is InsufficientScopeError || structuredResult is ParameterBindingError {
             return structuredResult;
         }
         if structuredResult is error {
