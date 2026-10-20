@@ -33,11 +33,11 @@ isolated function nextCallCount() returns int {
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:StreamableHttpConfig {
     info: {name: "parameter-default-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8783) {
+isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8784) {
 
     @mcp:Tool {description: "Echoes a city and a defaultable unit"}
     isolated remote function withDefaultableString(string city, string unit = "celsius") returns string {
@@ -82,12 +82,12 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
 
     @mcp:Tool {description: "Defaultable parameter followed by an injected meta"}
     isolated remote function withDefaultBeforeMeta(string city, string unit = "celsius",
-            mcp:Meta? meta = ()) returns string {
+            mcp:RequestMetaObject? meta = ()) returns string {
         return string `city=${city} unit=${unit} meta=${meta is () ? "()" : "present"}`;
     }
 }
 
-final http:Client parameterDefaultClient = check new ("http://localhost:8783");
+final http:Client parameterDefaultClient = check new ("http://localhost:8784");
 
 @test:Config
 function testOmittedDefaultableStringUsesDeclaredDefault() returns error? {
