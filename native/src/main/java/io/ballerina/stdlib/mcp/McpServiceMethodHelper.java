@@ -90,7 +90,7 @@ public final class McpServiceMethodHelper {
     // MCP HTTP session and metadata-related constants
     private static final String MCP_PACKAGE_NAME = "mcp";
     private static final String SESSION_TYPE_NAME = "HttpSession";
-    private static final String META_TYPE_NAME = "RequestMetaObject";
+    private static final String META_TYPE_NAME = "RequestMeta";
     private static final String META_FIELD_NAME = "_meta";
     private static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
     private static final String AUTH_CONTEXT_TYPE_NAME = "AuthContext";
@@ -787,7 +787,7 @@ public final class McpServiceMethodHelper {
             return true;
         }
 
-        // Check if it is an optional request metadata type (mcp:RequestMetaObject?).
+        // Check if it is an optional request metadata type (mcp:RequestMeta?).
         if (paramType instanceof UnionType unionType) {
             return unionType.getMemberTypes().stream()
                     .anyMatch(type -> type.getPackage() != null

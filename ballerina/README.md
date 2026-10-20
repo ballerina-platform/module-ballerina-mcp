@@ -13,7 +13,7 @@ The `ballerina/mcp` module builds MCP clients and servers over Streamable HTTP. 
 
 ## Protocol modes
 
-Set `protocolMode` on the client or in `@mcp:StreamableHttpConfig`.
+Set `protocolMode` on the client or in `@mcp:StreamableHttpServiceConfig`.
 
 | Mode | Client behavior | Server behavior |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ import ballerina/mcp;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9090);
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {
         name: "calculator",
         version: "2.0.0"
@@ -50,7 +50,7 @@ listener mcp:StreamableHttpListener mcpListener = check new (9090);
 service mcp:StreamableHttpService /mcp on mcpListener {
     # Add two numbers.
     remote isolated function add(int left, int right,
-            mcp:RequestMetaObject? meta) returns int {
+            mcp:RequestMeta? meta) returns int {
         return left + right;
     }
 }
@@ -60,7 +60,7 @@ The annotation has one `httpConfig` field for Ballerina HTTP service settings. I
 the MCP transport's required inbound `Origin` validation.
 
 ```ballerina
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "calculator", version: "2.0.0"},
     httpConfig: {
         cors: {
@@ -77,7 +77,7 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 A tool may bind these runtime values in addition to ordinary `anydata` arguments:
 
 - `mcp:HttpSession` or `mcp:HttpSession?`, placed first, for legacy HTTP session state.
-- `mcp:RequestMetaObject?`, at any position, for the request's `_meta` value.
+- `mcp:RequestMeta?`, at any position, for the request's `_meta` value.
 - `@http:Header` parameters, `http:Headers`, and `http:Request` for Streamable HTTP request data.
 
 Runtime parameters do not appear in the generated tool input schema. Request metadata must be nilable because clients
@@ -144,7 +144,7 @@ Legacy requests support three `HttpSessionMode` values:
 - `mcp:AUTO`: select behavior from the request lifecycle.
 
 ```ballerina
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "cart", version: "2.0.0"},
     protocolMode: "auto",
     sessionMode: mcp:STATEFUL
@@ -204,7 +204,7 @@ same HTTP request values as basic tools; `onCallTool` reads request metadata fro
 
 ## Server authorization
 
-Set `httpConfig.auth` on `@mcp:StreamableHttpConfig` to an `mcp:OAuthProtectedResourceConfig` to protect a service as an OAuth
+Set `httpConfig.auth` on `@mcp:StreamableHttpServiceConfig` to an `mcp:OAuthProtectedResourceConfig` to protect a service as an OAuth
 protected resource (RFC 9728), as the MCP authorization specification requires. The service then:
 
 - publishes protected resource metadata at `<origin>/.well-known/oauth-protected-resource<path>`,
@@ -215,7 +215,7 @@ protected resource (RFC 9728), as the MCP authorization specification requires. 
   obtain a token with more scopes and retry.
 
 ```ballerina
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "files", version: "1.0.0"},
     httpConfig: {
         cors: {allowOrigins: ["https://app.example.com"]},
@@ -433,10 +433,10 @@ The lower-level lifecycle methods are available for applications that manage dis
 Modern `server/discover` and `tools/list` results carry caching hints: `ttlMs`, how long a client may treat the
 result as fresh, and `cacheScope`, whether the result may be shared between callers (`public`) or only reused for
 the same authorization context (`private`). Services default to `ttlMs: 0` and `cacheScope: "private"`, which
-disables reuse. Set hints per method in `@mcp:StreamableHttpConfig`:
+disables reuse. Set hints per method in `@mcp:StreamableHttpServiceConfig`:
 
 ```ballerina
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "weather", version: "1.0.0"},
     cacheHints: {
         discover: {ttlMs: 300000, cacheScope: "public"},
@@ -468,10 +468,10 @@ Version 2.0 removes deprecated transport-neutral aliases and gives Streamable HT
 | `mcp:Listener` | `mcp:StreamableHttpListener` |
 | `mcp:Service` | `mcp:StreamableHttpService` |
 | `mcp:AdvancedService` | `mcp:StreamableHttpAdvancedService` |
-| `@mcp:ServiceConfig`, `@mcp:StreamableHttpServiceConfig` | `@mcp:StreamableHttpConfig` |
+| `@mcp:ServiceConfig` | `@mcp:StreamableHttpServiceConfig` |
 | `mcp:Session`, `mcp:SessionEntry` | `mcp:HttpSession`, `mcp:HttpSessionEntry` |
 | `mcp:SessionMode` | `mcp:HttpSessionMode` |
-| `mcp:Meta` | `mcp:RequestMetaObject` |
+| `mcp:Meta` | `mcp:RequestMeta` |
 | `mcp:StreamableHttpClientTransportConfig` | `mcp:StreamableHttpClientConfig` |
 | An `http:HttpServiceConfig` value for `httpConfig` | `mcp:HttpServiceConfig`: the same fields, with `auth` also accepting `mcp:OAuthProtectedResourceConfig` |
 | `initialize()` | `connect()` or `initializeLegacy()` |

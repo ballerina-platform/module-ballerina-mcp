@@ -19,7 +19,7 @@ import ballerina/test;
 
 listener StreamableHttpListener pvServerListener = check new (3201);
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {
         name: "Protocol Version Test Server",
         version: "1.0.0"

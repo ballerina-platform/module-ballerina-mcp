@@ -61,7 +61,7 @@ public isolated class StreamableHttpListener {
     # + return - Error? if attachment fails.
     public isolated function attach(StreamableHttpService|StreamableHttpAdvancedService mcpService,
             string[]|string? name = ()) returns Error? {
-        StreamableHttpConfiguration serviceConfig = getServiceConfiguration(mcpService);
+        StreamableHttpServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
         if serviceConfig.protocolMode == "modern" && requiresLegacySession(mcpService) {
             return error DispatcherError("Modern MCP services cannot require mcp:HttpSession; use explicit application state");
         }
@@ -186,7 +186,7 @@ public isolated class StreamableHttpListener {
 }
 
 isolated function createServerAuthenticator(StreamableHttpService|StreamableHttpAdvancedService mcpService,
-        StreamableHttpConfiguration serviceConfig) returns ServerAuthenticator|Error? {
+        StreamableHttpServiceConfiguration serviceConfig) returns ServerAuthenticator|Error? {
     readonly & map<string[]> toolScopes = getToolScopes(mcpService);
     OAuthProtectedResourceConfig|http:ListenerAuthConfig[]? authConfig = serviceConfig.httpConfig.auth;
     if authConfig is OAuthProtectedResourceConfig {
@@ -207,7 +207,7 @@ isolated function createServerAuthenticator(StreamableHttpService|StreamableHttp
 // Builds the HTTP configuration of the dispatcher that serves an MCP service. Plain HTTP
 // listener authentication is handed to the HTTP module; MCP authorization is enforced by the
 // service's authenticator, so the HTTP module is given no authentication settings for it.
-isolated function toHttpServiceConfig(StreamableHttpConfiguration serviceConfig, ServerAuthenticator? authenticator)
+isolated function toHttpServiceConfig(StreamableHttpServiceConfiguration serviceConfig, ServerAuthenticator? authenticator)
         returns http:HttpServiceConfig {
     // Every setting carries over except `auth`, which is wider than the HTTP module's.
     HttpServiceConfig {auth: authConfig, ...settings} = serviceConfig.httpConfig;

@@ -18,7 +18,7 @@ import ballerina/http;
 import ballerina/test;
 
 isolated function newTestMcpService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {info: {name: "lifecycle", version: "1"}}
+    @StreamableHttpServiceConfig {info: {name: "lifecycle", version: "1"}}
     service object {
         remote isolated function onListTools() returns ListToolsResult => {
             tools: [{name: "ping", inputSchema: {'type: "object"}}]
@@ -86,7 +86,7 @@ function testListenerImmediateStop() returns error? {
 @test:Config {}
 function testModernServicesCannotRequireLegacySessions() returns error? {
     StreamableHttpAdvancedService sessionService =
-        @StreamableHttpConfig {info: {name: "session-bound", version: "1"}, protocolMode: "modern"}
+        @StreamableHttpServiceConfig {info: {name: "session-bound", version: "1"}, protocolMode: "modern"}
         service object {
             remote isolated function onListTools() returns ListToolsResult => {tools: []};
 

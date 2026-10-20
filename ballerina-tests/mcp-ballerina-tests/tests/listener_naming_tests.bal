@@ -19,8 +19,8 @@ import ballerina/mcp;
 import ballerina/test;
 
 // Streamable HTTP service configured through the transport-specific
-// @mcp:StreamableHttpConfig annotation; header binding is allowed here.
-@mcp:StreamableHttpConfig {
+// @mcp:StreamableHttpServiceConfig annotation; header binding is allowed here.
+@mcp:StreamableHttpServiceConfig {
     info: {name: "transport-named-listener-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS,
     httpConfig: {treatNilableAsOptional: false}
@@ -32,13 +32,13 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
         return name + ":" + authorization;
     }
 
-    @mcp:Tool {description: "Nilable header under strict mode set via @mcp:StreamableHttpConfig"}
+    @mcp:Tool {description: "Nilable header under strict mode set via @mcp:StreamableHttpServiceConfig"}
     isolated remote function tenant(@http:Header {name: "X-Tenant-Id"} string? tenant) returns string {
         return tenant ?: "<none>";
     }
 }
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "transport-config-precedence-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -67,7 +67,7 @@ function testHeaderBindingOnStreamableHttpListener() returns error? {
 
 @test:Config
 function testStrictModeViaTransportConfigAnnotation() returns error? {
-    // treatNilableAsOptional=false comes from @mcp:StreamableHttpConfig.httpConfig:
+    // treatNilableAsOptional=false comes from @mcp:StreamableHttpServiceConfig.httpConfig:
     // a missing nilable header must be rejected as invalid params
     json payload = check rawCallTool(rawTransportClient, "tenant", {});
     string message = check getRawErrorMessage(payload);
@@ -82,11 +82,11 @@ function testStrictModeViaTransportConfigAnnotation() returns error? {
 @test:Config
 function testTransportConfigSessionMode() returns error? {
     // No initialize handshake and no mcp-session-id header: only works if the effective
-    // session mode is STATELESS as configured by @mcp:StreamableHttpConfig.
+    // session mode is STATELESS as configured by @mcp:StreamableHttpServiceConfig.
     json payload = check rawCallTool(rawPrecedenceClient, "echo", {});
     json|error errorField = payload.'error;
     if errorField is json {
-        test:assertFail("expected STATELESS behavior from @mcp:StreamableHttpConfig, got: "
+        test:assertFail("expected STATELESS behavior from @mcp:StreamableHttpServiceConfig, got: "
             + errorField.toString());
     }
     test:assertEquals(check getRawTextResult(payload), "ok");

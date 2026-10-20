@@ -30,7 +30,7 @@ const PROTECTED_METADATA_URL = "http://localhost:3235/.well-known/oauth-protecte
 
 listener StreamableHttpListener serverAuthListener = check new (3235);
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "protected", version: "1"},
     httpConfig: {
         auth: {
@@ -63,7 +63,7 @@ service StreamableHttpService /mcp on serverAuthListener {
     }
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "protected-advanced", version: "1"},
     httpConfig: {
         auth: {
@@ -91,7 +91,7 @@ service StreamableHttpAdvancedService /advanced on serverAuthListener {
     }
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "protected-listing", version: "1"},
     httpConfig: {
         auth: {
@@ -115,7 +115,7 @@ service StreamableHttpAdvancedService /listing on serverAuthListener {
         {content: [{'type: "text", text: params.name}]};
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "protected-session-required", version: "1"},
     httpConfig: {
         auth: {
@@ -131,7 +131,7 @@ service StreamableHttpService /sessionRequired on serverAuthListener {
     remote isolated function sessionId(HttpSession session) returns string => session.getSessionId();
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "protected-stateful", version: "1"},
     sessionMode: STATEFUL,
     httpConfig: {
@@ -500,7 +500,7 @@ function testServerAuthConfigurationIsValidated() returns error? {
     test:assertTrue(toolScopeResult is Error &&
             toolScopeResult.message().includes("from the '@mcp:Tool' scopes of 'refresh'"));
 
-    StreamableHttpAdvancedService requiresAuth = @StreamableHttpConfig {
+    StreamableHttpAdvancedService requiresAuth = @StreamableHttpServiceConfig {
         info: {name: "requires-auth", version: "1"}
     } isolated service object {
         remote isolated function onListTools() returns ListToolsResult => {tools: []};
@@ -514,7 +514,7 @@ function testServerAuthConfigurationIsValidated() returns error? {
 }
 
 isolated function newFilesVirtualHostService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {
+    @StreamableHttpServiceConfig {
         info: {name: "files", version: "1"},
         httpConfig: {
             host: "files.example.com",
@@ -532,7 +532,7 @@ isolated function newFilesVirtualHostService() returns StreamableHttpAdvancedSer
     };
 
 isolated function newUppercaseFilesVirtualHostService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {
+    @StreamableHttpServiceConfig {
         info: {name: "uppercase-files", version: "1"},
         httpConfig: {
             host: "Files.Example.com",
@@ -550,7 +550,7 @@ isolated function newUppercaseFilesVirtualHostService() returns StreamableHttpAd
     };
 
 isolated function newMediaVirtualHostService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {
+    @StreamableHttpServiceConfig {
         info: {name: "media", version: "1"},
         httpConfig: {
             host: "media.example.com",
@@ -568,7 +568,7 @@ isolated function newMediaVirtualHostService() returns StreamableHttpAdvancedSer
     };
 
 isolated function newOtherFilesVirtualHostService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {
+    @StreamableHttpServiceConfig {
         info: {name: "other-files", version: "1"},
         httpConfig: {
             host: "files.example.com",
@@ -586,7 +586,7 @@ isolated function newOtherFilesVirtualHostService() returns StreamableHttpAdvanc
     };
 
 isolated function newDefaultHostService() returns StreamableHttpAdvancedService =>
-    @StreamableHttpConfig {
+    @StreamableHttpServiceConfig {
         info: {name: "default-host", version: "1"},
         httpConfig: {
             auth: {
@@ -718,7 +718,7 @@ service /oauth2 on new http:Listener(3237) {
     }
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "protected-multi", version: "1"},
     httpConfig: {
         auth: {
@@ -749,7 +749,7 @@ service StreamableHttpService /multi on serverAuthListener {
 }
 
 // The introspection endpoint of this service is not listening.
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "protected-unavailable", version: "1"},
     httpConfig: {
         auth: {
@@ -961,7 +961,7 @@ function testTokensAreOnlySentToTheirIssuer() returns error? {
 }
 
 // Plain HTTP listener authentication: tokens are checked by the HTTP module, without discovery.
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "plain-http-auth", version: "1"},
     httpConfig: {
         auth: [
@@ -993,7 +993,7 @@ function testPlainHttpAuthBehavesAsBefore() returns error? {
 }
 
 // Scope hierarchies: a broader scope satisfies the narrower scopes it implies.
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "protected-hierarchy", version: "1"},
     httpConfig: {
         auth: {
@@ -1116,7 +1116,7 @@ listener StreamableHttpListener e2eMcpListener = check new (3234, secureSocket =
     key: {certFile: MTLS_RESOURCES + "server.crt", keyFile: MTLS_RESOURCES + "server.key"}
 });
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "e2e-protected", version: "1"},
     httpConfig: {
         auth: {

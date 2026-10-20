@@ -28,7 +28,7 @@ import ballerina/mcp;
 import ballerina/test;
 
 // The tool-bearing basic service. Its presence is what makes the modifier rewrite this document.
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "shared-doc-basic", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -37,7 +37,7 @@ isolated service mcp:StreamableHttpService /sharedBasic on new mcp:StreamableHtt
 }
 
 // The advanced service sharing the document above.
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "shared-doc-advanced", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }

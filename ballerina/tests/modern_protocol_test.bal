@@ -17,7 +17,7 @@
 import ballerina/http;
 import ballerina/test;
 
-@StreamableHttpConfig {info: {name: "modern-test", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "modern-test", version: "1"}}
 service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
     remote isolated function onListTools() returns ListToolsResult {
         ListToolsResult handlerResult = {
@@ -86,7 +86,7 @@ type StructuredPerson record {|
     int age;
 |};
 
-@StreamableHttpConfig {info: {name: "regular-structured-output", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "regular-structured-output", version: "1"}}
 service StreamableHttpService /regular on structuredOutputListener {
     @Tool {description: "string", schema: {'type: "object"}, outputSchema: {"type": "string"}}
     remote isolated function stringValue() returns string => "hello";
@@ -104,7 +104,7 @@ service StreamableHttpService /regular on structuredOutputListener {
     remote isolated function textOnlyValue() returns string => "text only";
 }
 
-@StreamableHttpConfig {info: {name: "generic-structured-output", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "generic-structured-output", version: "1"}}
 service StreamableHttpService /generic on structuredOutputListener {
     @Tool {description: "boolean", schema: {'type: "object"}, outputSchema: {"type": "boolean"}}
     remote isolated function booleanValue() returns boolean => true;

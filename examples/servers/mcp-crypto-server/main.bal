@@ -22,7 +22,7 @@ import ballerina/time;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9091);
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {
         name: "MCP Crypto Server",
         version: "1.0.0"
@@ -156,7 +156,7 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
             originalText: text
         };
 
-        mcp:ResultMetaObject responseMeta = {
+        mcp:ResultMeta responseMeta = {
             "executionTimeMs": executionTime,
             "inputLength": text.length(),
             "outputLength": hashedValue.length()
@@ -221,7 +221,7 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
             originalInput: text
         };
 
-        mcp:ResultMetaObject responseMeta = {
+        mcp:ResultMeta responseMeta = {
             "executionTimeMs": executionTime,
             "inputLength": text.length(),
             "outputLength": resultValue.length()

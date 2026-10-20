@@ -165,7 +165,7 @@ function testAdditionalHeadersOverrideGeneratedTransportHeaders() returns error?
 
 @test:Config {}
 function testCloseResetsTheClientWhenSessionTerminationFails() returns error? {
-    StreamableHttpAdvancedService sessionService = @StreamableHttpConfig {
+    StreamableHttpAdvancedService sessionService = @StreamableHttpServiceConfig {
         info: {name: "closing-session", version: "1"},
         sessionMode: STATEFUL
     } isolated service object {

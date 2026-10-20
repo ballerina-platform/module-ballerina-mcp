@@ -67,7 +67,7 @@ public type ProgressToken string|int;
 public type Cursor string;
 
 # Application-facing metadata for requests.
-public type RequestMetaObject record {
+public type RequestMeta record {
     # If specified, the caller is requesting out-of-band progress notifications for this request (as represented by notifications/progress).
     # The value of this parameter is an opaque token that will be attached to any subsequent notifications. The receiver is not obligated to provide these notifications.
     ProgressToken progressToken?;
@@ -76,7 +76,7 @@ public type RequestMetaObject record {
 # Parameters for the request
 public type RequestParams record {
     # Optional metadata for the request
-    RequestMetaObject _meta?;
+    RequestMeta _meta?;
 };
 
 # Represents a generic request in the protocol
@@ -93,18 +93,18 @@ public type Notification record {|
     string method;
     # Additional parameters for the notification
     record {
-        NotificationMetaObject _meta?;
+        NotificationMeta _meta?;
     } params?;
 |};
 
 # Application-facing metadata attached to a result.
-public type ResultMetaObject record {
+public type ResultMeta record {
     # Server implementation that produced the response.
     Implementation serverInfo?;
 };
 
 # Application-facing metadata attached to a notification.
-public type NotificationMetaObject record {
+public type NotificationMeta record {
     # Request identifier of the subscription that delivered the notification.
     RequestId subscriptionId?;
 };
@@ -112,7 +112,7 @@ public type NotificationMetaObject record {
 # Fields shared by result records.
 type ResultFields record {
     # Metadata attached to the result.
-    ResultMetaObject _meta?;
+    ResultMeta _meta?;
 };
 
 # Result discriminator. Known core results narrow this to a string singleton.
@@ -680,7 +680,7 @@ public type CacheHints record {|
 |};
 
 # Configuration for an MCP service exposed over the Streamable HTTP transport.
-public type StreamableHttpConfiguration record {|
+public type StreamableHttpServiceConfiguration record {|
     # Server implementation information
     Implementation info;
     # Protocol selection. Auto preserves legacy requests and accepts modern requests when the service supports them.
@@ -739,9 +739,8 @@ public type HttpServiceConfig record {|
     boolean laxDataBinding = false;
 |};
 
-# Annotation to provide configuration to Streamable HTTP MCP services.
 # Annotation to configure an MCP service exposed over Streamable HTTP.
-public annotation StreamableHttpConfiguration StreamableHttpConfig on service;
+public annotation StreamableHttpServiceConfiguration StreamableHttpServiceConfig on service;
 
 # Defines a basic MCP service interface exposed over the Streamable HTTP transport. Tool
 # `remote` functions may additionally bind HTTP request information (e.g. `@http:Header`

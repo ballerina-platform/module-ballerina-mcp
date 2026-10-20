@@ -50,7 +50,7 @@ isolated function unsupportedProtocolResponse(string requestedVersion, string[] 
 isolated function modernError(int errorCode, string errorMessage, RequestId requestId)
         returns http:BadRequest => {body: createJsonRpcError(errorCode, errorMessage, requestId)};
 
-isolated function modernCapabilities(StreamableHttpConfiguration serviceConfig, boolean supportsSubscriptions = false) returns ServerCapabilities {
+isolated function modernCapabilities(StreamableHttpServiceConfiguration serviceConfig, boolean supportsSubscriptions = false) returns ServerCapabilities {
     ServerCapabilities serverCapabilities = {...(serviceConfig.options?.capabilities ?: {})};
     // No runtime for these optional capabilities is installed by this module.
     foreach string capabilityName in ["tasks", "logging", "prompts", "resources", "completions"] {
@@ -64,7 +64,7 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
         CacheHint? cacheHint = ()) returns http:Ok {
     Result wireResult = {...resultValue};
     wireResult["resultType"] = wireResult["resultType"] ?: "complete";
-    ResultMetaObject resultMeta = {...(wireResult._meta ?: {})};
+    ResultMeta resultMeta = {...(wireResult._meta ?: {})};
     Implementation effectiveServerInfo = resultMeta.serverInfo ?: serverInfo;
     _ = resultMeta.removeIfHasKey("serverInfo");
     resultMeta[SERVER_INFO_META_KEY] = effectiveServerInfo;
@@ -79,7 +79,7 @@ isolated function modernResult(Result resultValue, Implementation serverInfo, Re
 
 isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         JsonRpcRequest requestMessage, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpConfiguration serviceConfig, ServerAuthenticator? authenticator = (),
+        StreamableHttpServiceConfiguration serviceConfig, ServerAuthenticator? authenticator = (),
         readonly & AuthContext? authContext = ())
         returns http:Ok|http:BadRequest|http:NotFound|http:Forbidden|http:InternalServerError|http:Response {
     string|http:HeaderNotFoundError originHeader = requestHeaders.getHeader("origin");
@@ -256,7 +256,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
 }
 
 isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
-        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpConfiguration serviceConfig,
+        http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig,
         readonly & AuthContext? authContext) returns ListToolsResult|error {
     ListToolsResult|Error listResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
@@ -280,10 +280,10 @@ isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvanced
 
 isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         CallToolParams callParams, http:Request httpRequest, http:Headers requestHeaders,
-        StreamableHttpConfiguration serviceConfig, readonly & AuthContext? authContext)
+        StreamableHttpServiceConfiguration serviceConfig, readonly & AuthContext? authContext)
         returns CallToolResult|InputRequiredResult|error {
     CallToolParams applicationParams = callParams.clone();
-    RequestMetaObject applicationMeta = {...(callParams._meta ?: {})};
+    RequestMeta applicationMeta = {...(callParams._meta ?: {})};
     foreach string metaKey in [PROTOCOL_META_KEY, CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LOG_LEVEL_META_KEY] {
         _ = applicationMeta.removeIfHasKey(metaKey);
     }

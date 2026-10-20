@@ -20,7 +20,7 @@ import ballerina/test;
 
 listener StreamableHttpListener cachingListener = check new (3222);
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "hinted", version: "1"},
     cacheHints: {
         discover: {ttlMs: 300000, cacheScope: "public"},
@@ -32,13 +32,13 @@ service StreamableHttpService /hinted on cachingListener {
     remote isolated function echo() returns string => "ok";
 }
 
-@StreamableHttpConfig {info: {name: "unhinted", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "unhinted", version: "1"}}
 service StreamableHttpService /unhinted on cachingListener {
     @Tool {description: "echo", schema: {'type: "object"}}
     remote isolated function echo() returns string => "ok";
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "handler-hinted", version: "1"},
     sessionMode: STATELESS,
     cacheHints: {listTools: {ttlMs: 60000, cacheScope: "public"}}
@@ -49,7 +49,7 @@ service StreamableHttpAdvancedService /handlerHinted on cachingListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "scope-only", version: "1"}, cacheHints: {listTools: {cacheScope: "public"}}}
+@StreamableHttpServiceConfig {info: {name: "scope-only", version: "1"}, cacheHints: {listTools: {cacheScope: "public"}}}
 service StreamableHttpAdvancedService /scopeOnly on cachingListener {
     remote isolated function onListTools() returns ListToolsResult => {tools: []};
 
@@ -113,7 +113,7 @@ function testLegacyResultsCarryNoCacheHints() returns error? {
 
 @test:Config {}
 function testNegativeConfiguredTtlIsRejectedOnAttach() returns error? {
-    StreamableHttpAdvancedService negativeService = @StreamableHttpConfig {
+    StreamableHttpAdvancedService negativeService = @StreamableHttpServiceConfig {
         info: {name: "negative", version: "1"},
         cacheHints: {discover: {ttlMs: -1}}
     } isolated service object {

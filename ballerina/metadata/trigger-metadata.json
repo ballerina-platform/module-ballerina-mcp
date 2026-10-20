@@ -25,7 +25,7 @@
       "concrete": false,
       "multipleListenersAllowed": false,
       "annotations": [
-        "$streamableHttpConfig"
+        "$streamableHttpServiceConfig"
       ],
       "identifier": {
         "presence": "optional",
@@ -68,9 +68,9 @@
               {
                 "id": "$streamableHttpService.tool.meta",
                 "name": "meta",
-                "doc": "The request metadata (`_meta`) the client attached to this tool call, e.g. a progress token. Injected by the runtime and excluded from the tool's input schema, so it is never a tool argument. Declare it nilable -- write `mcp:RequestMetaObject? meta`; a non-nilable `mcp:RequestMetaObject` is a compile error. At most one per method; its position in the signature is unconstrained.",
+                "doc": "The request metadata (`_meta`) the client attached to this tool call, e.g. a progress token. Injected by the runtime and excluded from the tool's input schema, so it is never a tool argument. Declare it nilable -- write `mcp:RequestMeta? meta`; a non-nilable `mcp:RequestMeta` is a compile error. At most one per method; its position in the signature is unconstrained.",
                 "type": {
-                  "name": "RequestMetaObject"
+                  "name": "RequestMeta"
                 },
                 "presence": "optional"
               },
@@ -177,7 +177,7 @@
       "concrete": false,
       "multipleListenersAllowed": false,
       "annotations": [
-        "$streamableHttpConfig"
+        "$streamableHttpServiceConfig"
       ],
       "identifier": {
         "presence": "optional",
@@ -377,9 +377,9 @@
   ],
   "annotations": [
     {
-      "id": "$streamableHttpConfig",
+      "id": "$streamableHttpServiceConfig",
       "type": {
-        "name": "StreamableHttpConfig"
+        "name": "StreamableHttpServiceConfig"
       },
       "attachPoint": "service",
       "presence": "optional"

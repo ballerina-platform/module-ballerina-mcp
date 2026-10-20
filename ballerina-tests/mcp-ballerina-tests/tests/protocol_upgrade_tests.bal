@@ -19,12 +19,12 @@ import ballerina/test;
 
 listener mcp:StreamableHttpListener upgradeListener = check new (8788);
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "protocol-upgrade", version: "2.0.0"},
     protocolMode: "auto"
 }
 service mcp:StreamableHttpService /upgrade on upgradeListener {
-    remote isolated function versionedEcho(string inputValue, mcp:RequestMetaObject? requestMeta) returns string {
+    remote isolated function versionedEcho(string inputValue, mcp:RequestMeta? requestMeta) returns string {
         return inputValue + (requestMeta is () ? ":no-meta" : ":meta");
     }
 }

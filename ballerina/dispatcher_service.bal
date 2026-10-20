@@ -30,7 +30,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         // Principal that created each session, when the service uses an `mcp:OAuthProtectedResourceConfig`.
         private map<string> sessionOwners = {};
         private final ServerAuthenticator? authenticator = serviceAuthenticator;
-        private StreamableHttpConfiguration? cachedServiceConfig = ();
+        private StreamableHttpServiceConfiguration? cachedServiceConfig = ();
 
         isolated resource function delete .(http:Headers headers)
                 returns http:BadRequest|http:NotFound|http:InternalServerError|http:Ok|http:MethodNotAllowed|
@@ -52,7 +52,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if protocolVersionError !is () {
                 return protocolVersionError;
             }
-            StreamableHttpConfiguration|Error config = self.getCachedServiceConfiguration();
+            StreamableHttpServiceConfiguration|Error config = self.getCachedServiceConfiguration();
             if config is Error {
                 return <http:InternalServerError>{
                     body: createJsonRpcError(INTERNAL_ERROR, config.message())
@@ -123,7 +123,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 return request;
             }
 
-            StreamableHttpConfiguration|Error routeConfig = self.getCachedServiceConfiguration();
+            StreamableHttpServiceConfiguration|Error routeConfig = self.getCachedServiceConfiguration();
             if routeConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, routeConfig.message());
             }
@@ -174,14 +174,14 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             };
         }
 
-        private isolated function getCachedServiceConfiguration() returns StreamableHttpConfiguration|Error {
+        private isolated function getCachedServiceConfiguration() returns StreamableHttpServiceConfiguration|Error {
             lock {
                 if self.cachedServiceConfig is () {
                     StreamableHttpService|StreamableHttpAdvancedService mcpService =
                             check getMcpServiceFromDispatcher(self);
                     self.cachedServiceConfig = getServiceConfiguration(mcpService);
                 }
-                return <StreamableHttpConfiguration>self.cachedServiceConfig.clone();
+                return <StreamableHttpServiceConfiguration>self.cachedServiceConfig.clone();
             }
         }
 
@@ -233,7 +233,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                         string `Invalid parameters for '${REQUEST_INITIALIZE}'`, id);
             }
 
-            StreamableHttpConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
+            StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), id);
             }
@@ -309,7 +309,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         private isolated function handleListToolsRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers, readonly & AuthContext? authContext)
             returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
-            StreamableHttpConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
+            StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
             }
@@ -366,7 +366,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         private isolated function handleCallToolRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers, readonly & AuthContext? authContext)
             returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
-            StreamableHttpConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
+            StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
             }

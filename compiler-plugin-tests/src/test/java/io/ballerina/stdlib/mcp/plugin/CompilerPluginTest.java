@@ -197,9 +197,17 @@ public class CompilerPluginTest {
     public void testMetaParameterCanAppearBeforeDataParameters() {
         DiagnosticResult diagnosticResult = compile("sample_package_18");
         Assert.assertEquals(errorCount(diagnosticResult), 0,
-                "an optional mcp:RequestMetaObject parameter must be accepted outside the final position: "
+                "an optional mcp:RequestMeta parameter must be accepted outside the final position: "
                         + diagnosticResult.errors().toString());
     }
+
+    @Test
+    public void testRequestMetaParameterMustBeOptional() {
+        DiagnosticResult diagnosticResult = compile("required_request_meta");
+        Assert.assertEquals(errorCount(diagnosticResult), 1, diagnosticResult.errors().toString());
+        assertError(diagnosticResult, 0, "(e.g., 'mcp:RequestMeta?')", "MCP_106");
+    }
+
     @Test
     public void testProtocolSessionDiagnostics() {
         String[] codes = {"MCP_WARNING_102", "MCP_114", "MCP_WARNING_104", "MCP_WARNING_103"};

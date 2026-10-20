@@ -22,7 +22,7 @@
         "target": {
           "kind": "serviceAnnotationField",
           "serviceType": "$streamableHttpService",
-          "annotation": "$streamableHttpConfig",
+          "annotation": "$streamableHttpServiceConfig",
           "path": "info.name"
         },
         "metadata": {
@@ -34,7 +34,7 @@
             "kind": "SERVICE_ANNOTATION"
           },
           "argument": {
-            "originalName": "StreamableHttpConfig"
+            "originalName": "StreamableHttpServiceConfig"
           },
           "module": {
             "name": "mcp"
@@ -55,7 +55,7 @@
         "target": {
           "kind": "serviceAnnotationField",
           "serviceType": "$streamableHttpService",
-          "annotation": "$streamableHttpConfig",
+          "annotation": "$streamableHttpServiceConfig",
           "path": "info.version"
         },
         "metadata": {
@@ -67,7 +67,7 @@
             "kind": "SERVICE_ANNOTATION"
           },
           "argument": {
-            "originalName": "StreamableHttpConfig"
+            "originalName": "StreamableHttpServiceConfig"
           },
           "module": {
             "name": "mcp"
@@ -290,8 +290,8 @@
                     "advanced": false
                   },
                   "key": "type",
-                  "placeholder": "mcp:RequestMetaObject?",
-                  "default": "mcp:RequestMetaObject?",
+                  "placeholder": "mcp:RequestMeta?",
+                  "default": "mcp:RequestMeta?",
                   "widget": {
                     "widgetKind": "TYPE",
                     "selected": true
@@ -778,8 +778,8 @@
                     "advanced": false
                   },
                   "key": "type",
-                  "placeholder": "mcp:RequestMetaObject?",
-                  "default": "mcp:RequestMetaObject?",
+                  "placeholder": "mcp:RequestMeta?",
+                  "default": "mcp:RequestMeta?",
                   "widget": {
                     "widgetKind": "TYPE",
                     "selected": true

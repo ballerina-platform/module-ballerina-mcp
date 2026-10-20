@@ -2,7 +2,7 @@ import ballerina/mcp;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9095);
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "streamable-transport-agnostic", version: "1.0.0"}
 }
 service mcp:StreamableHttpService /transportagnostic on mcpListener {

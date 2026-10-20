@@ -22,10 +22,10 @@ import ballerina/log;
 # + mcpService - The MCP service instance
 # + return - The resolved Streamable HTTP service configuration
 isolated function getServiceConfiguration(StreamableHttpService|StreamableHttpAdvancedService mcpService)
-        returns StreamableHttpConfiguration {
+        returns StreamableHttpServiceConfiguration {
     typedesc mcpServiceType = typeof mcpService;
-    StreamableHttpConfiguration? transportConfig = mcpServiceType.@StreamableHttpConfig;
-    if transportConfig is StreamableHttpConfiguration {
+    StreamableHttpServiceConfiguration? transportConfig = mcpServiceType.@StreamableHttpServiceConfig;
+    if transportConfig is StreamableHttpServiceConfiguration {
         return transportConfig;
     }
     return {
@@ -67,7 +67,7 @@ isolated function extractHeaderValues(http:Headers headers) returns map<string[]
 # + headers - HTTP request headers
 # + requestMethod - The MCP request method (optional, used for AUTO mode logic)
 # + return - Effective session mode to use
-isolated function determineEffectiveSessionMode(StreamableHttpConfiguration config, http:Headers headers, RequestMethod? requestMethod = ()) returns HttpSessionMode {
+isolated function determineEffectiveSessionMode(StreamableHttpServiceConfiguration config, http:Headers headers, RequestMethod? requestMethod = ()) returns HttpSessionMode {
     HttpSessionMode configuredMode = config.sessionMode;
 
     if configuredMode == STATEFUL || configuredMode == STATELESS {

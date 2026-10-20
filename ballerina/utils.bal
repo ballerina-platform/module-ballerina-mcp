@@ -88,7 +88,7 @@ isolated function applicationResult(Result resultValue, boolean preserveCacheHin
     foreach string fieldName in wireFields {
         _ = applicationValue.removeIfHasKey(fieldName);
     }
-    ResultMetaObject applicationMeta = {...(applicationValue._meta ?: {})};
+    ResultMeta applicationMeta = {...(applicationValue._meta ?: {})};
     anydata wireServerInfo = applicationMeta[SERVER_INFO_META_KEY];
     if wireServerInfo is record {} {
         Implementation|error serverInfo = wireServerInfo.cloneWithType();

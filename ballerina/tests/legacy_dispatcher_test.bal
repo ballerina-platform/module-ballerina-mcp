@@ -19,7 +19,7 @@ import ballerina/test;
 
 listener StreamableHttpListener legacyDispatcherListener = check new (3216);
 
-@StreamableHttpConfig {info: {name: "stateful-legacy", version: "1"}, sessionMode: STATEFUL}
+@StreamableHttpServiceConfig {info: {name: "stateful-legacy", version: "1"}, sessionMode: STATEFUL}
 service StreamableHttpAdvancedService /stateful on legacyDispatcherListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [{name: "echo", inputSchema: {'type: "object"}}]
@@ -29,7 +29,7 @@ service StreamableHttpAdvancedService /stateful on legacyDispatcherListener {
 }
 
 // Binds every transport-specific parameter shape an advanced handler may declare.
-@StreamableHttpConfig {info: {name: "session-aware", version: "1"}, sessionMode: STATEFUL}
+@StreamableHttpServiceConfig {info: {name: "session-aware", version: "1"}, sessionMode: STATEFUL}
 service StreamableHttpAdvancedService /sessionAware on legacyDispatcherListener {
     remote isolated function onListTools(http:Request request, http:Headers headers) returns ListToolsResult => {
         tools: [{name: "whoami", inputSchema: {'type: "object"}}]
@@ -44,14 +44,14 @@ service StreamableHttpAdvancedService /sessionAware on legacyDispatcherListener 
     }
 }
 
-@StreamableHttpConfig {info: {name: "modern-only", version: "1"}, protocolMode: "modern"}
+@StreamableHttpServiceConfig {info: {name: "modern-only", version: "1"}, protocolMode: "modern"}
 service StreamableHttpAdvancedService /modernOnly on legacyDispatcherListener {
     remote isolated function onListTools() returns ListToolsResult => {tools: []};
 
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "stateless-legacy", version: "1"}, sessionMode: STATELESS}
+@StreamableHttpServiceConfig {info: {name: "stateless-legacy", version: "1"}, sessionMode: STATELESS}
 service StreamableHttpAdvancedService /stateless on legacyDispatcherListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [{name: "ask", inputSchema: {'type: "object"}}]
@@ -63,7 +63,7 @@ service StreamableHttpAdvancedService /stateless on legacyDispatcherListener {
     };
 }
 
-// Attached without a @StreamableHttpConfig annotation so the dispatcher falls back to defaults.
+// Attached without a @StreamableHttpServiceConfig annotation so the dispatcher falls back to defaults.
 isolated function newUnconfiguredService() returns StreamableHttpAdvancedService =>
     service object {
         remote isolated function onListTools() returns ListToolsResult => {

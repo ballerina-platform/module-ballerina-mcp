@@ -20,7 +20,7 @@ import ballerina/time;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9090);
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {
         name: "MCP Weather Server",
         version: "1.0.0"
@@ -35,9 +35,9 @@ service mcp:StreamableHttpService /mcp on mcpListener {
             - location (string, required): City name or coordinates (e.g., "London", "40.7128,-74.0060")
             `
     }
-    remote function getCurrentWeather(string city, mcp:RequestMetaObject? meta) returns Weather|error {
+    remote function getCurrentWeather(string city, mcp:RequestMeta? meta) returns Weather|error {
         // Log received metadata if present
-        if meta is mcp:RequestMetaObject {
+        if meta is mcp:RequestMeta {
             log:printInfo(string `Received _meta from client: ${meta.toJsonString()}`);
         }
 
@@ -74,9 +74,9 @@ service mcp:StreamableHttpService /mcp on mcpListener {
     # + days - Number of days to forecast (1-7)
     # + meta - Optional metadata for the request
     # + return - Weather forecast for the specified location and days
-    remote function getWeatherForecast(string location, int days, mcp:RequestMetaObject? meta) returns WeatherForecast|error {
+    remote function getWeatherForecast(string location, int days, mcp:RequestMeta? meta) returns WeatherForecast|error {
         // Log received metadata if present
-        if meta is mcp:RequestMetaObject {
+        if meta is mcp:RequestMeta {
             log:printInfo(string `Received _meta from client: ${meta.toJsonString()}`);
         }
 

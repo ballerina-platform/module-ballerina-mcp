@@ -78,7 +78,7 @@ public class Utils {
     public static final String STREAMABLE_HTTP_BASIC_SERVICE_NAME = "StreamableHttpService";
     public static final String STREAMABLE_HTTP_ADVANCED_SERVICE_NAME = "StreamableHttpAdvancedService";
     public static final String SESSION_TYPE_NAME = "HttpSession";
-    public static final String META_TYPE_NAME = "RequestMetaObject";
+    public static final String META_TYPE_NAME = "RequestMeta";
     public static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
     public static final String AUTH_CONTEXT_TYPE_NAME = "AuthContext";
     public static final String CALL_TOOL_RESULT_TYPE_NAME = "CallToolResult";
@@ -90,14 +90,14 @@ public class Utils {
     public static final String REQUEST_TYPE_NAME = "Request";
     public static final String HEADER_ANNOTATION_NAME = "Header";
     public static final String UNKNOWN_SYMBOL = "unknown";
-    public static final String STREAMABLE_HTTP_CONFIG_ANNOTATION_NAME = "StreamableHttpConfig";
+    public static final String STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME = "StreamableHttpServiceConfig";
     public static final String SESSION_MODE_FIELD = "sessionMode";
     private static final Pattern MCP_HEADER_NAME = Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
 
     // Human-readable lists of supported parameter types, used in the INVALID_PARAMETER_TYPE diagnostic.
     public static final String BASIC_TOOL_SUPPORTED_PARAM_TYPES =
             "'anydata' tool parameters, a first 'mcp:HttpSession' parameter, an optional "
-                    + "'mcp:RequestMetaObject' parameter, an 'mcp:AuthContext' parameter, "
+                    + "'mcp:RequestMeta' parameter, an 'mcp:AuthContext' parameter, "
                     + "an 'http:Headers' parameter, an 'http:Request' parameter, or '@http:Header' parameters";
     public static final String ADVANCED_SUPPORTED_PARAM_TYPES =
             "'mcp:CallToolParams', 'mcp:HttpSession', 'mcp:AuthContext', 'http:Headers', 'http:Request', "
@@ -438,7 +438,7 @@ public class Utils {
     }
 
     /**
-     * Check if a TypeSymbol is optional/nullable (e.g., mcp:RequestMetaObject?).
+     * Check if a TypeSymbol is optional/nullable (e.g., mcp:RequestMeta?).
      * An optional type is a union type that includes NIL as one of its members.
      *
      * @param typeSymbol The type symbol to check
@@ -462,7 +462,7 @@ public class Utils {
     }
 
     /**
-     * Check if a parameter is request metadata (either mcp:RequestMetaObject or mcp:RequestMetaObject?).
+     * Check if a parameter is request metadata (either mcp:RequestMeta or mcp:RequestMeta?).
      * Returns true if the parameter is Meta type, and also indicates if it's optional.
      *
      * @param typeSymbol The type symbol to check
@@ -474,7 +474,7 @@ public class Utils {
             return true;
         }
 
-        // Check if it is an optional request metadata type (mcp:RequestMetaObject?).
+        // Check if it is an optional request metadata type (mcp:RequestMeta?).
         if (typeSymbol.typeKind() == TypeDescKind.UNION) {
             UnionTypeSymbol unionTypeSymbol = (UnionTypeSymbol) typeSymbol;
             for (TypeSymbol memberType : unionTypeSymbol.memberTypeDescriptors()) {
@@ -625,7 +625,7 @@ public class Utils {
         }
 
         AnnotationNode transportConfigAnnotation =
-                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_CONFIG_ANNOTATION_NAME);
+                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME);
         if (transportConfigAnnotation != null) {
             return getSessionModeFieldValue(transportConfigAnnotation, semanticModel);
         }

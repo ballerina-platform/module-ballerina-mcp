@@ -24,7 +24,7 @@ type Person record {|
     int age;
 |};
 
-@mcp:StreamableHttpConfig {info: {name: "structured-http", version: "1.0.0"}}
+@mcp:StreamableHttpServiceConfig {info: {name: "structured-http", version: "1.0.0"}}
 service mcp:StreamableHttpService /structuredHttp on structuredListener {
     remote isolated function stringValue() returns string => "hello";
 
@@ -38,12 +38,12 @@ service mcp:StreamableHttpService /structuredHttp on structuredListener {
     remote isolated function textOnlyValue() returns string => "text only";
 }
 
-@mcp:StreamableHttpConfig {info: {name: "structured-generic", version: "1.0.0"}}
+@mcp:StreamableHttpServiceConfig {info: {name: "structured-generic", version: "1.0.0"}}
 service mcp:StreamableHttpService /structuredGeneric on structuredListener {
     remote isolated function booleanValue() returns boolean => true;
 }
 
-@mcp:StreamableHttpConfig {info: {name: "argument-headers", version: "1.0.0"}}
+@mcp:StreamableHttpServiceConfig {info: {name: "argument-headers", version: "1.0.0"}}
 service mcp:StreamableHttpService /argumentHeaders on structuredListener {
     remote isolated function mirrorArguments(
             @mcp:Argument {headerName: "Region"} string region,

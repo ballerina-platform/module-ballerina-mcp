@@ -29,7 +29,7 @@ public enum DiagnosticMessage {
     ERROR_104("HttpSession parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'."),
     ERROR_105("Meta parameter ''{1}'' in function ''{0}'' must be the last parameter."),
     ERROR_106("Request metadata parameter ''{1}'' in function ''{0}'' must be optional " +
-            "(e.g., 'mcp:RequestMetaObject?')."),
+            "(e.g., ''mcp:RequestMeta?'')."),
     ERROR_107("Duplicate parameter ''{1}'' in function ''{0}''. " +
             "Only one parameter of type ''{2}'' is allowed."),
     ERROR_108("Invalid type of header param ''{1}'' in function ''{0}'': expected one of the 'string', 'int', " +

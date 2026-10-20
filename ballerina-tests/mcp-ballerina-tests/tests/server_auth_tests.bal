@@ -25,7 +25,7 @@ const AUTH_PLUGIN_RESOURCE = "http://localhost:8792/mcp";
 
 // The tools rely on the compiler plugin for their schemas, which must leave out the injected
 // `mcp:AuthContext` parameter and keep the `scopes` declared on `@mcp:Tool`.
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "auth-plugin-test-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS,
     httpConfig: {

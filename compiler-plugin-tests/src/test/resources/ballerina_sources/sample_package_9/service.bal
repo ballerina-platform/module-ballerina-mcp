@@ -18,7 +18,7 @@ import ballerina/http;
 import ballerina/mcp;
 
 // A raw http:Request parameter is available on the Streamable HTTP service.
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "sample-9", version: "1.0.0"}
 }
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9309) {

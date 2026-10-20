@@ -23,7 +23,7 @@ type CartItem record {|
     int qty;
 |};
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "error-handling-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -67,7 +67,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 }
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "advanced-error-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -90,7 +90,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
     }
 }
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "stateful-error-server", version: "1.0.0"},
     sessionMode: mcp:STATEFUL
 }
@@ -100,7 +100,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     isolated remote function greet() returns string => "hello";
 }
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "list-tools-failing-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
@@ -116,7 +116,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
     }
 }
 
-@mcp:StreamableHttpConfig {
+@mcp:StreamableHttpServiceConfig {
     info: {name: "list-tools-panicking-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }

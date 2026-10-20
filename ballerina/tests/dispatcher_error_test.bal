@@ -19,7 +19,7 @@ import ballerina/test;
 
 listener StreamableHttpListener dispatcherErrorListener = check new (3211);
 
-@StreamableHttpConfig {info: {name: "dispatcher-tools", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "dispatcher-tools", version: "1"}}
 service StreamableHttpAdvancedService /tools on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [{name: "echo", inputSchema: {'type: "object"}}]
@@ -28,7 +28,7 @@ service StreamableHttpAdvancedService /tools on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "mirrored-headers", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "mirrored-headers", version: "1"}}
 service StreamableHttpAdvancedService /mirrored on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [
@@ -45,7 +45,7 @@ service StreamableHttpAdvancedService /mirrored on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "fail-list", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "fail-list", version: "1"}}
 service StreamableHttpAdvancedService /failList on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult|ServerError =>
         error ServerError("tool listing is unavailable");
@@ -53,7 +53,7 @@ service StreamableHttpAdvancedService /failList on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "panic-list", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "panic-list", version: "1"}}
 service StreamableHttpAdvancedService /panicList on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult {
         panic error("unexpected listing panic");
@@ -62,7 +62,7 @@ service StreamableHttpAdvancedService /panicList on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "bad-headers", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "bad-headers", version: "1"}}
 service StreamableHttpAdvancedService /badHeaders on dispatcherErrorListener {
     // Two arguments mirrored onto the same header name cannot be represented on the wire.
     remote isolated function onListTools() returns ListToolsResult => {
@@ -83,14 +83,14 @@ service StreamableHttpAdvancedService /badHeaders on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "negative-ttl", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "negative-ttl", version: "1"}}
 service StreamableHttpAdvancedService /negativeTtl on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {tools: [], ttlMs: -1};
 
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "needs-structured", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "needs-structured", version: "1"}}
 service StreamableHttpAdvancedService /needsStructured on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [{name: "structured", inputSchema: {'type: "object"}, outputSchema: {"type": "object"}}]
@@ -100,7 +100,7 @@ service StreamableHttpAdvancedService /needsStructured on dispatcherErrorListene
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "fail-call", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "fail-call", version: "1"}}
 service StreamableHttpAdvancedService /failCall on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [{name: "echo", inputSchema: {'type: "object"}}]
@@ -110,7 +110,7 @@ service StreamableHttpAdvancedService /failCall on dispatcherErrorListener {
         error ServerError("tool execution is unavailable");
 }
 
-@StreamableHttpConfig {info: {name: "bad-input-required", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "bad-input-required", version: "1"}}
 service StreamableHttpAdvancedService /badInputRequired on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {
         tools: [{name: "ask", inputSchema: {'type: "object"}}, {name: "badMode", inputSchema: {'type: "object"}}]
@@ -133,7 +133,7 @@ service StreamableHttpAdvancedService /badInputRequired on dispatcherErrorListen
     }
 }
 
-@StreamableHttpConfig {info: {name: "fail-subscribe", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "fail-subscribe", version: "1"}}
 service StreamableHttpAdvancedService /failSubscribe on dispatcherErrorListener {
     remote isolated function onListTools() returns ListToolsResult => {tools: []};
 
@@ -143,7 +143,7 @@ service StreamableHttpAdvancedService /failSubscribe on dispatcherErrorListener 
             returns stream<JsonRpcNotification, error?>|ServerError => error ServerError("subscriptions are down");
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "legacy-only", version: "1"},
     protocolMode: "legacy"
 }
@@ -153,7 +153,7 @@ service StreamableHttpAdvancedService /legacyMode on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "guided", version: "1"},
     options: {instructions: "Call echo first."}
 }
@@ -163,7 +163,7 @@ service StreamableHttpAdvancedService /guided on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {
+@StreamableHttpServiceConfig {
     info: {name: "cors-guarded", version: "1"},
     httpConfig: {cors: {allowOrigins: ["https://trusted.example"]}}
 }
@@ -173,7 +173,7 @@ service StreamableHttpAdvancedService /corsGuarded on dispatcherErrorListener {
     remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
 }
 
-@StreamableHttpConfig {info: {name: "panic-tool", version: "1"}}
+@StreamableHttpServiceConfig {info: {name: "panic-tool", version: "1"}}
 service StreamableHttpService /panicTool on dispatcherErrorListener {
     @Tool {description: "always fails", schema: {'type: "object"}}
     remote isolated function explode() returns string {
@@ -187,7 +187,7 @@ isolated function dispatcherPost(string servicePath, string methodName, RequestP
         map<string|string[]> extraHeaders = {}, string protocolVersion = MODERN_PROTOCOL_VERSION,
         string? metaProtocolVersion = (), boolean includeCapabilities = true,
         ClientCapabilities capabilities = {}) returns http:Response|error {
-    RequestMetaObject requestMeta = {};
+    RequestMeta requestMeta = {};
     requestMeta[PROTOCOL_META_KEY] = metaProtocolVersion ?: protocolVersion;
     if includeCapabilities {
         requestMeta[CAPABILITIES_META_KEY] = capabilities;

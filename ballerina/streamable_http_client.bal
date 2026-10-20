@@ -549,7 +549,7 @@ public distinct isolated client class StreamableHttpClient {
         lock {
             self.requestId += 1;
             RequestParams wireParams = {...requestParams.cloneReadOnly()};
-            RequestMetaObject requestMeta = {...(wireParams._meta ?: {})};
+            RequestMeta requestMeta = {...(wireParams._meta ?: {})};
             requestMeta[PROTOCOL_META_KEY] = MODERN_PROTOCOL_VERSION;
             requestMeta[CLIENT_INFO_META_KEY] = self.clientInfo;
             requestMeta[CAPABILITIES_META_KEY] = self.clientCapabilities;
