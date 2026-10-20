@@ -480,15 +480,24 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 ```
 
 An advanced service may also set `ttlMs` or `cacheScope` on the `ListToolsResult` returned by `onListTools`; each
-field set there takes precedence over the configured hint. Hints are only sent to modern clients.
+field set there takes precedence over the configured hint. A negative configured `ttlMs` fails `attach`, while a
+negative `ttlMs` from `onListTools` is sent as `0` and logged as an error. Hints are only sent to modern clients.
 
 The client reuses a `tools/list` result while it is fresh, caching each page by its cursor. Each client keeps its own
 cache and represents a single authorization context: configure credentials through `httpConfig.auth`, and use a
 separate client for each user rather than passing different credentials as per-call headers. A call that passes its own
-`Authorization` header bypasses the cache. A `notifications/tools/list_changed`
-notification read from `listen()` drops the cached list. Pass `cacheMode = "refresh"` to `listTools()` to fetch and
-re-cache the list, or `cacheMode = "bypass"` to fetch without touching the cache. Set `resultCache = ()` in the client
-configuration to disable reuse, or adjust `maxTtlMs` and `maxEntries` in `resultCache` to bound it.
+`Authorization` header bypasses the cache. Cached results are dropped when:
+
+- the application reads `notifications/tools/list_changed` from `listen()`,
+- the server rejects a cursor with `INVALID_PARAMS` (all pages are dropped),
+- a call fails with `HEADER_MISMATCH`,
+- a `401` or `insufficient_scope` challenge yields a different token, since a step-up can change the tool list, or
+- the client is closed with `close()`.
+
+A token refreshed on expiry keeps the cache. A negative `ttlMs` from a server is treated as `0`. Pass
+`cacheMode = "refresh"` to `listTools()` to fetch and re-cache the list, or `cacheMode = "bypass"` to fetch without
+touching the cache. Set `resultCache = ()` in the client configuration to disable reuse, or adjust `maxTtlMs` and
+`maxEntries` in `resultCache` to bound it.
 
 ## Migrating from 1.x
 

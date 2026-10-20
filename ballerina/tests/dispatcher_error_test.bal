@@ -85,9 +85,14 @@ service StreamableHttpAdvancedService /badHeaders on dispatcherErrorListener {
 
 @StreamableHttpServiceConfig {info: {name: "negative-ttl", version: "1"}}
 service StreamableHttpAdvancedService /negativeTtl on dispatcherErrorListener {
-    remote isolated function onListTools() returns ListToolsResult => {tools: [], ttlMs: -1};
+    remote isolated function onListTools() returns ListToolsResult => {
+        tools: [{name: "echo", inputSchema: {'type: "object"}}],
+        ttlMs: -5
+    };
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {
+        content: [{'type: "text", text: "called"}]
+    };
 }
 
 @StreamableHttpServiceConfig {info: {name: "needs-structured", version: "1"}}
@@ -225,9 +230,20 @@ function testDispatcherReportsToolListingFailures() returns error? {
 
     http:Response headerResponse = check dispatcherPost("/badHeaders", REQUEST_LIST_TOOLS);
     check assertJsonRpcError(headerResponse, 200, INTERNAL_ERROR, "Duplicate x-mcp-header name");
+}
 
-    http:Response ttlResponse = check dispatcherPost("/negativeTtl", REQUEST_LIST_TOOLS);
-    check assertJsonRpcError(ttlResponse, 200, INTERNAL_ERROR, "ttlMs must be non-negative");
+@test:Config {}
+function testNegativeHandlerTtlIsSentAsZero() returns error? {
+    http:Response listResponse = check dispatcherPost("/negativeTtl", REQUEST_LIST_TOOLS);
+    test:assertEquals(listResponse.statusCode, 200);
+    json listResult = check (check listResponse.getJsonPayload()).result;
+    test:assertEquals(check listResult.ttlMs, 0);
+
+    http:Response callResponse = check dispatcherPost("/negativeTtl", REQUEST_CALL_TOOL, {"name": "echo"},
+            {[NAME_HEADER]: "echo"});
+    test:assertEquals(callResponse.statusCode, 200);
+    json callResult = check (check callResponse.getJsonPayload()).result;
+    test:assertEquals(check callResult.content, [{'type: "text", text: "called"}]);
 }
 
 @test:Config {}

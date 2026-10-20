@@ -526,7 +526,8 @@ isolated function splitScopes(string scopeValue) returns string[] {
 # + additional - Scopes to add
 # + return - The union
 isolated function unionScopes(string[] existing, string[] additional) returns string[] {
-    string[] combined = existing.clone();
+    // A copy, not a clone: granted scopes may be held as an immutable list.
+    string[] combined = [...existing];
     foreach string scope in additional {
         if combined.indexOf(scope) is () {
             combined.push(scope);

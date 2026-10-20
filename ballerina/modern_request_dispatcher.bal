@@ -259,8 +259,10 @@ isolated function listCheckedProtocolTools(StreamableHttpService|StreamableHttpA
             return error ServerError(headerDefinition.message());
         }
     }
-    if toolList.ttlMs is int && toolList.ttlMs < 0 {
-        return error ServerError("ttlMs must be non-negative");
+    int? ttlMs = toolList.ttlMs;
+    if ttlMs is int && ttlMs < 0 {
+        log:printError("onListTools returned a negative ttlMs; using 0", ttlMs = ttlMs);
+        toolList.ttlMs = 0;
     }
     return toolList;
 }
