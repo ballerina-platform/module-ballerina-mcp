@@ -854,7 +854,7 @@ public type FormSchema record {|
 
 # The schema of one form field.
 public type FormFieldSchema StringFieldSchema|NumberFieldSchema|BooleanFieldSchema|EnumFieldSchema|
-    TitledEnumFieldSchema|MultiSelectEnumFieldSchema|TitledMultiSelectEnumFieldSchema;
+    TitledEnumFieldSchema|MultiSelectEnumFieldSchema|TitledMultiSelectEnumFieldSchema|LegacyTitledEnumFieldSchema;
 
 # A free-text form field.
 public type StringFieldSchema record {|
@@ -912,6 +912,23 @@ public type EnumFieldSchema record {|
     string description?;
     # The allowed values.
     string[] 'enum;
+    # The initially selected value.
+    string default?;
+|};
+
+# A single-select field whose labels are listed in `enumNames`, in the order of `enum`. MCP keeps this
+# shape for older servers; the client accepts it, but a service cannot send it. Use `TitledEnumFieldSchema`.
+public type LegacyTitledEnumFieldSchema record {|
+    # The JSON type.
+    "string" 'type;
+    # A display label.
+    string title?;
+    # A description of the field.
+    string description?;
+    # The allowed values.
+    string[] 'enum;
+    # A display label for each allowed value.
+    string[] enumNames;
     # The initially selected value.
     string default?;
 |};

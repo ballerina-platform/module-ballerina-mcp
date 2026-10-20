@@ -124,6 +124,10 @@ final readonly & map<FormElicitationParams> badForms = {
         requestedSchema: {properties: {age: {'type: "integer", minimum: 10, maximum: 1}}}
     },
     emptyEnum: {message: "?", requestedSchema: {properties: {color: {'type: "string", 'enum: []}}}},
+    legacyEnumNames: {
+        message: "?",
+        requestedSchema: {properties: {color: {'type: "string", 'enum: ["red"], enumNames: ["Red"]}}}
+    },
     foreignDefault: {
         message: "?",
         requestedSchema: {properties: {color: {'type: "string", 'enum: ["red"], default: "blue"}}}

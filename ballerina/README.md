@@ -366,7 +366,8 @@ remote isolated function onCallTool(mcp:CallToolParams params)
 A form schema is a flat object whose fields are string, number or integer, boolean, single-select enum (`enum`,
 or `oneOf` with titles) and multi-select enum (`items.enum`, or `items.anyOf` with titles) schemas. Elicitations
 use form mode by default; set `mode: "url"` with a `url` to send the user to an out-of-band page. The
-`mcp:elicitForm` and `mcp:elicitUrl` builders also work here.
+`mcp:elicitForm` and `mcp:elicitUrl` builders also work here. The older single-select shape with labels in
+`enumNames` is rejected; use `oneOf` with titles instead. The client still accepts it from other servers.
 
 Before sending an input-required result, the service checks it:
 

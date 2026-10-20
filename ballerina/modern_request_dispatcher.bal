@@ -402,6 +402,10 @@ isolated function validateFormElicitation(FormElicitationParams formParams) retu
         }
     }
     foreach [string, FormFieldSchema] [fieldName, fieldSchema] in properties.entries() {
+        // MCP keeps the enumNames shape only so clients can read older servers.
+        if fieldSchema is LegacyTitledEnumFieldSchema {
+            return error(string `Form schema field '${fieldName}' uses enumNames; use oneOf with titles`);
+        }
         if !isValidFormField(fieldSchema) {
             return error(string `Form schema field '${fieldName}' is outside the allowed subset`);
         }

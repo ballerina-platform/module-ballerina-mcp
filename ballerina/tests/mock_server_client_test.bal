@@ -366,6 +366,40 @@ service /mock on new http:Listener(3210) {
                         }
                     });
                 }
+                "legacyEnumNames" => {
+                    if nextMockCall(scenario) > 1 {
+                        return mockJson({
+                            "jsonrpc": JSONRPC_VERSION,
+                            "id": requestId,
+                            "result": {"resultType": "complete", "content": [{"type": "text", "text": "painted"}]}
+                        });
+                    }
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {
+                            "resultType": "input_required",
+                            "inputRequests": {
+                                "paint": {
+                                    "method": "elicitation/create",
+                                    "params": {
+                                        "message": "Pick a colour",
+                                        "requestedSchema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "color": {
+                                                    "type": "string",
+                                                    "enum": ["#F00", "#0F0"],
+                                                    "enumNames": ["Red", "Green"]
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
                 "unknownResultType" => {
                     return mockJson({
                         "jsonrpc": JSONRPC_VERSION,
@@ -678,6 +712,31 @@ function testModernClientRequiresAnElicitationHandlerForContinuations() returns 
     if callResult is ToolCallError {
         test:assertTrue(callResult.message().includes("Elicitation handler is not configured"));
         test:assertTrue(callResult.detail()["inputRequired"] is InputRequiredResult);
+    }
+}
+
+isolated json legacyColorField = ();
+
+isolated function pickLegacyColor(ElicitRequest request) returns ElicitResult|ClientError {
+    FormElicitationParams|UrlElicitationParams params = request.params;
+    if params is FormElicitationParams {
+        lock {
+            legacyColorField = params.requestedSchema.properties["color"].toJson().cloneReadOnly();
+        }
+    }
+    return {action: "accept", content: {color: "#0F0"}};
+}
+
+@test:Config {}
+function testModernClientAcceptsLegacyEnumNamesForms() returns error? {
+    StreamableHttpClient legacyForm = check new (mockUrl("legacyEnumNames"), protocolMode = "modern",
+        elicitationHandler = pickLegacyColor);
+    _ = check legacyForm->connect();
+    CallToolResult callResult = check legacyForm->callTool({name: "echo"});
+    test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "painted"});
+    lock {
+        test:assertEquals(legacyColorField,
+                {"type": "string", "enum": ["#F00", "#0F0"], "enumNames": ["Red", "Green"]});
     }
 }
 
