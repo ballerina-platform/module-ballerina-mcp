@@ -114,7 +114,7 @@ A comprehensive example demonstrating STATEFUL session mode with persistent shop
 **Features:**
 - Session-based shopping cart management
 - Persistent state across multiple requests within a session
-- Demonstrates proper session parameter usage as first parameter
+- Demonstrates session parameter usage
 - Basic Service pattern with automatic tool discovery
 - Thread-safe session storage
 

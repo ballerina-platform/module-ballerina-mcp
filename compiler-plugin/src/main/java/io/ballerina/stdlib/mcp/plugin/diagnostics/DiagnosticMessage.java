@@ -25,7 +25,6 @@ public enum DiagnosticMessage {
     ERROR_101("Failed to generate the parameter schema definition for the function ''{0}''." +
             " Specify the parameter schema manually using the `@mcp:McpTool` annotation's parameter field."),
     ERROR_102("Parameter ''{1}'' in function ''{0}'' has an unsupported type. Supported types are {2}."),
-    ERROR_103("HttpSession parameter ''{1}'' in function ''{0}'' must be the first parameter."),
     ERROR_104("HttpSession parameter ''{1}'' in function ''{0}'' is not allowed when sessionMode is 'STATELESS'."),
     ERROR_105("Meta parameter ''{1}'' in function ''{0}'' must be the last parameter."),
     ERROR_106("Request metadata parameter ''{1}'' in function ''{0}'' must be optional " +
@@ -44,7 +43,7 @@ public enum DiagnosticMessage {
     ERROR_114("Required HttpSession parameter ''{0}'' is not supported in modern protocol mode. " +
             "Use explicit application state or select legacy protocol mode."),
     ERROR_115("Parameter ''{1}'' in function ''{0}'' cannot use '@mcp:Argument': expected a non-nilable " +
-            "'string', 'int', 'float', 'decimal', or 'boolean' tool argument."),
+            "'string', 'int', or 'boolean' tool argument."),
     ERROR_116("Invalid MCP argument header name ''{2}'' on parameter ''{1}'' in function ''{0}''."),
     ERROR_117("Duplicate MCP argument header name ''{2}'' on parameter ''{1}'' in function ''{0}''."),
     ERROR_118("Function ''{0}'' cannot combine '@mcp:Argument' with an explicitly supplied '@mcp:Tool.schema'."),

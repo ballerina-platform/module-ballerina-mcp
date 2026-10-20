@@ -126,6 +126,20 @@ public class CompilerPluginTest {
     }
 
     @Test
+    public void testSessionParamAtAnyPosition() {
+        DiagnosticResult diagnosticResult = compile("session_param_any_position");
+        Assert.assertEquals(errorCount(diagnosticResult), 0, diagnosticResult.errors().toString());
+    }
+
+    @Test
+    public void testDuplicateSessionParams() {
+        DiagnosticResult diagnosticResult = compile("duplicate_session_param");
+        Assert.assertEquals(errorCount(diagnosticResult), 1, diagnosticResult.errors().toString());
+        assertError(diagnosticResult, 0, "Duplicate parameter 'second'", MCP_107);
+        assertError(diagnosticResult, 0, "type 'mcp:HttpSession'", MCP_107);
+    }
+
+    @Test
     public void testDuplicateHttpRequestParams() {
         DiagnosticResult diagnosticResult = compile("sample_package_10");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
@@ -248,6 +262,11 @@ public class CompilerPluginTest {
         DiagnosticResult invalidType = compile("sample_package_27");
         Assert.assertEquals(errorCount(invalidType), 1L);
         assertError(invalidType, 0, "cannot use @mcp:Argument", "MCP_115");
+
+        DiagnosticResult numberTypes = compile("argument_number_headers");
+        Assert.assertEquals(errorCount(numberTypes), 2L, numberTypes.errors().toString());
+        assertError(numberTypes, 0, "cannot use @mcp:Argument", "MCP_115");
+        assertError(numberTypes, 1, "cannot use @mcp:Argument", "MCP_115");
 
         DiagnosticResult invalidName = compile("sample_package_28");
         Assert.assertEquals(errorCount(invalidName), 1L);

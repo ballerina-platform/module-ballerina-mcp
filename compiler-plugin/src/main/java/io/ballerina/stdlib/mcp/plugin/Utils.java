@@ -96,7 +96,7 @@ public class Utils {
 
     // Human-readable lists of supported parameter types, used in the INVALID_PARAMETER_TYPE diagnostic.
     public static final String BASIC_TOOL_SUPPORTED_PARAM_TYPES =
-            "'anydata' tool parameters, a first 'mcp:HttpSession' parameter, an optional "
+            "'anydata' tool parameters, an 'mcp:HttpSession' parameter, an optional "
                     + "'mcp:RequestMeta' parameter, an 'mcp:AuthContext' parameter, "
                     + "an 'http:Headers' parameter, an 'http:Request' parameter, or '@http:Header' parameters";
     public static final String ADVANCED_SUPPORTED_PARAM_TYPES =
@@ -337,18 +337,9 @@ public class Utils {
             } else if (isSessionType) {
                 if (hasSessionParam) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.SESSION_PARAM_MUST_BE_FIRST,
+                            CompilationDiagnostic.DUPLICATE_PARAMETER,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
-                            functionName, parameterName);
-                    context.reportDiagnostic(diagnostic);
-                    return false;
-                }
-
-                if (i != 0) {
-                    Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.SESSION_PARAM_MUST_BE_FIRST,
-                            parameterSymbol.getLocation().orElse(alternativeLocation),
-                            functionName, parameterName);
+                            functionName, parameterName, MCP_PACKAGE_NAME + ":" + SESSION_TYPE_NAME);
                     context.reportDiagnostic(diagnostic);
                     return false;
                 }
@@ -536,7 +527,6 @@ public class Utils {
         TypeSymbol rawType = getRawType(typeSymbol);
         var types = context.semanticModel().types();
         return rawType.subtypeOf(types.STRING) || rawType.subtypeOf(types.INT)
-                || rawType.subtypeOf(types.FLOAT) || rawType.subtypeOf(types.DECIMAL)
                 || rawType.subtypeOf(types.BOOLEAN);
     }
 

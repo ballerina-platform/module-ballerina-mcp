@@ -20,9 +20,7 @@ service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9326) {
     remote isolated function lookup(
             @mcp:Argument {headerName: "Region"} string region,
             @mcp:Argument {headerName: "Retry-Count"} int retries,
-            @mcp:Argument {headerName: "Confidence"} float confidence,
-            @mcp:Argument {headerName: "Ratio"} decimal ratio,
             @mcp:Argument {headerName: "Enabled"} boolean enabled) returns string {
-        return string `${region}:${retries}:${confidence}:${ratio}:${enabled}`;
+        return string `${region}:${retries}:${enabled}`;
     }
 }

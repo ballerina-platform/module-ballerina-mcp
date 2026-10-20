@@ -339,6 +339,17 @@ service /mock on new http:Listener(3210) {
                         }
                     ]);
                 }
+                "intHeaderTool" => {
+                    return mockToolListResult(requestId, [
+                        {
+                            "name": "count",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"count": {"type": "integer", "x-mcp-header": "Count"}}
+                            }
+                        }
+                    ]);
+                }
                 "missingStructured" => {
                     return mockToolListResult(requestId, [
                         {"name": "structured", "inputSchema": {"type": "object"}, "outputSchema": {"type": "object"}}
@@ -388,6 +399,18 @@ service /mock on new http:Listener(3210) {
                 }
                 "legacyWrongResult" => {
                     return mockJson({"jsonrpc": JSONRPC_VERSION, "id": requestId, "result": {"tools": []}});
+                }
+                "intHeaderTool" => {
+                    // Echoes the call number and the mirrored header the client sent.
+                    string countHeader = check request.getHeader("mcp-param-count");
+                    return mockJson({
+                        "jsonrpc": JSONRPC_VERSION,
+                        "id": requestId,
+                        "result": {
+                            "resultType": "complete",
+                            "content": [{"type": "text", "text": string `${nextMockCall(scenario)}:${countHeader}`}]
+                        }
+                    });
                 }
                 "badToolResult" => {
                     return mockJson({
@@ -609,6 +632,26 @@ function testModernClientToolLookupAcrossPages() returns error? {
     _ = check unmirrorable->connect();
     ListToolsResult filteredTools = check unmirrorable->listTools();
     test:assertEquals(filteredTools.tools, []);
+}
+
+@test:Config {}
+function testModernClientRejectsIntArgumentHeadersOutsideSafeRange() returns error? {
+    StreamableHttpClient rangeClient = check new (mockUrl("intHeaderTool"), protocolMode = "modern");
+    _ = check rangeClient->connect();
+    foreach int count in [9007199254740992, -9007199254740992] {
+        CallToolResult|ClientError rejected =
+            rangeClient->callTool({name: "count", arguments: {"count": count}});
+        test:assertTrue(rejected is ToolCallError, string `expected ToolCallError for ${count}`);
+    }
+    // Rejected calls never reach the server, so the first accepted call is call 1.
+    test:assertEquals(check callCountTool(rangeClient, 9007199254740991), "1:9007199254740991");
+    test:assertEquals(check callCountTool(rangeClient, -9007199254740991), "2:-9007199254740991");
+}
+
+function callCountTool(StreamableHttpClient rangeClient, int count) returns string|error {
+    CallToolResult result = check rangeClient->callTool({name: "count", arguments: {"count": count}});
+    TextContent textContent = check result.content[0].ensureType();
+    return textContent.text;
 }
 
 @test:Config {}

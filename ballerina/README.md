@@ -76,7 +76,7 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 
 A tool may bind these runtime values in addition to ordinary `anydata` arguments:
 
-- `mcp:HttpSession` or `mcp:HttpSession?`, placed first, for legacy HTTP session state.
+- `mcp:HttpSession` or `mcp:HttpSession?`, at any position, for legacy HTTP session state.
 - `mcp:RequestMeta?`, at any position, for the request's `_meta` value.
 - `@http:Header` parameters, `http:Headers`, and `http:Request` for Streamable HTTP request data.
 
@@ -132,8 +132,10 @@ remote isolated function weather(
 }
 ```
 
-This produces a `region` property containing `"x-mcp-header": "Region"`. Use `@http:Header` when a value comes only
-from an HTTP header and must not be part of the MCP tool arguments.
+This produces a `region` property containing `"x-mcp-header": "Region"`. `@mcp:Argument` applies to a non-nilable
+`string`, `int` or `boolean` argument. Header names are compared case-insensitively, and the client rejects a call whose
+`int` argument header is outside ±(2<sup>53</sup>−1) with a `ToolCallError`. Use `@http:Header` when a value comes
+only from an HTTP header and must not be part of the MCP tool arguments.
 
 ## Sessions
 
