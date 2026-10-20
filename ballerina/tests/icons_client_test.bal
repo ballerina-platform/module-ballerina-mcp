@@ -62,8 +62,7 @@ isolated service /mcp on new http:Listener(3203) {
                         }
                     ],
                     // Non-spec top-level fields sent by some servers.
-                    ttlMs: 60000,
-                    cacheScope: "session"
+                    vendorHint: "session"
                 }
             }
         };
@@ -86,8 +85,7 @@ function testClientDecodesSpecCompliantIcons() returns error? {
     test:assertEquals(icons[0].theme, "light");
     test:assertEquals(icons[1].theme, "dark");
     test:assertEquals(icons[2].sizes, ["any"]);
-    test:assertEquals(result["ttlMs"], 60000);
-    test:assertEquals(result["cacheScope"], "session");
+    test:assertEquals(result["vendorHint"], "session");
 }
 
 @test:Config {}
