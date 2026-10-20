@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/lang.runtime;
 import ballerina/test;
 
 // A deliberately misbehaving peer. A conforming MCP server cannot produce these
@@ -39,6 +40,20 @@ isolated function nextMockCall(string scenario) returns int {
         int callNumber = (mockCallCounts[scenario] ?: 0) + 1;
         mockCallCounts[scenario] = callNumber;
         return callNumber;
+    }
+}
+
+// Counts handshake requests, and slows them for "slow" scenarios so concurrent connects overlap.
+isolated function recordHandshake(string scenario, string method) {
+    _ = nextMockCall(string `${scenario}:${method}`);
+    if scenario.startsWith("slow") {
+        runtime:sleep(0.5);
+    }
+}
+
+isolated function mockCallCount(string key) returns int {
+    lock {
+        return mockCallCounts[key] ?: 0;
     }
 }
 
@@ -142,6 +157,7 @@ service /mock on new http:Listener(3210) {
         string method = requestMessage.method;
 
         if method == "server/discover" {
+            recordHandshake(scenario, "discover");
             match scenario {
                 "noWireDefaults" => {
                     return mockDiscoverResult(requestId, includeWireDefaults = false);
@@ -212,6 +228,7 @@ service /mock on new http:Listener(3210) {
         }
 
         if method == REQUEST_INITIALIZE {
+            recordHandshake(scenario, "initialize");
             if scenario == "legacyBadInit" {
                 return mockJson({"jsonrpc": JSONRPC_VERSION, "id": requestId, "result": {"tools": []}});
             }

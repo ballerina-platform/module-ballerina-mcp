@@ -104,14 +104,25 @@ public distinct isolated client class StreamableHttpClient {
     isolated remote function connect(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
             returns ConnectionInfo|ClientError {
-        ClientCapabilities advertisedCapabilities =
-            withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
+        ClientCapabilities & readonly advertisedCapabilities =
+            withOAuthExtensionCapability(capabilities, self.transport.oauthExtension()).cloneReadOnly();
+        Implementation & readonly connectingClient = clientInfo.cloneReadOnly();
+        map<string|string[]> & readonly requestHeaders = headers.cloneReadOnly();
+        // Held through the handshake, so a concurrent first connect() waits and reuses its result.
         lock {
             if self.connected {
                 return self.getConnectionInfo();
             }
-            self.clientInfo = clientInfo.cloneReadOnly();
-            self.clientCapabilities = advertisedCapabilities.cloneReadOnly();
+            return self.handshake(connectingClient, advertisedCapabilities, requestHeaders);
+        }
+    }
+
+    private isolated function handshake(Implementation & readonly clientInfo,
+            ClientCapabilities & readonly advertisedCapabilities, map<string|string[]> & readonly headers)
+            returns ConnectionInfo|ClientError {
+        lock {
+            self.clientInfo = clientInfo;
+            self.clientCapabilities = advertisedCapabilities;
             string? sessionId = self.transport.getSessionId();
 
             // If a session ID exists, assume reconnection and skip initialization.
