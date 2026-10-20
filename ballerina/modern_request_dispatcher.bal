@@ -362,7 +362,7 @@ isolated function validateInputRequired(InputRequiredResult inputResult, ClientC
         FormElicitationParams|UrlElicitationParams inputParams = inputRequest.params;
         if !clientCapabilities.hasKey("elicitation") {
             return error("Client did not declare the required capability: elicitation",
-                    requiredCapabilities = {elicitation: {}});
+                    requiredCapabilities = {elicitation: {[inputParams.mode]: {}}});
         }
         record {} elicitationCapabilities = clientCapabilities.elicitation ?: {};
         boolean supportedMode = inputParams.mode == "form" ?

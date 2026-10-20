@@ -366,7 +366,13 @@ function testDispatcherValidatesInputRequiredResults() returns error? {
     http:Response missingCapability = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL,
             {"name": "openLink"}, {[NAME_HEADER]: "openLink"});
     check assertMissingCapability(missingCapability, "Client did not declare the required capability: elicitation",
-            {elicitation: {}});
+            {elicitation: {url: {}}});
+
+    string formTool = badForms.keys()[0];
+    http:Response missingFormCapability = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL,
+            {"name": formTool}, {[NAME_HEADER]: formTool});
+    check assertMissingCapability(missingFormCapability,
+            "Client did not declare the required capability: elicitation", {elicitation: {form: {}}});
 
     http:Response missingMode = check dispatcherPost("/badInputRequired", REQUEST_CALL_TOOL, {"name": "openLink"},
             {[NAME_HEADER]: "openLink"}, capabilities = {elicitation: {form: {}}});
