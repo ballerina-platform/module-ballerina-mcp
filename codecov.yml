@@ -1,12 +1,13 @@
-# The Ballerina JaCoCo report splits each .bal file across synthetic packages
-# (values, global_vars, constants, lambdas, identifiers). Only the plain
-# `ballerina/<file>.bal` sections map onto real repo paths, so the rest must be
-# flattened back or their hits are dropped. Class and object method bodies live
-# under `values`, so without this the unit tests for them count as uncovered.
 fixes:
   - "io/ballerina/stdlib/mcp/plugin/::./compiler-plugin/src/main/java/io/ballerina/stdlib/mcp/plugin/"
   - "ballerina/mcp/**/::../ballerina/"
-  - "ballerina/**/::ballerina/"
+  # Since Ballerina 2201.14, the module coverage report places object methods, lambdas and module-level
+  # variable initializers under synthetic packages (e.g. `ballerina/values`). Map them back to the sources.
+  - "ballerina/values/::ballerina/"
+  - "ballerina/lambdas/::ballerina/"
+  - "ballerina/global_vars/::ballerina/"
+  - "ballerina/constants/::ballerina/"
+  - "ballerina/typedescs/::ballerina/"
 
 ignore:
   - "ballerina-tests"

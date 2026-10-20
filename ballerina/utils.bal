@@ -81,6 +81,20 @@ isolated function extractResultFromMessage(JsonRpcMessage message) returns Serve
     return error InvalidMessageTypeError("Received message from server is not a valid JsonRpcResponse.");
 }
 
+// Legacy revisions predate the 2026-07-28 result fields, so a value outside that schema
+// must not fail the whole response.
+isolated function toLegacyMessage(json payload) returns JsonRpcMessage|error {
+    if payload is map<json> {
+        json resultValue = payload["result"];
+        if resultValue is map<json> {
+            foreach string fieldName in ["resultType", "ttlMs", "cacheScope"] {
+                _ = resultValue.removeIfHasKey(fieldName);
+            }
+        }
+    }
+    return payload.cloneWithType();
+}
+
 // Keep wire-only additions out of the established application result APIs.
 isolated function applicationResult(Result resultValue, boolean preserveCacheHints = false) returns Result {
     Result applicationValue = {...resultValue};

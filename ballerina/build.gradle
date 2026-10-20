@@ -56,7 +56,7 @@ ballerina {
     packageOrganization = packageOrg
     module = packageName
     langVersion = ballerinaLangVersion
-    platform = "java21"
+    platform = "java25"
 }
 
 task updateTomlFiles {
@@ -164,8 +164,8 @@ publish.dependsOn build
 // so deleted source files and stale BIR cannot leak into downstream compilation.
 build.doLast {
     project.sync { syncSpec ->
-        syncSpec.from(project.zipTree("${project.projectDir}/build/bal_build_target/bala/ballerina-mcp-java21-${tomlVersion}.bala"))
-        syncSpec.into("${project.rootDir}/target/ballerina-runtime/repo/bala/ballerina/mcp/${tomlVersion}/java21")
+        syncSpec.from(project.zipTree("${project.projectDir}/build/bal_build_target/bala/ballerina-mcp-java25-${tomlVersion}.bala"))
+        syncSpec.into("${project.rootDir}/target/ballerina-runtime/repo/bala/ballerina/mcp/${tomlVersion}/java25")
     }
     delete "${project.rootDir}/target/ballerina-runtime/repo/cache/ballerina/mcp/${tomlVersion}"
 }

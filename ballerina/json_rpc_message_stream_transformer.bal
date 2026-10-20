@@ -96,7 +96,8 @@ isolated class JsonRpcMessageStreamTransformer {
             return error MissingSseDataError("SSE event is missing the required 'data' field.");
         }
 
-        JsonRpcMessage|error message = eventData.fromJsonStringWithType();
+        json|error payload = eventData.fromJsonString();
+        JsonRpcMessage|error message = payload is error ? payload : toLegacyMessage(payload);
         if message is error {
             return error TypeConversionError(string `Failed to convert JSON data to JsonRpcMessage: ${message.message()}`);
         }

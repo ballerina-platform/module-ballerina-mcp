@@ -2,7 +2,7 @@
 org = "ballerina"
 name = "mcp_shopping_client"
 version = "0.1.0"
-distribution = "2201.13.6"
+distribution = "2201.14.0"
 
 [build-options]
 observabilityIncluded = true
