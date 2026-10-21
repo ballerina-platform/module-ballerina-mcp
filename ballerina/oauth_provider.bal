@@ -189,7 +189,7 @@ isolated class MetadataStore {
 isolated class ClientOAuthProvider {
     private final string serverUrl;
     // Held as immutable values so that isolated methods can read them without a lock.
-    private final readonly & OAuthConfig config;
+    private final readonly & OAuth2DiscoveryConfig config;
     private final readonly & AuthHttpConfig clientConfig;
     private final TokenStore tokens;
     private final MetadataStore metadataStore;
@@ -200,7 +200,7 @@ isolated class ClientOAuthProvider {
     # + config - Authorization configuration
     # + clientConfig - HTTP settings for metadata and token endpoint requests
     # + return - A `OAuthConfigError` if the configuration is unusable, or `()`
-    isolated function init(string serverUrl, OAuthConfig config,
+    isolated function init(string serverUrl, OAuth2DiscoveryConfig config,
             AuthHttpConfig clientConfig = {}) returns Error? {
         check validateConfig(config);
         self.serverUrl = check canonicalResourceUri(serverUrl);

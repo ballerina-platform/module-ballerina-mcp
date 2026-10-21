@@ -38,7 +38,7 @@ isolated function testCimdWithPrivateKeyJwt() {
             auth: {
                 grant: {
                     clientConfig: {
-                        url: "https://wso2.com/mcp/client.json",
+                        clientMetadataUrl: "https://wso2.com/mcp/client.json",
                         clientAuth: {
                             signatureConfig: {config: {keyFile: "./client-private.key"}},
                             keyId: "mcp-signing-1"
@@ -48,7 +48,7 @@ isolated function testCimdWithPrivateKeyJwt() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
@@ -67,7 +67,7 @@ isolated function testPreRegisteredWithClientSecret() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
@@ -87,7 +87,7 @@ isolated function testIdentityAssertionWithPreRegisteredClient() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
@@ -97,7 +97,7 @@ isolated function testIdentityAssertionWithCimdClient() {
             auth: {
                 grant: {
                     clientConfig: {
-                        url: "https://wso2.com/mcp/client.json",
+                        clientMetadataUrl: "https://wso2.com/mcp/client.json",
                         clientAuth: {
                             signatureConfig: {config: {keyFile: "./client-private.key"}},
                             keyId: "mcp-signing-1"
@@ -108,14 +108,14 @@ isolated function testIdentityAssertionWithCimdClient() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
 isolated function testGrantClientConfigShapes() {
     readonly & map<anydata> publicPreRegistered = {clientId: "agent", issuer: "https://auth.example.com"};
     test:assertTrue(publicPreRegistered is OAuthClientConfig);
-    test:assertFalse(publicPreRegistered is ClientCredentialsClientConfig);
+    test:assertFalse(publicPreRegistered is ConfidentialClientConfig);
 
     readonly & map<anydata> confidentialPreRegistered = {
         clientId: "agent",
@@ -123,22 +123,22 @@ isolated function testGrantClientConfigShapes() {
         clientAuth: {clientSecret: "s3cr3t", authMethod: CLIENT_SECRET_BASIC}
     };
     test:assertTrue(confidentialPreRegistered is OAuthClientConfig);
-    test:assertTrue(confidentialPreRegistered is ClientCredentialsClientConfig);
+    test:assertTrue(confidentialPreRegistered is ConfidentialClientConfig);
 
-    readonly & map<anydata> publicCimd = {url: "https://wso2.com/mcp/client.json"};
+    readonly & map<anydata> publicCimd = {clientMetadataUrl: "https://wso2.com/mcp/client.json"};
     test:assertTrue(publicCimd is OAuthClientConfig);
-    test:assertFalse(publicCimd is ClientCredentialsClientConfig);
+    test:assertFalse(publicCimd is ConfidentialClientConfig);
 
     readonly & map<anydata> confidentialCimd = {
-        url: "https://wso2.com/mcp/client.json",
+        clientMetadataUrl: "https://wso2.com/mcp/client.json",
         clientAuth: {signatureConfig: {algorithm: "RS256", config: {keyFile: "./client-private.key"}}}
     };
     test:assertTrue(confidentialCimd is OAuthClientConfig);
-    test:assertTrue(confidentialCimd is ClientCredentialsClientConfig);
+    test:assertTrue(confidentialCimd is ConfidentialClientConfig);
 
     // A CIMD client cannot hold a shared secret.
     readonly & map<anydata> cimdWithSecret = {
-        url: "https://wso2.com/mcp/client.json",
+        clientMetadataUrl: "https://wso2.com/mcp/client.json",
         clientAuth: {clientSecret: "s3cr3t", authMethod: CLIENT_SECRET_BASIC}
     };
     test:assertFalse(cimdWithSecret is OAuthClientConfig);
@@ -150,13 +150,13 @@ isolated function testIdentityAssertionWithPublicCimdClient() {
         httpConfig: {
             auth: {
                 grant: {
-                    clientConfig: {url: "https://wso2.com/mcp/client.json"},
+                    clientConfig: {clientMetadataUrl: "https://wso2.com/mcp/client.json"},
                     assertionProvider: provideIdentityAssertion
                 }
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
@@ -171,7 +171,7 @@ isolated function testIdentityAssertionWithPublicPreRegisteredClient() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
@@ -189,7 +189,7 @@ isolated function testClientSecretInPostBody() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
@@ -198,7 +198,7 @@ isolated function testCimdPublicAuthorizationCodeClient() {
         httpConfig: {
             auth: {
                 grant: {
-                    clientConfig: {url: "https://wso2.com/mcp/client.json"},
+                    clientConfig: {clientMetadataUrl: "https://wso2.com/mcp/client.json"},
                     redirectUri: "http://127.0.0.1:3030/callback",
                     redirectHandler: printAuthorizationUrl,
                     callbackHandler: receiveAuthorizationResponse
@@ -206,7 +206,7 @@ isolated function testCimdPublicAuthorizationCodeClient() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
@@ -227,7 +227,7 @@ isolated function testPreRegisteredAuthorizationCodeClientWithSecret() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
@@ -237,7 +237,7 @@ isolated function testCimdAuthorizationCodeWithMutualTls() {
             auth: {
                 grant: {
                     clientConfig: {
-                        url: "https://wso2.com/mcp/client.json",
+                        clientMetadataUrl: "https://wso2.com/mcp/client.json",
                         clientAuth: {
                             key: {certFile: "./client.crt", keyFile: "./client.key"},
                             authMethod: SELF_SIGNED_TLS_CLIENT_AUTH
@@ -250,7 +250,7 @@ isolated function testCimdAuthorizationCodeWithMutualTls() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}
@@ -271,7 +271,7 @@ isolated function testPreRegisteredClientCredentialsWithMutualTls() {
             }
         }
     };
-    test:assertTrue(config.httpConfig.auth is OAuthConfig);
+    test:assertTrue(config.httpConfig.auth is OAuth2DiscoveryConfig);
 }
 
 @test:Config {}

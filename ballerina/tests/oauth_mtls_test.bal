@@ -172,9 +172,9 @@ function testValidateMutualTlsConfig() {
     };
     test:assertTrue(validateConfig(preRegisteredConfig(missingKeyStore)) is Error);
 
-    OAuthConfig cimd = {
+    OAuth2DiscoveryConfig cimd = {
         grant: {
-            clientConfig: {url: MTLS_CLIENT_ID, clientAuth: mutualTlsAuth()}
+            clientConfig: {clientMetadataUrl: MTLS_CLIENT_ID, clientAuth: mutualTlsAuth()}
         }
     };
     test:assertTrue(validateConfig(cimd) is ());

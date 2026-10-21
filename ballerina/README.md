@@ -674,9 +674,9 @@ final mcp:StreamableHttpClient client = check new ("http://localhost:9090/mcp", 
 ```
 
 HTTP settings go under `httpConfig`, an `mcp:HttpClientConfig` with the fields and defaults of
-`http:ClientConfiguration`, except that `auth` also accepts `mcp:OAuthConfig`. With `mcp:OAuthConfig`, redirects are
-not followed and `init` returns an error if `followRedirects` enables them; the metadata and token endpoint requests
-reuse `secureSocket` and `proxy`.
+`http:ClientConfiguration`, except that `auth` also accepts `mcp:OAuth2DiscoveryConfig`. With
+`mcp:OAuth2DiscoveryConfig`, redirects are not followed and `init` returns an error if `followRedirects` enables them;
+the metadata and token endpoint requests reuse `secureSocket` and `proxy`.
 
 Configuring `elicitationHandler` advertises the `elicitation` capability with form and URL modes on every modern
 request, merged with the capabilities passed to `connect()`. The client does not validate answers against the

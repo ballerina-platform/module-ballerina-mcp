@@ -34,7 +34,7 @@ public type StreamableHttpClientConfig record {|
 |};
 
 # HTTP settings of the client. The fields mirror `http:ClientConfiguration`, and are copied
-# because `auth` also accepts `OAuthConfig`.
+# because `auth` also accepts `OAuth2DiscoveryConfig`.
 public type HttpClientConfig record {|
     # HTTP protocol version supported by the client
     http:HttpVersion httpVersion = http:HTTP_2_0;
@@ -46,8 +46,8 @@ public type HttpClientConfig record {|
     decimal timeout = 30;
     # Controls the `Forwarded` and `X-Forwarded-For` headers when acting as a proxy
     string forwarded = "disable";
-    # HTTP redirect handling. `()` follows redirects, except with `OAuthConfig`, which
-    # cannot be combined with enabled redirects
+    # HTTP redirect handling. `()` follows redirects, except with `OAuth2DiscoveryConfig`,
+    # which cannot be combined with enabled redirects
     http:FollowRedirects? followRedirects = ();
     # Request connection pool configuration
     http:PoolConfiguration? poolConfig = ();
@@ -55,9 +55,9 @@ public type HttpClientConfig record {|
     http:CacheConfig cache = {};
     # Request and response compression behavior
     http:Compression compression = http:COMPRESSION_AUTO;
-    # How requests to the MCP server are authorized. `OAuthConfig` obtains access tokens
-    # through MCP authorization; `http:ClientAuthConfig` supplies an existing credential.
-    (http:ClientAuthConfig|OAuthConfig)? auth = ();
+    # How requests to the MCP server are authorized. `OAuth2DiscoveryConfig` obtains access
+    # tokens through MCP authorization; `http:ClientAuthConfig` supplies an existing credential.
+    (http:ClientAuthConfig|OAuth2DiscoveryConfig)? auth = ();
     # Circuit breaker configuration
     http:CircuitBreakerConfig? circuitBreaker = ();
     # Automatic retry configuration
@@ -134,14 +134,14 @@ isolated class StreamableHttpClientTransport {
             returns StreamableHttpTransportError? {
         self.serverUrl = serverUrl;
 
-        // `auth` may hold an `OAuthConfig`, which is handled by this module rather than by
-        // the HTTP client.
+        // `auth` may hold an `OAuth2DiscoveryConfig`, which is handled by this module rather
+        // than by the HTTP client.
         HttpClientConfig httpConfig = config.httpConfig;
         HttpClientConfig {auth: authConfig, ...rest} = httpConfig;
         http:ClientConfiguration clientConfig = {...rest};
 
-        OAuthConfig? oauth =
-            authConfig is OAuthConfig ? authConfig : ();
+        OAuth2DiscoveryConfig? oauth =
+            authConfig is OAuth2DiscoveryConfig ? authConfig : ();
         if authConfig is http:ClientAuthConfig {
             clientConfig.auth = authConfig;
         }
