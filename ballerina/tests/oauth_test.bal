@@ -19,7 +19,7 @@ import ballerina/test;
 
 const ISSUER = "https://auth.example.com";
 
-function preRegisteredConfig(ClientAuth clientAuth = {clientSecret: "secret"}) returns OAuthConfig => {
+function preRegisteredConfig(ClientAuth clientAuth = {clientSecret: "secret"}) returns OAuth2DiscoveryConfig => {
     grant: {
         clientConfig: {
             clientId: "reporting-agent",
@@ -85,7 +85,7 @@ function identityAssertionMetadata(string[]? profiles = [PROFILE_ID_JAG])
 
 function authorizationCodeGrant(string redirectUri = "http://127.0.0.1:3030/callback")
         returns AuthorizationCodeGrant => {
-    clientConfig: {url: "https://client.example.com/oauth/metadata.json"},
+    clientConfig: {clientMetadataUrl: "https://client.example.com/oauth/metadata.json"},
     redirectUri,
     redirectHandler: testRedirectHandler,
     callbackHandler: testCallbackHandler
@@ -178,7 +178,7 @@ function testCanonicalResourceUri() returns error? {
 function testValidatePreRegisteredClient() {
     test:assertTrue(validateConfig(preRegisteredConfig()) is ());
 
-    OAuthConfig missingClientId = {
+    OAuth2DiscoveryConfig missingClientId = {
         grant: {
             clientConfig: {
                 clientId: " ",
@@ -189,7 +189,7 @@ function testValidatePreRegisteredClient() {
     };
     test:assertTrue(validateConfig(missingClientId) is Error);
 
-    OAuthConfig insecureIssuer = {
+    OAuth2DiscoveryConfig insecureIssuer = {
         grant: {
             clientConfig: {
                 clientId: "reporting-agent",
@@ -200,7 +200,7 @@ function testValidatePreRegisteredClient() {
     };
     test:assertTrue(validateConfig(insecureIssuer) is Error);
 
-    OAuthConfig issuerWithQuery = {
+    OAuth2DiscoveryConfig issuerWithQuery = {
         grant: {
             clientConfig: {
                 clientId: "reporting-agent",
@@ -215,10 +215,10 @@ function testValidatePreRegisteredClient() {
 
 @test:Config {}
 function testValidateCimdClient() {
-    OAuthConfig config = {
+    OAuth2DiscoveryConfig config = {
         grant: {
             clientConfig: {
-                url: "https://client.example.com/oauth/metadata.json",
+                clientMetadataUrl: "https://client.example.com/oauth/metadata.json",
                 clientAuth: {
                     signatureConfig: {
                         algorithm: jwt:RS256,
@@ -230,10 +230,10 @@ function testValidateCimdClient() {
     };
     test:assertTrue(validateConfig(config) is ());
 
-    OAuthConfig rootUrl = {
+    OAuth2DiscoveryConfig rootUrl = {
         grant: {
             clientConfig: {
-                url: "https://client.example.com/",
+                clientMetadataUrl: "https://client.example.com/",
                 clientAuth: {
                     signatureConfig: {config: {keyFile: "private-key.pem"}}
                 }
@@ -287,10 +287,10 @@ function testValidateAdvertisedClientAuthentication() {
 
 @test:Config {}
 function testValidateAuthorizationCodeConfiguration() {
-    OAuthConfig config = {grant: authorizationCodeGrant()};
+    OAuth2DiscoveryConfig config = {grant: authorizationCodeGrant()};
     test:assertTrue(validateConfig(config) is ());
 
-    OAuthConfig insecureRedirect = {
+    OAuth2DiscoveryConfig insecureRedirect = {
         grant: authorizationCodeGrant("http://client.example.com/callback")
     };
     test:assertTrue(validateConfig(insecureRedirect) is Error);
@@ -298,10 +298,10 @@ function testValidateAuthorizationCodeConfiguration() {
 
 @test:Config {}
 function testValidateIdentityAssertionConfiguration() {
-    OAuthConfig config = {grant: identityAssertionGrant()};
+    OAuth2DiscoveryConfig config = {grant: identityAssertionGrant()};
     test:assertTrue(validateConfig(config) is ());
 
-    OAuthConfig invalid = {
+    OAuth2DiscoveryConfig invalid = {
         grant: {
             clientConfig: {
                 clientId: " ",
@@ -316,18 +316,18 @@ function testValidateIdentityAssertionConfiguration() {
 
 @test:Config {}
 function testValidateCimdIdentityAssertionConfiguration() {
-    OAuthConfig publicClient = {
+    OAuth2DiscoveryConfig publicClient = {
         grant: {
-            clientConfig: {url: "https://client.example.com/oauth/metadata.json"},
+            clientConfig: {clientMetadataUrl: "https://client.example.com/oauth/metadata.json"},
             assertionProvider: testIdentityAssertionProvider
         }
     };
     test:assertTrue(validateConfig(publicClient) is ());
 
-    OAuthConfig confidentialClient = {
+    OAuth2DiscoveryConfig confidentialClient = {
         grant: {
             clientConfig: {
-                url: "https://client.example.com/oauth/metadata.json",
+                clientMetadataUrl: "https://client.example.com/oauth/metadata.json",
                 clientAuth: {
                     signatureConfig: {algorithm: jwt:RS256, config: {keyFile: "private-key.pem"}}
                 }
@@ -337,18 +337,18 @@ function testValidateCimdIdentityAssertionConfiguration() {
     };
     test:assertTrue(validateConfig(confidentialClient) is ());
 
-    OAuthConfig rootUrl = {
+    OAuth2DiscoveryConfig rootUrl = {
         grant: {
-            clientConfig: {url: "https://client.example.com/"},
+            clientConfig: {clientMetadataUrl: "https://client.example.com/"},
             assertionProvider: testIdentityAssertionProvider
         }
     };
     test:assertTrue(validateConfig(rootUrl) is Error);
 
-    OAuthConfig symmetricKey = {
+    OAuth2DiscoveryConfig symmetricKey = {
         grant: {
             clientConfig: {
-                url: "https://client.example.com/oauth/metadata.json",
+                clientMetadataUrl: "https://client.example.com/oauth/metadata.json",
                 clientAuth: {signatureConfig: {algorithm: jwt:HS256, config: "shared-secret"}}
             },
             assertionProvider: testIdentityAssertionProvider
@@ -359,7 +359,7 @@ function testValidateCimdIdentityAssertionConfiguration() {
 
 @test:Config {}
 function testValidatePublicPreRegisteredIdentityAssertionConfiguration() {
-    OAuthConfig publicClient = {
+    OAuth2DiscoveryConfig publicClient = {
         grant: {
             clientConfig: {clientId: "reporting-agent", issuer: ISSUER},
             assertionProvider: testIdentityAssertionProvider
@@ -367,7 +367,7 @@ function testValidatePublicPreRegisteredIdentityAssertionConfiguration() {
     };
     test:assertTrue(validateConfig(publicClient) is ());
 
-    OAuthConfig insecureIssuer = {
+    OAuth2DiscoveryConfig insecureIssuer = {
         grant: {
             clientConfig: {clientId: "reporting-agent", issuer: "http://auth.example.com"},
             assertionProvider: testIdentityAssertionProvider
@@ -379,7 +379,7 @@ function testValidatePublicPreRegisteredIdentityAssertionConfiguration() {
 @test:Config {}
 function testCimdIdentityAssertionClientAuthentication() {
     IdentityAssertionGrant publicGrant = {
-        clientConfig: {url: "https://client.example.com/oauth/metadata.json"},
+        clientConfig: {clientMetadataUrl: "https://client.example.com/oauth/metadata.json"},
         assertionProvider: testIdentityAssertionProvider
     };
     test:assertTrue(grantClientAuth(publicGrant) is ());
@@ -687,15 +687,15 @@ function testApplyClientSecretAuthentication() returns error? {
 
 @test:Config {}
 function testResolveCimdClientId() returns error? {
-    CimdClientCredentialsConfig clientConfig = {
-        url: "https://client.example.com/oauth/metadata.json",
+    CimdConfidentialClientConfig clientConfig = {
+        clientMetadataUrl: "https://client.example.com/oauth/metadata.json",
         clientAuth: {signatureConfig: {config: {keyFile: "private-key.pem"}}}
     };
     test:assertTrue(resolveClientId(clientConfig, serverMetadata(["private_key_jwt"], ["RS256"])) is Error);
 
     AuthorizationServerMetadata metadata = serverMetadata(["private_key_jwt"], ["RS256"]);
     metadata.client_id_metadata_document_supported = true;
-    test:assertEquals(check resolveClientId(clientConfig, metadata), clientConfig.url);
+    test:assertEquals(check resolveClientId(clientConfig, metadata), clientConfig.clientMetadataUrl);
 }
 
 @test:Config {}
@@ -704,7 +704,7 @@ function testAuthorizationServerSelection() returns error? {
         'resource: "https://mcp.example.com",
         authorization_servers: ["https://first.example.com", ISSUER]
     };
-    PreRegisteredClientCredentialsConfig preRegistered = {
+    PreRegisteredConfidentialClientConfig preRegistered = {
         clientId: "reporting-agent",
         issuer: ISSUER,
         clientAuth: {clientSecret: "secret"}
@@ -716,8 +716,8 @@ function testAuthorizationServerSelection() returns error? {
     test:assertTrue(selectAuthorizationServer(preRegistered, resourceMetadata,
                     resourceMetadata.'resource) is Error);
 
-    CimdClientCredentialsConfig cimd = {
-        url: "https://client.example.com/oauth/metadata.json",
+    CimdConfidentialClientConfig cimd = {
+        clientMetadataUrl: "https://client.example.com/oauth/metadata.json",
         clientAuth: {signatureConfig: {config: {keyFile: "private-key.pem"}}}
     };
     test:assertEquals(check selectAuthorizationServer(cimd, resourceMetadata,
@@ -728,19 +728,19 @@ function testAuthorizationServerSelection() returns error? {
     test:assertEquals(check selectAuthorizationServer(publicPreRegistered, resourceMetadata,
                     resourceMetadata.'resource), ISSUER);
 
-    CimdClientConfig publicCimd = {url: "https://client.example.com/oauth/metadata.json"};
+    CimdClientConfig publicCimd = {clientMetadataUrl: "https://client.example.com/oauth/metadata.json"};
     test:assertEquals(check selectAuthorizationServer(publicCimd, resourceMetadata,
                     resourceMetadata.'resource), "https://first.example.com");
 }
 
 @test:Config {}
 function testResolveCimdIdentityAssertionClientId() returns error? {
-    CimdClientConfig clientConfig = {url: "https://client.example.com/oauth/metadata.json"};
+    CimdClientConfig clientConfig = {clientMetadataUrl: "https://client.example.com/oauth/metadata.json"};
     test:assertTrue(resolveClientId(clientConfig, identityAssertionMetadata()) is Error);
 
     AuthorizationServerMetadata metadata = identityAssertionMetadata();
     metadata.client_id_metadata_document_supported = true;
-    test:assertEquals(check resolveClientId(clientConfig, metadata), clientConfig.url);
+    test:assertEquals(check resolveClientId(clientConfig, metadata), clientConfig.clientMetadataUrl);
 }
 
 @test:Config {}

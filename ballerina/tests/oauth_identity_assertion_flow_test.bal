@@ -222,7 +222,7 @@ function testIdentityAssertionAcquisitionAndStepUp() returns error? {
 function testIdentityAssertionWithPublicCimdClientFlow() returns error? {
     ClientOAuthProvider provider = check new (FLOW_SERVER_URL, {
         grant: {
-            clientConfig: {url: FLOW_CIMD_URL},
+            clientConfig: {clientMetadataUrl: FLOW_CIMD_URL},
             assertionProvider: recordingAssertionProvider
         },
         scopes: ["files:read"]

@@ -93,45 +93,45 @@ public type PreRegisteredClientConfig record {|
 # A CIMD client uses `private_key_jwt` or mutual TLS; the authorization server obtains the
 # corresponding public key or certificate from the metadata document.
 #
-# + url - HTTPS URL of the Client ID Metadata Document
+# + clientMetadataUrl - HTTPS URL of the Client ID Metadata Document
 # + clientAuth - Key or certificate used to authenticate at the token endpoint. Omit for a
 # public client
 public type CimdClientConfig record {|
-    string url;
+    string clientMetadataUrl;
     CimdClientAuth clientAuth?;
 |};
 
-# Represents the client configurations supported by the authorization code and identity
-# assertion grants.
+# Represents a public or confidential client, as supported by the authorization code and
+# identity assertion grants.
 public type OAuthClientConfig PreRegisteredClientConfig|CimdClientConfig;
 
-# Represents a pre-registered client using the client credentials grant, which requires
-# client authentication.
+# Represents a pre-registered confidential client, as required by the client credentials
+# grant.
 #
 # + clientAuth - How the client authenticates at the token endpoint
-public type PreRegisteredClientCredentialsConfig record {|
+public type PreRegisteredConfidentialClientConfig record {|
     *PreRegisteredClientConfig;
     ClientAuth clientAuth;
 |};
 
-# Represents a client identified by a Client ID Metadata Document and using the client
-# credentials grant, which requires client authentication.
+# Represents a confidential client identified by a Client ID Metadata Document, as required
+# by the client credentials grant.
 #
 # + clientAuth - Key or certificate used to authenticate the client at the token endpoint
-public type CimdClientCredentialsConfig record {|
+public type CimdConfidentialClientConfig record {|
     *CimdClientConfig;
     CimdClientAuth clientAuth;
 |};
 
-# Represents the client configurations supported by the client credentials grant.
-public type ClientCredentialsClientConfig
-    PreRegisteredClientCredentialsConfig|CimdClientCredentialsConfig;
+# Represents a confidential client, as required by the client credentials grant.
+public type ConfidentialClientConfig
+    PreRegisteredConfidentialClientConfig|CimdConfidentialClientConfig;
 
 # Represents the client credentials grant, used for access on the client's own behalf.
 #
 # + clientConfig - Client identity, registration mode, and token endpoint authentication
 public type ClientCredentialsGrant record {|
-    ClientCredentialsClientConfig clientConfig;
+    ConfidentialClientConfig clientConfig;
 |};
 
 # Supplies the values an Identity Assertion Provider needs to obtain an ID-JAG for one
@@ -206,12 +206,13 @@ public type AuthorizationCodeGrant record {|
     AuthorizationCallbackHandler callbackHandler;
 |};
 
-# Represents the configuration for MCP authorization (OAuth 2.1).
+# Represents OAuth 2.0 client authentication where the authorization server and token endpoint
+# are discovered from the target server (RFC 9728, RFC 8414).
 #
 # + grant - How the access token is obtained
 # + scopes - Scopes to request. Used only when the `WWW-Authenticate` challenge carries none
 # and the protected resource metadata advertises no `scopes_supported`
-public type OAuthConfig record {|
+public type OAuth2DiscoveryConfig record {|
     ClientCredentialsGrant|AuthorizationCodeGrant|IdentityAssertionGrant grant;
     string[] scopes?;
 |};
@@ -238,8 +239,8 @@ public type IdentityProviderConfig record {|
 |};
 
 # Represents the HTTP settings for metadata and token endpoint requests. This configures how
-# those requests are made; it is unrelated to `OAuthConfig`, which configures the OAuth client
-# itself (client ID, grant, credentials).
+# those requests are made; it is unrelated to `OAuth2DiscoveryConfig`, which configures the
+# OAuth client itself (client ID, grant, credentials).
 #
 # + secureSocket - SSL/TLS related options
 # + proxy - Proxy server settings

@@ -37,11 +37,11 @@ const TOKEN_TYPE_REFRESH_TOKEN = "urn:ietf:params:oauth:token-type:refresh_token
 const TOKEN_TYPE_SAML2 = "urn:ietf:params:oauth:token-type:saml2";
 const PROFILE_ID_JAG = "urn:ietf:params:oauth:grant-profile:id-jag";
 
-# Validates an `OAuthConfig`.
+# Validates an `OAuth2DiscoveryConfig`.
 #
 # + config - The configuration to validate
 # + return - An `OAuthConfigError` describing the first problem found, or `()` if usable
-isolated function validateConfig(OAuthConfig config) returns Error? {
+isolated function validateConfig(OAuth2DiscoveryConfig config) returns Error? {
     ClientCredentialsGrant|AuthorizationCodeGrant|IdentityAssertionGrant grant = config.grant;
     check validateClientConfig(grant.clientConfig);
     if grant is AuthorizationCodeGrant {
@@ -57,7 +57,7 @@ isolated function validateClientConfig(OAuthClientConfig oauthClient) returns Er
         }
         check validateHttpsUrl(oauthClient.issuer, "issuer", false, false);
     } else {
-        check validateHttpsUrl(oauthClient.url, "url", true, true);
+        check validateHttpsUrl(oauthClient.clientMetadataUrl, "clientMetadataUrl", true, true);
     }
     ClientAuth? clientAuth = oauthClient?.clientAuth;
     if clientAuth is ClientAuth {
@@ -266,7 +266,7 @@ isolated function resolveClientId(OAuthClientConfig oauthClient, AuthorizationSe
     if !cimdSupported {
         return error OAuthConfigError(string `Authorization server '${metadata.issuer}' does not ` +
             string `advertise 'client_id_metadata_document_supported', so the Client ID ` +
-            string `Metadata Document at '${oauthClient.url}' cannot be used.`);
+            string `Metadata Document at '${oauthClient.clientMetadataUrl}' cannot be used.`);
     }
-    return oauthClient.url;
+    return oauthClient.clientMetadataUrl;
 }
