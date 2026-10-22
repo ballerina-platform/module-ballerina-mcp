@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp;
+package io.ballerina.stdlib.mcp.v2;
 
 import io.ballerina.runtime.api.Environment;
 import io.ballerina.runtime.api.Module;
@@ -39,6 +39,12 @@ public final class ModuleUtils {
     @SuppressWarnings("unused")
     public static void setModule(Environment env) {
         module = env.getCurrentModule();
+    }
+
+    // Runtime annotation keys have the form '<org>/<module>:<major-version>:<annotation>'.
+    public static boolean isModuleAnnotation(String annotationKey, String annotationName) {
+        return annotationKey.equals(module.getOrg() + "/" + module.getName() + ":" + module.getMajorVersion()
+                + ":" + annotationName);
     }
 
     public static BError createError(String errorMessage) {

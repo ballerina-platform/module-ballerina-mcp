@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp.plugin;
+package io.ballerina.stdlib.mcp.plugin.v2;
 
 import io.ballerina.compiler.api.symbols.ConstantSymbol;
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
@@ -30,7 +30,7 @@ import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
-import io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic;
+import io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic;
 
 import java.util.Optional;
 

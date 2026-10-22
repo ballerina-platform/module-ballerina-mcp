@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp.plugin;
+package io.ballerina.stdlib.mcp.plugin.v2;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -51,17 +51,17 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
-import static io.ballerina.stdlib.mcp.plugin.RemoteFunctionAnalysisTask.EMPTY_STRING;
+import static io.ballerina.stdlib.mcp.plugin.v2.RemoteFunctionAnalysisTask.EMPTY_STRING;
 import static io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.EndpointYamlGenerator.unescapeIdentifier;
-import static io.ballerina.stdlib.mcp.plugin.Utils.hasHttpHeaderAnnotation;
-import static io.ballerina.stdlib.mcp.plugin.Utils.getMcpArgumentHeaderName;
-import static io.ballerina.stdlib.mcp.plugin.Utils.isAuthContextType;
-import static io.ballerina.stdlib.mcp.plugin.Utils.isContextType;
-import static io.ballerina.stdlib.mcp.plugin.Utils.isHttpHeadersType;
-import static io.ballerina.stdlib.mcp.plugin.Utils.isHttpRequestType;
-import static io.ballerina.stdlib.mcp.plugin.Utils.isInputRequiredResultType;
-import static io.ballerina.stdlib.mcp.plugin.Utils.isMetaParameter;
-import static io.ballerina.stdlib.mcp.plugin.Utils.isSessionType;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.hasHttpHeaderAnnotation;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.getMcpArgumentHeaderName;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.isAuthContextType;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.isContextType;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.isHttpHeadersType;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.isHttpRequestType;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.isInputRequiredResultType;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.isMetaParameter;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.isSessionType;
 
 /**
  * Utility class for generating and manipulating function tool parameter schemas.

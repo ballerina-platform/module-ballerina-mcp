@@ -18,15 +18,15 @@ import ballerina/http;
 import ballerina/jballerina.java;
 
 isolated function encodeProtocolHeader(string headerValue) returns string = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.ProtocolHeaders"
+    'class: "io.ballerina.stdlib.mcp.v2.ProtocolHeaders"
 } external;
 
 isolated function decodeProtocolHeader(string headerValue) returns string|Error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.ProtocolHeaders"
+    'class: "io.ballerina.stdlib.mcp.v2.ProtocolHeaders"
 } external;
 
 isolated function toolParameterHeaders(InputSchema toolSchema, record {} toolArguments) returns map<string>|Error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.ProtocolHeaders"
+    'class: "io.ballerina.stdlib.mcp.v2.ProtocolHeaders"
 } external;
 
 isolated function validateToolHeaders(InputSchema toolSchema, record {} toolArguments, http:Headers requestHeaders)

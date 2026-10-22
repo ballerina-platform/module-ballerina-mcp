@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp.plugin;
+package io.ballerina.stdlib.mcp.plugin.v2;
 
 /**
  * Signals that a record field has a type a form schema cannot express.

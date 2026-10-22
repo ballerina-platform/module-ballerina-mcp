@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp.plugin;
+package io.ballerina.stdlib.mcp.plugin.v2;
 
 import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
@@ -38,7 +38,7 @@ import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.projects.DocumentId;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
-import io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic;
+import io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic;
 
 import java.util.List;
 import java.util.Map;
@@ -48,8 +48,8 @@ import static io.ballerina.compiler.syntax.tree.SyntaxKind.NAMED_ARG;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.POSITIONAL_ARG;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.QUALIFIED_NAME_REFERENCE;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.SIMPLE_NAME_REFERENCE;
-import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.FORM_SCHEMA_TYPE_NOT_STATIC;
-import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.UNSUPPORTED_FORM_FIELD;
+import static io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic.FORM_SCHEMA_TYPE_NOT_STATIC;
+import static io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic.UNSUPPORTED_FORM_FIELD;
 
 /**
  * Generates the form schema of a record type passed to {@code mcp:elicitForm}, for the source modifier to supply.

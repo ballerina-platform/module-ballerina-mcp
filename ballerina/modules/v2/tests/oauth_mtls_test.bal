@@ -18,7 +18,7 @@ import ballerina/http;
 import ballerina/jwt;
 import ballerina/test;
 
-const MTLS_RESOURCES = "tests/resources/mtls/";
+const MTLS_RESOURCES = "modules/v2/tests/resources/mtls/";
 const MTLS_CLIENT_ID = "https://client.example.com/oauth/mtls-client.json";
 const MTLS_TOKEN_ENDPOINT = "https://localhost:3220/oauth/token";
 const PLAIN_TOKEN_ENDPOINT = "https://localhost:3221/oauth/token";

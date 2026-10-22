@@ -21,66 +21,66 @@ isolated function invokeAdvancedOnListTools(StreamableHttpAdvancedService 'servi
         http:Headers headers, http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional,
         AuthContext? authContext)
         returns ListToolsResult|Error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 isolated function invokeAdvancedOnCallTool(StreamableHttpAdvancedService 'service, CallToolParams params,
         HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
         boolean treatNilableAsOptional, AuthContext? authContext)
         returns CallToolResult|InputRequiredResult|Error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 isolated function listToolsForRemoteFunctions(StreamableHttpService 'service,
         typedesc<ListToolsResult> t = <>) returns t|Error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 isolated function listProtocolToolsForRemoteFunctions(StreamableHttpService 'service,
         typedesc<ListToolsResult> t = <>) returns t|Error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 isolated function callToolForRemoteFunctions(StreamableHttpService 'service, CallToolParams params,
         HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
         boolean treatNilableAsOptional, AuthContext? authContext, Context toolContext,
         typedesc<CallToolResult> t = CallToolResult) returns CallToolResult|InputRequiredResult|error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 isolated function callProtocolToolForRemoteFunctions(StreamableHttpService 'service, CallToolParams params,
         HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
         boolean treatNilableAsOptional, AuthContext? authContext, Context toolContext,
         typedesc<CallToolResult> t = CallToolResult) returns CallToolResult|InputRequiredResult|error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 isolated function addMcpServiceToDispatcher(http:Service dispatcherService,
         StreamableHttpService|StreamableHttpAdvancedService mcpService)
         returns Error? = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 isolated function getMcpServiceFromDispatcher(http:Service dispatcherService)
         returns StreamableHttpService|StreamableHttpAdvancedService|Error = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 // Runtime counterpart of the compiler diagnostic, including dynamically attached services.
 isolated function requiresLegacySession(StreamableHttpService|StreamableHttpAdvancedService mcpService)
         returns boolean = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 // Returns whether the service requires a non-nilable `mcp:AuthContext`.
 // Used during attachment to ensure the service is configured with `mcp:OAuthProtectedResourceConfig`.
 isolated function requiresAuthContext(StreamableHttpService|StreamableHttpAdvancedService mcpService)
         returns boolean = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
 
 // Returns the scopes declared with `@mcp:Tool`, keyed by tool name. Advanced services declare none.
 isolated function getToolScopes(StreamableHttpService|StreamableHttpAdvancedService mcpService)
         returns readonly & map<string[]> = @java:Method {
-    'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;

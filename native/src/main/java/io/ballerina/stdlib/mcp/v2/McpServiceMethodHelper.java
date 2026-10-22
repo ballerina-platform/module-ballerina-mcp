@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp;
+package io.ballerina.stdlib.mcp.v2;
 
 import io.ballerina.runtime.api.Environment;
 import io.ballerina.runtime.api.creators.TypeCreator;
@@ -89,7 +89,7 @@ public final class McpServiceMethodHelper {
     private static final String MCP_SERVICE_FIELD = "mcpService";
 
     // MCP HTTP session and metadata-related constants
-    private static final String MCP_PACKAGE_NAME = "mcp";
+    private static final String MCP_PACKAGE_NAME = "mcp.v2";
     private static final String SESSION_TYPE_NAME = "HttpSession";
     private static final String META_TYPE_NAME = "RequestMeta";
     private static final String META_FIELD_NAME = "_meta";
@@ -156,7 +156,7 @@ public final class McpServiceMethodHelper {
                 TypeCreator.createMapType(TypeCreator.createArrayType(PredefinedTypes.TYPE_STRING)));
         for (RemoteMethodType remoteMethod : getRemoteMethods(mcpService)) {
             remoteMethod.getAnnotations().entrySet().stream()
-                    .filter(e -> e.getKey().getValue().contains(ANNOTATION_MCP_TOOL))
+                    .filter(e -> ModuleUtils.isModuleAnnotation(e.getKey().getValue(), ANNOTATION_MCP_TOOL))
                     .map(e -> ((BMap<?, ?>) e.getValue()).get(fromString(SCOPES_FIELD_NAME)))
                     .filter(BArray.class::isInstance)
                     .findFirst()
@@ -253,7 +253,7 @@ public final class McpServiceMethodHelper {
 
         for (RemoteMethodType remoteMethod : getRemoteMethods(mcpService)) {
             remoteMethod.getAnnotations().entrySet().stream()
-                    .filter(e -> e.getKey().getValue().contains(ANNOTATION_MCP_TOOL))
+                    .filter(e -> ModuleUtils.isModuleAnnotation(e.getKey().getValue(), ANNOTATION_MCP_TOOL))
                     .findFirst()
                     .ifPresent(annotation -> tools.append(
                             createToolRecord(toolsArrayType, remoteMethod, (BMap<?, ?>) annotation.getValue(),
@@ -445,7 +445,7 @@ public final class McpServiceMethodHelper {
 
     private static boolean isStructuredOutputEnabled(RemoteMethodType method) {
         return method.getAnnotations().entrySet().stream()
-                .filter(entry -> entry.getKey().getValue().contains(ANNOTATION_MCP_TOOL))
+                .filter(entry -> ModuleUtils.isModuleAnnotation(entry.getKey().getValue(), ANNOTATION_MCP_TOOL))
                 .map(entry -> (BMap<?, ?>) entry.getValue())
                 .anyMatch(McpServiceMethodHelper::isStructuredOutputEnabled);
     }

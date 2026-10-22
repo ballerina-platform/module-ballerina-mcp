@@ -247,7 +247,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
 	{org = "ballerina", name = "crypto"},
 	{org = "ballerina", name = "http"},
@@ -264,7 +264,8 @@ dependencies = [
 	{org = "ballerina", name = "uuid"}
 ]
 modules = [
-	{org = "ballerina", packageName = "mcp", moduleName = "mcp"}
+	{org = "ballerina", packageName = "mcp", moduleName = "mcp"},
+	{org = "ballerina", packageName = "mcp", moduleName = "mcp.v2"}
 ]
 
 [[package]]

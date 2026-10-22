@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp.plugin;
+package io.ballerina.stdlib.mcp.plugin.v2;
 
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
@@ -34,7 +34,7 @@ import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.projects.DocumentId;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
-import io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic;
+import io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic;
 import io.ballerina.tools.diagnostics.Diagnostic;
 import io.ballerina.tools.diagnostics.Location;
 
@@ -43,15 +43,15 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.DESCRIPTION_FIELD_NAME;
-import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.OUTPUT_SCHEMA_FIELD_NAME;
-import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCHEMA_FIELD_NAME;
-import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.SCOPES_FIELD_NAME;
-import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.STRUCTURED_OUTPUT_FIELD_NAME;
-import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
-import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpServiceFunction;
-import static io.ballerina.stdlib.mcp.plugin.Utils.validateParameterTypes;
-import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION;
+import static io.ballerina.stdlib.mcp.plugin.v2.ToolAnnotationConfig.DESCRIPTION_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.v2.ToolAnnotationConfig.OUTPUT_SCHEMA_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.v2.ToolAnnotationConfig.SCHEMA_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.v2.ToolAnnotationConfig.SCOPES_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.v2.ToolAnnotationConfig.STRUCTURED_OUTPUT_FIELD_NAME;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.getToolAnnotationNode;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.isMcpServiceFunction;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.validateParameterTypes;
+import static io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic.UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION;
 
 /**
  * Analysis task that processes remote function definitions to generate MCP tool annotation configurations.

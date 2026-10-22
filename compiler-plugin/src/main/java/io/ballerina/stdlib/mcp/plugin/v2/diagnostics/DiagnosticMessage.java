@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp.plugin.diagnostics;
+package io.ballerina.stdlib.mcp.plugin.v2.diagnostics;
 
 /**
  * Compilation error messages used in Ballerina mcp package compiler plugin.

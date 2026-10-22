@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp.plugin;
+package io.ballerina.stdlib.mcp.plugin.v2;
 
 import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
@@ -50,9 +50,9 @@ import static io.ballerina.compiler.syntax.tree.SyntaxKind.CLOSE_BRACE_TOKEN;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.OBJECT_METHOD_DEFINITION;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.OPEN_BRACE_TOKEN;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.SERVICE_DECLARATION;
-import static io.ballerina.stdlib.mcp.plugin.Utils.MCP_PACKAGE_NAME;
-import static io.ballerina.stdlib.mcp.plugin.Utils.TOOL_ANNOTATION_NAME;
-import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.MCP_PACKAGE_NAME;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.TOOL_ANNOTATION_NAME;
+import static io.ballerina.stdlib.mcp.plugin.v2.Utils.getToolAnnotationNode;
 
 /**
  * Source modifier task that updates MCP tool annotations in Ballerina source files.

@@ -47,7 +47,7 @@ public isolated readonly class Context {
     # or does not convert to `contentType`
     public isolated function acceptedContent(string key, typedesc<map<anydata>> contentType = <>)
             returns contentType? = @java:Method {
-        'class: "io.ballerina.stdlib.mcp.Context"
+        'class: "io.ballerina.stdlib.mcp.v2.Context"
     } external;
 }
 

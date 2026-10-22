@@ -98,7 +98,7 @@ public isolated class HttpSession {
     # + return - The casted value or an error if the entry is missing or of the wrong type
     public isolated function getWithType(string key, typedesc<HttpSessionEntry> targetType = <>)
     returns targetType|Error = @java:Method {
-        'class: "io.ballerina.stdlib.mcp.Session"
+        'class: "io.ballerina.stdlib.mcp.v2.Session"
     } external;
 
     # Removes the entry associated with the given key. Panics if the key does not exist.

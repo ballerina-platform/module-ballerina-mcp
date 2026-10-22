@@ -41,6 +41,12 @@ public final class ModuleUtils {
         module = env.getCurrentModule();
     }
 
+    // Runtime annotation keys have the form '<org>/<module>:<major-version>:<annotation>'.
+    public static boolean isModuleAnnotation(String annotationKey, String annotationName) {
+        return annotationKey.equals(module.getOrg() + "/" + module.getName() + ":" + module.getMajorVersion()
+                + ":" + annotationName);
+    }
+
     public static BError createError(String errorMessage) {
         return ErrorCreator.createError(fromString(errorMessage));
     }
