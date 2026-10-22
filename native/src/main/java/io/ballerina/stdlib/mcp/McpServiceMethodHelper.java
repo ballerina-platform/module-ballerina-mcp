@@ -120,6 +120,29 @@ public final class McpServiceMethodHelper {
 
     private McpServiceMethodHelper() {}
 
+    /**
+     * Invoke the 'onListTools' remote method on the given MCP service object.
+     *
+     * @param env        The Ballerina runtime environment.
+     * @param mcpService The MCP service object.
+     * @return           Result of remote method invocation.
+     */
+    public static Object invokeOnListTools(Environment env, BObject mcpService) {
+        return env.getRuntime().callMethod(mcpService, ON_LIST_TOOLS_METHOD, null);
+    }
+
+    /**
+     * Invoke the 'onCallTool' remote method on the given MCP service object with parameters.
+     *
+     * @param env        The Ballerina runtime environment.
+     * @param mcpService The MCP service object.
+     * @param params     Parameters for the tool invocation.
+     * @return           Result of remote method invocation.
+     */
+    public static Object invokeOnCallTool(Environment env, BObject mcpService, BMap<?, ?> params, Object session) {
+        return env.getRuntime().callMethod(mcpService, ON_CALL_TOOL_METHOD, null, params, session);
+    }
+
     /** Returns whether a service has a session parameter that cannot receive nil. */
     public static boolean requiresLegacySession(BObject mcpService) {
         for (RemoteMethodType method : getRemoteMethods(mcpService)) {

@@ -75,6 +75,8 @@ public class Utils {
     public static final String ARGUMENT_ANNOTATION_NAME = "Argument";
     public static final String ARGUMENT_HEADER_NAME_FIELD = "headerName";
     public static final String MCP_PACKAGE_NAME = "mcp";
+    public static final String MCP_BASIC_SERVICE_NAME = "Service";
+    public static final String MCP_ADVANCED_SERVICE_NAME = "AdvancedService";
     public static final String STREAMABLE_HTTP_BASIC_SERVICE_NAME = "StreamableHttpService";
     public static final String STREAMABLE_HTTP_ADVANCED_SERVICE_NAME = "StreamableHttpAdvancedService";
     public static final String SESSION_TYPE_NAME = "Session";
@@ -206,7 +208,7 @@ public class Utils {
     }
 
     /**
-     * Returns whether the given node is an `mcp:StreamableHttpService` declaration attached to a
+     * Returns whether the given node is an `mcp:Service` or `mcp:StreamableHttpService` declaration attached to a
      * listener from the mcp module. These are the only services whose tool methods the source modifier may rewrite;
      * every other service declaration (including advanced mcp services and unrelated services such as `http:Service`)
      * must be left untouched.
@@ -225,7 +227,8 @@ public class Utils {
 
         boolean isServiceType = serviceSymbol.typeDescriptor()
                 .flatMap(TypeSymbol::getName)
-                .map(STREAMABLE_HTTP_BASIC_SERVICE_NAME::equals)
+                .map(name -> MCP_BASIC_SERVICE_NAME.equals(name)
+                        || STREAMABLE_HTTP_BASIC_SERVICE_NAME.equals(name))
                 .orElse(false);
 
         return isFromMcpModule && isServiceType;
@@ -802,6 +805,25 @@ public class Utils {
             return false;
         }
         return serviceSymbol.listenerTypes().stream().anyMatch(Utils::isMcpListenerType);
+    }
+
+    /**
+     * Checks whether the service in the analysis context is a deprecated transport-neutral {@code mcp:Service} or
+     * {@code mcp:AdvancedService}, which is served on the legacy protocol only.
+     *
+     * @param context the analysis context
+     * @return {@code true} if the service type is one of the transport-neutral service types
+     */
+    public static boolean isTransportNeutralService(SyntaxNodeAnalysisContext context) {
+        Optional<Symbol> symbol = context.semanticModel().symbol(context.node());
+        if (symbol.isEmpty() || !(symbol.get() instanceof ServiceDeclarationSymbol serviceSymbol)) {
+            return false;
+        }
+        return serviceSymbol.typeDescriptor()
+                .filter(Utils::isMcpModuleSymbol)
+                .flatMap(TypeSymbol::getName)
+                .map(name -> MCP_BASIC_SERVICE_NAME.equals(name) || MCP_ADVANCED_SERVICE_NAME.equals(name))
+                .orElse(false);
     }
 
     private static boolean isMcpListenerType(TypeSymbol listenerType) {

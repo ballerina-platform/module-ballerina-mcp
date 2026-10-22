@@ -45,6 +45,7 @@ public class McpCodeModifier extends CodeModifier {
         codeModifierContext.addSyntaxNodeAnalysisTask(new ElicitFormAnalysisTask(modifierContextMap), FUNCTION_CALL);
         codeModifierContext.addSyntaxNodeAnalysisTask(new AdvancedServiceAnalysisTask(), SERVICE_DECLARATION);
         codeModifierContext.addSyntaxNodeAnalysisTask(new ProtocolSessionAnalysisTask(), SERVICE_DECLARATION);
+        codeModifierContext.addSyntaxNodeAnalysisTask(new DeprecatedServiceAnalysisTask(), SERVICE_DECLARATION);
         codeModifierContext.addSourceModifierTask(new McpSourceModifier(modifierContextMap));
     }
 }

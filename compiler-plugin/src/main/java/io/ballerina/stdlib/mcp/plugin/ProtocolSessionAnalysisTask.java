@@ -38,7 +38,7 @@ import java.util.Optional;
 public class ProtocolSessionAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
-        if (!Utils.isMcpService(context)) {
+        if (!Utils.isMcpService(context) || Utils.isTransportNeutralService(context)) {
             return;
         }
         ServiceDeclarationNode serviceNode = (ServiceDeclarationNode) context.node();

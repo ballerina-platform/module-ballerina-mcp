@@ -21,12 +21,31 @@ import ballerina/log;
 #
 # + mcpService - The MCP service instance
 # + return - The resolved Streamable HTTP service configuration
-isolated function getServiceConfiguration(StreamableHttpService|StreamableHttpAdvancedService mcpService)
+isolated function getServiceConfiguration(McpService mcpService)
         returns StreamableHttpServiceConfiguration {
     typedesc mcpServiceType = typeof mcpService;
+
+    // The transport-specific annotation is the configuration home for Streamable HTTP services.
     StreamableHttpServiceConfiguration? transportConfig = mcpServiceType.@StreamableHttpServiceConfig;
     if transportConfig is StreamableHttpServiceConfiguration {
         return transportConfig;
+    }
+
+    // Fallback for transport-agnostic services. The deprecated httpConfig/sessionMode fields of
+    // @mcp:ServiceConfig are still honored here for backward compatibility (the only place the
+    // runtime reads these deprecated fields).
+    ServiceConfiguration? serviceConfig = mcpServiceType.@ServiceConfig;
+    if serviceConfig is ServiceConfiguration {
+        StreamableHttpServiceConfiguration config = {
+            info: serviceConfig.info,
+            httpConfig: serviceConfig.httpConfig,
+            sessionMode: serviceConfig.sessionMode
+        };
+        ServerOptions? options = serviceConfig?.options;
+        if options is ServerOptions {
+            config.options = options;
+        }
+        return config;
     }
     return {
         info: {

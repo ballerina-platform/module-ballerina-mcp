@@ -59,7 +59,7 @@ public isolated class StreamableHttpListener {
     # + mcpService - Service to attach.
     # + name - Path(s) to mount the service on (string or string array).
     # + return - Error? if attachment fails.
-    public isolated function attach(StreamableHttpService|StreamableHttpAdvancedService mcpService,
+    public isolated function attach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService,
             string[]|string? name = ()) returns Error? {
         StreamableHttpServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
         if serviceConfig.protocolMode == "modern" && requiresLegacySession(mcpService) {
@@ -115,10 +115,11 @@ public isolated class StreamableHttpListener {
     #
     # + mcpService - Service to detach.
     # + return - Error? if detachment fails.
-    public isolated function detach(StreamableHttpService|StreamableHttpAdvancedService mcpService) returns Error? {
+    public isolated function detach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService)
+            returns Error? {
         lock {
             foreach [int, AttachedService] [index, attachedService] in self.attachedServices.enumerate() {
-                StreamableHttpService|StreamableHttpAdvancedService|Error attachedMcpService =
+                Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService|Error attachedMcpService =
                         getMcpServiceFromDispatcher(attachedService.dispatcherService);
                 if attachedMcpService === mcpService {
                     error? result = self.httpListener.detach(attachedService.dispatcherService);
@@ -187,7 +188,54 @@ public isolated class StreamableHttpListener {
     }
 }
 
-isolated function createServerAuthenticator(StreamableHttpService|StreamableHttpAdvancedService mcpService,
+# A server listener for handling MCP service requests.
+#
+# # Deprecated
+# This listener is renamed to make the transport explicit. Use `mcp:StreamableHttpListener` instead.
+@deprecated
+public isolated class Listener {
+    private final StreamableHttpListener inner;
+
+    # Initializes the Listener.
+    #
+    # + listenTo - Either a port number (int) or an existing http:Listener.
+    # + config - Listener configuration.
+    # + return - Error? if listener initialization fails.
+    public function init(int|http:Listener listenTo, *ListenerConfiguration config) returns Error? {
+        self.inner = check new (listenTo, config);
+    }
+
+    # Attaches an MCP service to the listener under the specified path(s).
+    #
+    # + mcpService - Service to attach.
+    # + name - Path(s) to mount the service on (string or string array).
+    # + return - Error? if attachment fails.
+    public isolated function attach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService, string[]|string? name = ()) returns Error? =>
+        self.inner.attach(mcpService, name);
+
+    # Detaches the MCP service from the listener.
+    #
+    # + mcpService - Service to detach.
+    # + return - Error? if detachment fails.
+    public isolated function detach(Service|AdvancedService|StreamableHttpService|StreamableHttpAdvancedService mcpService) returns Error? => self.inner.detach(mcpService);
+
+    # Starts the listener (begin accepting connections).
+    #
+    # + return - Error? if starting fails.
+    public isolated function 'start() returns Error? => self.inner.'start();
+
+    # Gracefully stops the listener (completes active requests before shutting down).
+    #
+    # + return - Error? if graceful stop fails.
+    public isolated function gracefulStop() returns Error? => self.inner.gracefulStop();
+
+    # Immediately stops the listener (terminates all connections).
+    #
+    # + return - Error? if immediate stop fails.
+    public isolated function immediateStop() returns Error? => self.inner.immediateStop();
+}
+
+isolated function createServerAuthenticator(McpService mcpService,
         StreamableHttpServiceConfiguration serviceConfig) returns ServerAuthenticator|Error? {
     readonly & map<string[]> toolScopes = getToolScopes(mcpService);
     OAuthProtectedResourceConfig|http:ListenerAuthConfig[]? authConfig = serviceConfig.httpConfig.auth;

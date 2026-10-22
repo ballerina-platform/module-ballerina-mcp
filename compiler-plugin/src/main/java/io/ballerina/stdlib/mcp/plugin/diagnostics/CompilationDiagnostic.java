@@ -54,6 +54,7 @@ public enum CompilationDiagnostic {
     REQUIRED_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_102, DiagnosticCode.MCP_WARNING_102, WARNING),
     OPTIONAL_SESSION_IN_MODERN_MODE(DiagnosticMessage.WARNING_103, DiagnosticCode.MCP_WARNING_103, WARNING),
     OPTIONAL_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_104, DiagnosticCode.MCP_WARNING_104, WARNING),
+    DEPRECATED_TRANSPORT_NEUTRAL_SERVICE(DiagnosticMessage.WARNING_105, DiagnosticCode.MCP_WARNING_105, WARNING),
     UNSUPPORTED_ENDPOINT_METADATA(DiagnosticMessage.WARNING_101, DiagnosticCode.MCP_WARNING_101, WARNING);
 
     private final String diagnostic;

@@ -745,6 +745,44 @@ public type CacheHints record {|
     CacheHint listTools?;
 |};
 
+# Transport-agnostic configuration for an MCP service, defining server metadata and options.
+#
+# # Deprecated
+# Configures the deprecated `mcp:Service` and `mcp:AdvancedService`. Use
+# `mcp:StreamableHttpServiceConfiguration` with an `mcp:StreamableHttpService` instead.
+@deprecated
+public type ServiceConfiguration record {|
+    # Server implementation information
+    Implementation info;
+    # Optional server configuration options
+    ServerOptions options?;
+    # HTTP service configuration for the underlying transport.
+    #
+    # # Deprecated
+    # HTTP configuration is transport-specific. Use the `httpConfig` field of the
+    # `@mcp:StreamableHttpServiceConfig` annotation on an `mcp:StreamableHttpService` instead.
+    @deprecated
+    http:HttpServiceConfig httpConfig = {};
+    # Controls the session management mode for the transport.
+    # - STATEFUL → Sessions are managed by the transport with session IDs
+    # - STATELESS → No session management, each request is independent
+    # - AUTO → Automatically determined based on client initialization behavior (default)
+    #
+    # # Deprecated
+    # Session management is transport-specific. Use the `sessionMode` field of the
+    # `@mcp:StreamableHttpServiceConfig` annotation on an `mcp:StreamableHttpService` instead.
+    @deprecated
+    SessionMode sessionMode = AUTO;
+|};
+
+# Annotation to provide configuration to MCP services.
+#
+# # Deprecated
+# Configures the deprecated `mcp:Service` and `mcp:AdvancedService`. Use
+# `@mcp:StreamableHttpServiceConfig` on an `mcp:StreamableHttpService` instead.
+@deprecated
+public annotation ServiceConfiguration ServiceConfig on service;
+
 # Configuration for an MCP service exposed over the Streamable HTTP transport.
 public type StreamableHttpServiceConfiguration record {|
     # Server implementation information
@@ -820,6 +858,29 @@ public type HttpServiceConfig record {|
 
 # Annotation to configure an MCP service exposed over Streamable HTTP.
 public annotation StreamableHttpServiceConfiguration StreamableHttpServiceConfig on service;
+
+# Defines a transport-agnostic MCP service interface that handles incoming MCP requests with
+# manual control over tool listing and invocation.
+#
+# # Deprecated
+# Transport-agnostic services speak only the legacy protocol. Use `mcp:StreamableHttpAdvancedService`,
+# which also speaks the modern protocol.
+@deprecated
+public type AdvancedService distinct service object {
+    remote isolated function onListTools() returns ListToolsResult|ServerError;
+    remote isolated function onCallTool(CallToolParams params, Session? session = ()) returns CallToolResult|ServerError;
+};
+
+# Defines a transport-agnostic basic MCP service interface. Tools are declared as `remote`
+# functions and cannot access transport-specific request information.
+#
+# # Deprecated
+# Transport-agnostic services speak only the legacy protocol. Use `mcp:StreamableHttpService`,
+# which also speaks the modern protocol.
+@deprecated
+public type Service distinct service object {
+
+};
 
 # Defines a basic MCP service interface exposed over the Streamable HTTP transport. Tool
 # `remote` functions may additionally bind HTTP request information (e.g. `@http:Header`

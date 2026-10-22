@@ -57,6 +57,8 @@ public enum DiagnosticMessage {
             "Remove it or migrate session-dependent behavior to explicit application state."),
     WARNING_104("Session parameter ''{0}'' may be nil for modern MCP requests in auto protocol mode. " +
             "Handle nil explicitly or select legacy protocol mode if this service requires sessions."),
+    WARNING_105("''{0}'' is deprecated: transport-agnostic services speak only the legacy protocol. " +
+            "Use ''{1}'' instead."),
     WARNING_101("The Ballerina version is not supported for endpoints.yaml. " +
             "Try using Ballerina 2201.13.6 or above.");
 

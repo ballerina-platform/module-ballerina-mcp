@@ -61,7 +61,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             }
             string? protocolVersion = getProtocolVersionFromHeaders(headers);
             // Modern requests have no sessions to delete, so the legacy header check does not apply to them.
-            if config.protocolMode == "modern" || isModernProtocolVersion(protocolVersion) {
+            if !self.isTransportNeutral() &&
+                    (config.protocolMode == "modern" || isModernProtocolVersion(protocolVersion)) {
                 return http:METHOD_NOT_ALLOWED;
             }
             http:BadRequest? protocolVersionError = validateProtocolVersionHeader(protocolVersion);
@@ -139,16 +140,19 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 return request;
             }
 
-            if request is JsonRpcNotification && isModernRequest(request, headers) {
+            // Transport-neutral services are legacy-only, so modern requests get the legacy version check below.
+            boolean transportNeutral = self.isTransportNeutral();
+            if !transportNeutral && request is JsonRpcNotification && isModernRequest(request, headers) {
                 return <http:BadRequest>{
                     body: createJsonRpcError(INVALID_REQUEST,
                             "No core client notifications are supported by modern Streamable HTTP")
                 };
             }
-            if request is JsonRpcRequest && isModernRequest(request, headers) {
+            if !transportNeutral && request is JsonRpcRequest && isModernRequest(request, headers) {
                 var mcpService = getMcpServiceFromDispatcher(self);
-                if mcpService is Error {
-                    return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), request.id);
+                if mcpService !is StreamableHttpService|StreamableHttpAdvancedService {
+                    return createJsonRpcErrorResponse(INTERNAL_ERROR,
+                            mcpService is Error ? mcpService.message() : "MCP service is not available", request.id);
                 }
                 var modernResponse = trap handleModernRequest(mcpService, request, httpRequest, headers, routeConfig,
                         self.requestStateSigner, self.authenticator, authContext);
@@ -157,7 +161,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }
                 return modernResponse;
             }
-            if routeConfig.protocolMode == "modern" {
+            if !transportNeutral && routeConfig.protocolMode == "modern" {
                 return unsupportedProtocolResponse(getProtocolVersionFromHeaders(headers) ?: "legacy",
                         MODERN_PROTOCOL_VERSIONS, request is JsonRpcRequest ? request.id : ());
             }
@@ -186,11 +190,13 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             };
         }
 
+        private isolated function isTransportNeutral() returns boolean =>
+            getMcpServiceFromDispatcher(self) is Service|AdvancedService;
+
         private isolated function getCachedServiceConfiguration() returns StreamableHttpServiceConfiguration|Error {
             lock {
                 if self.cachedServiceConfig is () {
-                    StreamableHttpService|StreamableHttpAdvancedService mcpService =
-                            check getMcpServiceFromDispatcher(self);
+                    McpService mcpService = check getMcpServiceFromDispatcher(self);
                     self.cachedServiceConfig = getServiceConfiguration(mcpService);
                 }
                 return <StreamableHttpServiceConfiguration>self.cachedServiceConfig.clone();
@@ -268,8 +274,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             boolean unownable = authContext is AuthContext && sessionOwner is ();
             boolean requiresSession = false;
             if unownable {
-                StreamableHttpService|StreamableHttpAdvancedService|Error mcpService =
-                        getMcpServiceFromDispatcher(self);
+                McpService|Error mcpService = getMcpServiceFromDispatcher(self);
                 if mcpService is Error {
                     return createJsonRpcErrorResponse(INTERNAL_ERROR, mcpService.message(), id);
                 }
@@ -350,7 +355,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if cursor is http:Ok {
                 return cursor;
             }
-            ToolPage|error listToolsResult = self.executeOnListTools(cursor, headers, httpRequest,
+            ListToolsResult|ToolPage|error listToolsResult = self.executeOnListTools(cursor, headers, httpRequest,
                     serviceConfig.httpConfig.treatNilableAsOptional, authContext);
             if listToolsResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, listToolsResult);
@@ -363,8 +368,15 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                         string `Failed to list tools: ${listToolsResult.message()}`, request.id);
             }
 
+            // 1.x results go out as the handler returned them, as in 1.4.0.
+            if listToolsResult is ListToolsResult {
+                return <http:Ok>{
+                    headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
+                    body: <JsonRpcResponse>{jsonrpc: JSONRPC_VERSION, id: request.id, result: listToolsResult.cloneReadOnly()}
+                };
+            }
             // Cache hints are not part of the legacy protocol.
-            ToolPage legacyResult = {...listToolsResult};
+            ToolPage legacyResult = {...<ToolPage>listToolsResult};
             foreach string fieldName in ["resultType", "ttlMs", "cacheScope"] {
                 _ = legacyResult.removeIfHasKey(fieldName);
             }
@@ -427,7 +439,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 session = sessionId is string ? self.sessionMap[sessionId] : ();
             }
 
-            ToolResult|error callToolResult = self.executeOnCallTool(params, session, headers, httpRequest,
+            CallToolResult|ToolResult|error callToolResult = self.executeOnCallTool(params, session, headers, httpRequest,
                     serviceConfig.httpConfig.treatNilableAsOptional, authContext);
             if callToolResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, callToolResult);
@@ -440,11 +452,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                         string `Failed to call tool '${params.name}': ${callToolResult.message()}`, request.id);
             }
 
-            WireResponse responseBody = {
-                jsonrpc: JSONRPC_VERSION,
-                id: request.id,
-                result: callToolResult.cloneReadOnly()
-            };
+            // 1.x results go out as the handler returned them, as in 1.4.0.
+            JsonRpcResponse|WireResponse responseBody = callToolResult is CallToolResult
+                ? <JsonRpcResponse>{jsonrpc: JSONRPC_VERSION, id: request.id, result: callToolResult.cloneReadOnly()}
+                : <WireResponse>{jsonrpc: JSONRPC_VERSION, id: request.id, result: (<ToolResult>callToolResult).cloneReadOnly()};
 
             return <http:Ok>{
                 headers: sessionId is string ? {[SESSION_ID_HEADER]: sessionId} : (),
@@ -453,9 +464,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         }
 
         private isolated function executeOnListTools(Cursor? cursor, http:Headers headers, http:Request httpRequest,
-                boolean treatNilableAsOptional, readonly & AuthContext? authContext) returns ToolPage|Error {
-            StreamableHttpService|StreamableHttpAdvancedService mcpService =
-                    check getMcpServiceFromDispatcher(self);
+                boolean treatNilableAsOptional, readonly & AuthContext? authContext) returns ListToolsResult|ToolPage|Error {
+            McpService mcpService = check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
                 ToolPage|error advancedResult =
                         trap invokeAdvancedOnListTools(mcpService, cursor, headers, httpRequest,
@@ -466,7 +476,14 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 ToolPage|error legacyResult = legacyToolListResult(advancedResult);
                 return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
-            if mcpService is StreamableHttpService {
+            if mcpService is AdvancedService {
+                ListToolsResult|error result = trap invokeOnListTools(mcpService);
+                if result is error {
+                    return trapListToolsFailure(result);
+                }
+                return result;
+            }
+            if mcpService is Service|StreamableHttpService {
                 return trapListToolsFailure(trap listToolsForRemoteFunctions(mcpService));
             }
             return error DispatcherError("MCP service is not available");
@@ -474,9 +491,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 
         private isolated function executeOnCallTool(CallToolParams params, Session? session, http:Headers headers,
                 http:Request httpRequest, boolean treatNilableAsOptional, readonly & AuthContext? authContext)
-                returns ToolResult|Error {
-            StreamableHttpService|StreamableHttpAdvancedService mcpService =
-                    check getMcpServiceFromDispatcher(self);
+                returns CallToolResult|ToolResult|Error {
+            McpService mcpService = check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
                 // Legacy calls have no continuations, so state and answers here were never verified.
                 CallToolParams legacyParams = params.clone();
@@ -501,7 +517,15 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 ToolResult|error legacyResult = legacyToolCallResult(completedResult);
                 return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
-            if mcpService is StreamableHttpService {
+            if mcpService is AdvancedService {
+                // Legacy calls have no continuations, so state and answers here were never verified.
+                CallToolParams legacyParams = params.clone();
+                _ = legacyParams.removeIfHasKey("requestState");
+                _ = legacyParams.removeIfHasKey("inputResponses");
+                CallToolResult|error result = trap invokeOnCallTool(mcpService, legacyParams.cloneReadOnly(), session);
+                return result is error ? toServerError(result, params.name) : result;
+            }
+            if mcpService is Service|StreamableHttpService {
                 ToolResult|InputRequiredResult|error result = trap callToolForRemoteFunctions(mcpService,
                         params.cloneReadOnly(), session, headers, httpRequest, extractHeaderValues(headers),
                         treatNilableAsOptional, authContext, new);

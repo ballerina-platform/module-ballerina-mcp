@@ -44,5 +44,6 @@ public enum DiagnosticCode {
     MCP_WARNING_102,
     MCP_WARNING_103,
     MCP_WARNING_104,
+    MCP_WARNING_105,
     MCP_WARNING_101
 }
