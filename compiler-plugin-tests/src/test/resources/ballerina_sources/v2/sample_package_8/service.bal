@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // A raw http:Headers parameter is available on the Streamable HTTP service.
 @mcp:StreamableHttpServiceConfig {

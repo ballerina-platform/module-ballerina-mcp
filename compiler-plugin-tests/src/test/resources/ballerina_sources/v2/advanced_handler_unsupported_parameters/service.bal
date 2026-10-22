@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // The first page is listed without a cursor, so the cursor must be nilable.
 @mcp:StreamableHttpServiceConfig {

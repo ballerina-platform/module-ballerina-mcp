@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // Header binding records must not have rest fields (MCP_108).
 type OpenHeaders record {|

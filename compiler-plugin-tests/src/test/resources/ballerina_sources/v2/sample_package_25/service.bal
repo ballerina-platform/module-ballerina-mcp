@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 @mcp:StreamableHttpServiceConfig {
     info: {name: "modern-advanced", version: "1.0.0"}

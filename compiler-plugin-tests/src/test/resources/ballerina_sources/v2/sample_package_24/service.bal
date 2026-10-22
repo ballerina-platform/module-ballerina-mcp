@@ -1,4 +1,4 @@
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 type OptionalSession mcp:HttpSession?;
 const string PROTOCOL_MODE = "modern";
 @mcp:StreamableHttpServiceConfig {

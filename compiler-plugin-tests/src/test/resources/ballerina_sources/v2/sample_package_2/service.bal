@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // A union of two distinct basic types is not a valid header parameter type (MCP_108).
 @mcp:StreamableHttpServiceConfig {

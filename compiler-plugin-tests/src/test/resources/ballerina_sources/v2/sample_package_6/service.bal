@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // A @http:Header parameter is available on the Streamable HTTP service.
 @mcp:StreamableHttpServiceConfig {

@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // Only onListTools and onCallTool are allowed; any other remote method is unsupported (MCP_113).
 @mcp:StreamableHttpServiceConfig {

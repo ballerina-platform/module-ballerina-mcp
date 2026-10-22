@@ -44,7 +44,6 @@ import io.ballerina.compiler.syntax.tree.MappingFieldNode;
 import io.ballerina.compiler.syntax.tree.MetadataNode;
 import io.ballerina.compiler.syntax.tree.Node;
 import io.ballerina.compiler.syntax.tree.NodeList;
-import io.ballerina.compiler.syntax.tree.QualifiedNameReferenceNode;
 import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
@@ -209,6 +208,7 @@ public class Utils {
                 .anyMatch(Utils::isListenerFromMcpModule);
 
         boolean isServiceType = serviceSymbol.typeDescriptor()
+                .filter(Utils::isMcpModuleSymbol)
                 .flatMap(TypeSymbol::getName)
                 .map(name -> MCP_BASIC_SERVICE_NAME.equals(name)
                         || STREAMABLE_HTTP_BASIC_SERVICE_NAME.equals(name))
@@ -538,21 +538,23 @@ public class Utils {
         // The transport-specific @mcp:StreamableHttpConfig annotation takes precedence over
         // the deprecated sessionMode field of @mcp:ServiceConfig
         AnnotationNode transportConfigAnnotation =
-                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME);
+                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME, semanticModel);
         if (transportConfigAnnotation != null) {
             return getSessionModeFieldValue(transportConfigAnnotation, semanticModel);
         }
 
-        AnnotationNode serviceConfigAnnotation = findMcpAnnotation(serviceNode, SERVICE_CONFIG_ANNOTATION_NAME);
+        AnnotationNode serviceConfigAnnotation =
+                findMcpAnnotation(serviceNode, SERVICE_CONFIG_ANNOTATION_NAME, semanticModel);
         if (serviceConfigAnnotation != null) {
             return getSessionModeFieldValue(serviceConfigAnnotation, semanticModel);
         }
         return SessionMode.AUTO;
     }
 
-    private static AnnotationNode findMcpAnnotation(ServiceDeclarationNode serviceNode, String annotationName) {
+    private static AnnotationNode findMcpAnnotation(ServiceDeclarationNode serviceNode, String annotationName,
+                                                    SemanticModel semanticModel) {
         for (AnnotationNode annotation : serviceNode.metadata().get().annotations()) {
-            if (isMcpAnnotation(annotation, annotationName)) {
+            if (isMcpAnnotation(annotation, annotationName, semanticModel)) {
                 return annotation;
             }
         }
@@ -610,16 +612,14 @@ public class Utils {
         return SessionMode.AUTO;
     }
 
-    private static boolean isMcpAnnotation(AnnotationNode annotation, String annotationName) {
-        if (annotation.annotReference().kind() != SyntaxKind.QUALIFIED_NAME_REFERENCE) {
-            return false;
-        }
-
-        QualifiedNameReferenceNode qualifiedRef = (QualifiedNameReferenceNode) annotation.annotReference();
-        String modulePrefix = qualifiedRef.modulePrefix().text();
-        String identifier = qualifiedRef.identifier().text();
-
-        return MCP_PACKAGE_NAME.equals(modulePrefix) && annotationName.equals(identifier);
+    private static boolean isMcpAnnotation(AnnotationNode annotation, String annotationName,
+                                           SemanticModel semanticModel) {
+        return semanticModel.symbol(annotation)
+                .filter(symbol -> symbol.kind() == SymbolKind.ANNOTATION)
+                .filter(Utils::isMcpModuleSymbol)
+                .flatMap(Symbol::getName)
+                .map(annotationName::equals)
+                .orElse(false);
     }
 
     /**

@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // onCallTool returns the wrong type (MCP_112).
 @mcp:StreamableHttpServiceConfig {

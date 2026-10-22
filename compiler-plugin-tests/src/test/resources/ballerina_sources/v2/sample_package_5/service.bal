@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // Header parameters must be string/int/float/decimal/boolean based (MCP_108).
 @mcp:StreamableHttpServiceConfig {

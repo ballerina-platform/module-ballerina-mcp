@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package io.ballerina.stdlib.mcp.plugin;
+package io.ballerina.stdlib.mcp.plugin.v2;
 
 import io.ballerina.projects.BuildOptions;
 import io.ballerina.projects.DiagnosticResult;
@@ -45,7 +45,7 @@ import java.util.stream.Stream;
  */
 public class EndpointExportTest {
 
-    private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "ballerina_sources",
+    private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "ballerina_sources", "v2",
             "endpoint_export")
             .toAbsolutePath();
     private static final Path DISTRIBUTION_PATH = Paths.get("../", "target", "ballerina-runtime")
@@ -231,7 +231,7 @@ public class EndpointExportTest {
             Assert.assertTrue(Files.notExists(artifactDir(projectDirPath)),
                     "No artifact should be emitted for a package with compilation errors");
 
-            BuildOptions buildOptions = BuildOptions.builder().setExportEndpoints(true).build();
+            BuildOptions buildOptions = BuildOptions.builder().setExportEndpoints(true).setOffline(true).build();
             BuildProject project = BuildProject.load(getEnvironmentBuilder(), projectDirPath, buildOptions);
             DiagnosticResult diagnostics = project.currentPackage().getCompilation().diagnosticResult();
             Assert.assertTrue(diagnostics.hasErrors(), "The fixture is expected to have compilation errors");
@@ -325,6 +325,7 @@ public class EndpointExportTest {
         String balFile = System.getProperty("os.name").startsWith("Windows") ? "bal.bat" : "bal";
         buildArgs.add(DISTRIBUTION_PATH.resolve("bin").resolve(balFile).toString());
         buildArgs.add("build");
+        buildArgs.add("--offline");
         buildArgs.add("--export-endpoints");
 
         ProcessBuilder pb = new ProcessBuilder(buildArgs).redirectErrorStream(true);
@@ -346,6 +347,7 @@ public class EndpointExportTest {
         }
         buildArgs.add(DISTRIBUTION_PATH.resolve("bin").resolve(balFile).toString());
         buildArgs.add("build");
+        buildArgs.add("--offline");
         if (exportEndpoints) {
             buildArgs.add("--export-endpoints");
         }

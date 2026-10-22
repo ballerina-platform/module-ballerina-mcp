@@ -37,6 +37,17 @@ import static io.ballerina.compiler.syntax.tree.SyntaxKind.SERVICE_DECLARATION;
  */
 public class McpCodeModifier extends CodeModifier {
     private final Map<DocumentId, ModifierContext> modifierContextMap = new HashMap<>();
+    private final McpSourceModifier sourceModifier = new McpSourceModifier(modifierContextMap);
+
+    /**
+     * Returns the source rewrites collected by this modifier's analysis tasks. They are applied by the shared
+     * {@code McpDocumentModifier}, together with the root module's.
+     *
+     * @return the source modifier
+     */
+    public McpSourceModifier sourceModifier() {
+        return sourceModifier;
+    }
 
     @Override
     public void init(CodeModifierContext codeModifierContext) {
@@ -45,6 +56,5 @@ public class McpCodeModifier extends CodeModifier {
         codeModifierContext.addSyntaxNodeAnalysisTask(new ElicitFormAnalysisTask(modifierContextMap), FUNCTION_CALL);
         codeModifierContext.addSyntaxNodeAnalysisTask(new AdvancedServiceAnalysisTask(), SERVICE_DECLARATION);
         codeModifierContext.addSyntaxNodeAnalysisTask(new ProtocolSessionAnalysisTask(), SERVICE_DECLARATION);
-        codeModifierContext.addSourceModifierTask(new McpSourceModifier(modifierContextMap));
     }
 }

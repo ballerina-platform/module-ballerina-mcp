@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9331) {
     remote isolated function conflictingBindings(

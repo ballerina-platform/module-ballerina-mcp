@@ -1,4 +1,4 @@
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 listener mcp:StreamableHttpListener listenerOne = check new (9090);
 listener mcp:StreamableHttpListener listenerTwo = check new (9091);

@@ -1,4 +1,4 @@
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 const int PORT = 9090;
 

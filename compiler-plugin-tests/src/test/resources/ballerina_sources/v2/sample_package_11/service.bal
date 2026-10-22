@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // An mcp:StreamableHttpAdvancedService whose remote methods bind transport-specific request
 // information the same way StreamableHttpService tools do. Must compile without diagnostics.

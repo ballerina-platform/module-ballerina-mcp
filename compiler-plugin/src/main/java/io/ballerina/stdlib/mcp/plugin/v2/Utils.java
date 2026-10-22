@@ -45,13 +45,13 @@ import io.ballerina.compiler.syntax.tree.MappingFieldNode;
 import io.ballerina.compiler.syntax.tree.MetadataNode;
 import io.ballerina.compiler.syntax.tree.Node;
 import io.ballerina.compiler.syntax.tree.NodeList;
-import io.ballerina.compiler.syntax.tree.QualifiedNameReferenceNode;
 import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.projects.Module;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
+import io.ballerina.stdlib.mcp.plugin.McpModule;
 import io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic;
 import io.ballerina.tools.diagnostics.Diagnostic;
 import io.ballerina.tools.diagnostics.DiagnosticSeverity;
@@ -74,6 +74,7 @@ public class Utils {
     public static final String TOOL_ANNOTATION_NAME = "Tool";
     public static final String ARGUMENT_ANNOTATION_NAME = "Argument";
     public static final String ARGUMENT_HEADER_NAME_FIELD = "headerName";
+    // Prefix used for v2 types in diagnostic messages, which match the v2 docs' `mcp:` prefix.
     public static final String MCP_PACKAGE_NAME = "mcp";
     public static final String STREAMABLE_HTTP_BASIC_SERVICE_NAME = "StreamableHttpService";
     public static final String STREAMABLE_HTTP_ADVANCED_SERVICE_NAME = "StreamableHttpAdvancedService";
@@ -147,9 +148,7 @@ public class Utils {
     }
 
     public static boolean isMcpModuleSymbol(Symbol symbol) {
-        return symbol.getModule().isPresent()
-                && MCP_PACKAGE_NAME.equals(symbol.getModule().get().id().moduleName())
-                && BALLERINA_ORG.equals(symbol.getModule().get().id().orgName());
+        return McpModule.V2.defines(symbol);
     }
 
     private static boolean isHttpModuleSymbol(Symbol symbol) {
@@ -224,6 +223,7 @@ public class Utils {
                 .anyMatch(Utils::isListenerFromMcpModule);
 
         boolean isServiceType = serviceSymbol.typeDescriptor()
+                .filter(Utils::isMcpModuleSymbol)
                 .flatMap(TypeSymbol::getName)
                 .map(STREAMABLE_HTTP_BASIC_SERVICE_NAME::equals)
                 .orElse(false);
@@ -681,16 +681,17 @@ public class Utils {
         }
 
         AnnotationNode transportConfigAnnotation =
-                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME);
+                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME, semanticModel);
         if (transportConfigAnnotation != null) {
             return getSessionModeFieldValue(transportConfigAnnotation, semanticModel);
         }
         return HttpSessionMode.AUTO;
     }
 
-    private static AnnotationNode findMcpAnnotation(ServiceDeclarationNode serviceNode, String annotationName) {
+    private static AnnotationNode findMcpAnnotation(ServiceDeclarationNode serviceNode, String annotationName,
+                                                    SemanticModel semanticModel) {
         for (AnnotationNode annotation : serviceNode.metadata().get().annotations()) {
-            if (isMcpAnnotation(annotation, annotationName)) {
+            if (isMcpAnnotation(annotation, annotationName, semanticModel)) {
                 return annotation;
             }
         }
@@ -749,16 +750,14 @@ public class Utils {
         return HttpSessionMode.AUTO;
     }
 
-    private static boolean isMcpAnnotation(AnnotationNode annotation, String annotationName) {
-        if (annotation.annotReference().kind() != SyntaxKind.QUALIFIED_NAME_REFERENCE) {
-            return false;
-        }
-
-        QualifiedNameReferenceNode qualifiedRef = (QualifiedNameReferenceNode) annotation.annotReference();
-        String modulePrefix = qualifiedRef.modulePrefix().text();
-        String identifier = qualifiedRef.identifier().text();
-
-        return MCP_PACKAGE_NAME.equals(modulePrefix) && annotationName.equals(identifier);
+    private static boolean isMcpAnnotation(AnnotationNode annotation, String annotationName,
+                                           SemanticModel semanticModel) {
+        return semanticModel.symbol(annotation)
+                .filter(symbol -> symbol.kind() == SymbolKind.ANNOTATION)
+                .filter(Utils::isMcpModuleSymbol)
+                .flatMap(Symbol::getName)
+                .map(annotationName::equals)
+                .orElse(false);
     }
 
     /**
@@ -821,9 +820,6 @@ public class Utils {
             return unionTypeSymbol.memberTypeDescriptors().stream()
                     .anyMatch(Utils::isListenerFromMcpModule);
         }
-        return typeSymbol.getModule()
-                .map(module -> MCP_PACKAGE_NAME.equals(module.id().moduleName())
-                        && BALLERINA_ORG.equals(module.id().orgName()))
-                .orElse(false);
+        return McpModule.V2.defines(typeSymbol);
     }
 }

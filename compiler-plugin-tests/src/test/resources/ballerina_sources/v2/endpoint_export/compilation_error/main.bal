@@ -1,4 +1,4 @@
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 service mcp:StreamableHttpService /mcp on undefinedListener {
     @mcp:Tool {description: "Stub tool."}

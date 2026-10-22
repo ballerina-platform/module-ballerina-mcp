@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // sessionMode declared via the @mcp:StreamableHttpServiceConfig annotation
 // must be honored by the plugin: a Session parameter under STATELESS is an error (MCP_104).

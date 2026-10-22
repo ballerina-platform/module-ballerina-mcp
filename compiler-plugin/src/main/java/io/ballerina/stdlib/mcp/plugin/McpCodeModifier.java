@@ -36,12 +36,17 @@ import static io.ballerina.compiler.syntax.tree.SyntaxKind.SERVICE_DECLARATION;
  */
 public class McpCodeModifier extends CodeModifier {
     private final Map<DocumentId, ModifierContext> modifierContextMap = new HashMap<>();
+    private final io.ballerina.stdlib.mcp.plugin.v2.McpCodeModifier v2CodeModifier =
+            new io.ballerina.stdlib.mcp.plugin.v2.McpCodeModifier();
 
     @Override
     public void init(CodeModifierContext codeModifierContext) {
         codeModifierContext.addSyntaxNodeAnalysisTask(new RemoteFunctionAnalysisTask(modifierContextMap),
                 OBJECT_METHOD_DEFINITION);
         codeModifierContext.addSyntaxNodeAnalysisTask(new AdvancedServiceAnalysisTask(), SERVICE_DECLARATION);
-        codeModifierContext.addSourceModifierTask(new McpSourceModifier(modifierContextMap));
+        v2CodeModifier.init(codeModifierContext);
+        // One source modifier applies both modules' rewrites, so a document using both is rewritten once.
+        codeModifierContext.addSourceModifierTask(new McpDocumentModifier(new McpSourceModifier(modifierContextMap),
+                v2CodeModifier.sourceModifier()));
     }
 }

@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // onListTools does not accept mcp:CallToolParams or mcp:HttpSession; the reported supported types
 // must be specific to onListTools and must not list those two (MCP_102).

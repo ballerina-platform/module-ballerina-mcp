@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 // onListTools binds HTTP request values and may declare a cursor.
 @mcp:StreamableHttpServiceConfig {

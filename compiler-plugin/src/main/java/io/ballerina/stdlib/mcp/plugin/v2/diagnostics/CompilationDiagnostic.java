@@ -31,30 +31,30 @@ import static io.ballerina.tools.diagnostics.DiagnosticSeverity.WARNING;
  * Compilation errors in the Ballerina mcp package.
  */
 public enum CompilationDiagnostic {
-    UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION(DiagnosticMessage.ERROR_101, DiagnosticCode.MCP_101, ERROR),
-    INVALID_PARAMETER_TYPE(DiagnosticMessage.ERROR_102, DiagnosticCode.MCP_102, ERROR),
-    SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE(DiagnosticMessage.ERROR_104, DiagnosticCode.MCP_104, ERROR),
+    UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION(DiagnosticMessage.ERROR_101, DiagnosticCode.MCP_201, ERROR),
+    INVALID_PARAMETER_TYPE(DiagnosticMessage.ERROR_102, DiagnosticCode.MCP_202, ERROR),
+    SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE(DiagnosticMessage.ERROR_104, DiagnosticCode.MCP_204, ERROR),
     // Retained for compatibility; Meta parameters are no longer required to be last.
-    META_PARAM_MUST_BE_LAST(DiagnosticMessage.ERROR_105, DiagnosticCode.MCP_105, ERROR),
-    META_PARAM_MUST_BE_OPTIONAL(DiagnosticMessage.ERROR_106, DiagnosticCode.MCP_106, ERROR),
-    DUPLICATE_PARAMETER(DiagnosticMessage.ERROR_107, DiagnosticCode.MCP_107, ERROR),
-    INVALID_HEADER_PARAMETER_TYPE(DiagnosticMessage.ERROR_108, DiagnosticCode.MCP_108, ERROR),
-    ADVANCED_SERVICE_MISSING_METHOD(DiagnosticMessage.ERROR_110, DiagnosticCode.MCP_110, ERROR),
-    ADVANCED_METHOD_PARAMS(DiagnosticMessage.ERROR_111, DiagnosticCode.MCP_111, ERROR),
-    ADVANCED_INVALID_RETURN_TYPE(DiagnosticMessage.ERROR_112, DiagnosticCode.MCP_112, ERROR),
-    ADVANCED_UNKNOWN_REMOTE_METHOD(DiagnosticMessage.ERROR_113, DiagnosticCode.MCP_113, ERROR),
-    REQUIRED_SESSION_IN_MODERN_MODE(DiagnosticMessage.ERROR_114, DiagnosticCode.MCP_114, ERROR),
-    INVALID_MCP_ARGUMENT_TYPE(DiagnosticMessage.ERROR_115, DiagnosticCode.MCP_115, ERROR),
-    INVALID_MCP_ARGUMENT_HEADER_NAME(DiagnosticMessage.ERROR_116, DiagnosticCode.MCP_116, ERROR),
-    DUPLICATE_MCP_ARGUMENT_HEADER_NAME(DiagnosticMessage.ERROR_117, DiagnosticCode.MCP_117, ERROR),
-    MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA(DiagnosticMessage.ERROR_118, DiagnosticCode.MCP_118, ERROR),
-    UNSUPPORTED_FORM_FIELD(DiagnosticMessage.ERROR_119, DiagnosticCode.MCP_119, ERROR),
-    FORM_SCHEMA_TYPE_NOT_STATIC(DiagnosticMessage.ERROR_120, DiagnosticCode.MCP_120, ERROR),
-    UNSTRUCTURED_OUTPUT_WITH_OUTPUT_SCHEMA(DiagnosticMessage.ERROR_121, DiagnosticCode.MCP_121, ERROR),
-    REQUIRED_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_102, DiagnosticCode.MCP_WARNING_102, WARNING),
-    OPTIONAL_SESSION_IN_MODERN_MODE(DiagnosticMessage.WARNING_103, DiagnosticCode.MCP_WARNING_103, WARNING),
-    OPTIONAL_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_104, DiagnosticCode.MCP_WARNING_104, WARNING),
-    UNSUPPORTED_ENDPOINT_METADATA(DiagnosticMessage.WARNING_101, DiagnosticCode.MCP_WARNING_101, WARNING);
+    META_PARAM_MUST_BE_LAST(DiagnosticMessage.ERROR_105, DiagnosticCode.MCP_205, ERROR),
+    META_PARAM_MUST_BE_OPTIONAL(DiagnosticMessage.ERROR_106, DiagnosticCode.MCP_206, ERROR),
+    DUPLICATE_PARAMETER(DiagnosticMessage.ERROR_107, DiagnosticCode.MCP_207, ERROR),
+    INVALID_HEADER_PARAMETER_TYPE(DiagnosticMessage.ERROR_108, DiagnosticCode.MCP_208, ERROR),
+    ADVANCED_SERVICE_MISSING_METHOD(DiagnosticMessage.ERROR_110, DiagnosticCode.MCP_210, ERROR),
+    ADVANCED_METHOD_PARAMS(DiagnosticMessage.ERROR_111, DiagnosticCode.MCP_211, ERROR),
+    ADVANCED_INVALID_RETURN_TYPE(DiagnosticMessage.ERROR_112, DiagnosticCode.MCP_212, ERROR),
+    ADVANCED_UNKNOWN_REMOTE_METHOD(DiagnosticMessage.ERROR_113, DiagnosticCode.MCP_213, ERROR),
+    REQUIRED_SESSION_IN_MODERN_MODE(DiagnosticMessage.ERROR_114, DiagnosticCode.MCP_214, ERROR),
+    INVALID_MCP_ARGUMENT_TYPE(DiagnosticMessage.ERROR_115, DiagnosticCode.MCP_215, ERROR),
+    INVALID_MCP_ARGUMENT_HEADER_NAME(DiagnosticMessage.ERROR_116, DiagnosticCode.MCP_216, ERROR),
+    DUPLICATE_MCP_ARGUMENT_HEADER_NAME(DiagnosticMessage.ERROR_117, DiagnosticCode.MCP_217, ERROR),
+    MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA(DiagnosticMessage.ERROR_118, DiagnosticCode.MCP_218, ERROR),
+    UNSUPPORTED_FORM_FIELD(DiagnosticMessage.ERROR_119, DiagnosticCode.MCP_219, ERROR),
+    FORM_SCHEMA_TYPE_NOT_STATIC(DiagnosticMessage.ERROR_120, DiagnosticCode.MCP_220, ERROR),
+    UNSTRUCTURED_OUTPUT_WITH_OUTPUT_SCHEMA(DiagnosticMessage.ERROR_121, DiagnosticCode.MCP_221, ERROR),
+    REQUIRED_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_102, DiagnosticCode.MCP_WARNING_202, WARNING),
+    OPTIONAL_SESSION_IN_MODERN_MODE(DiagnosticMessage.WARNING_103, DiagnosticCode.MCP_WARNING_203, WARNING),
+    OPTIONAL_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_104, DiagnosticCode.MCP_WARNING_204, WARNING),
+    UNSUPPORTED_ENDPOINT_METADATA(DiagnosticMessage.WARNING_101, DiagnosticCode.MCP_WARNING_201, WARNING);
 
     private final String diagnostic;
     private final String diagnosticCode;

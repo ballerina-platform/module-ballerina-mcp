@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9326) {
     remote isolated function lookup(
