@@ -463,10 +463,6 @@ public type ListToolsResult record {
     *PaginatedResult;
     # A list of tools available on the server.
     ToolDefinition[] tools;
-    # Freshness hint in milliseconds, sent by modern servers.
-    int ttlMs?;
-    # Whether a modern response may be shared between callers.
-    CacheScope cacheScope?;
 };
 
 # A page of tools, as `mcp:StreamableHttpClient2` returns it on both protocol generations. Unlike

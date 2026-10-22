@@ -27,65 +27,57 @@ final readonly & json[] mockIcons = [
     {src: "https://example.com/icon.svg", sizes: ["any"]}
 ];
 
-// A minimal legacy MCP server whose initialize and tools/list results carry icons.
+// A minimal MCP-like HTTP server whose initialize and tools/list results carry icons.
 isolated service /mcp on new http:Listener(3203) {
-    // go-sdk servers add the 2026-07-28 cache hints to list results on every protocol version.
     isolated resource function post .(@http:Payload json payload) returns http:Ok|http:Accepted|error {
-        return respondWithIcons(payload, 0, "public");
-    }
-
-    isolated resource function post invalidHints(@http:Payload json payload) returns http:Ok|http:Accepted|error {
-        return respondWithIcons(payload, -1, "");
-    }
-}
-
-isolated function respondWithIcons(json payload, int ttlMs, string cacheScope) returns http:Ok|http:Accepted|error {
-    string method = check payload.method.ensureType();
-    if method == REQUEST_INITIALIZE {
+        string method = check payload.method.ensureType();
+        if method == REQUEST_INITIALIZE {
+            return <http:Ok>{
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: check payload.id,
+                    result: {
+                        protocolVersion: "2025-03-26",
+                        capabilities: {tools: {}},
+                        serverInfo: {name: "icons-server", version: "1.0.0", icons: mockIcons}
+                    }
+                }
+            };
+        }
+        if method == NOTIFICATION_INITIALIZED {
+            return http:ACCEPTED;
+        }
         return <http:Ok>{
             body: {
                 jsonrpc: JSONRPC_VERSION,
                 id: check payload.id,
                 result: {
-                    protocolVersion: "2025-11-25",
-                    capabilities: {tools: {}},
-                    serverInfo: {name: "icons-server", version: "1.0.0", icons: mockIcons}
+                    tools: [
+                        {
+                            name: "get_me",
+                            description: "Get details of the authenticated GitHub user",
+                            inputSchema: {'type: "object", properties: {}},
+                            annotations: {title: "Get my user profile", readOnlyHint: true},
+                            icons: mockIcons
+                        }
+                    ],
+                    // Non-spec top-level fields sent by some servers.
+                    ttlMs: 60000,
+                    cacheScope: "session"
                 }
             }
         };
     }
-    if method == NOTIFICATION_INITIALIZED {
-        return http:ACCEPTED;
-    }
-    return <http:Ok>{
-        body: {
-            jsonrpc: JSONRPC_VERSION,
-            id: check payload.id,
-            result: {
-                tools: [
-                    {
-                        name: "get_me",
-                        description: "Get details of the authenticated GitHub user",
-                        inputSchema: {'type: "object", properties: {}},
-                        annotations: {title: "Get my user profile", readOnlyHint: true},
-                        icons: mockIcons
-                    }
-                ],
-                ttlMs,
-                cacheScope
-            }
-        }
-    };
 }
 
 @test:Config {}
 function testClientDecodesSpecCompliantIcons() returns error? {
-    StreamableHttpClient2 'client = check new (ICONS_MOCK_SERVER_URL);
-    _ = check 'client->initializeLegacy();
+    StreamableHttpClient 'client = check new (ICONS_MOCK_SERVER_URL);
+    check 'client->initialize();
 
-    ToolPage result = check 'client->listTools();
+    ListToolsResult result = check 'client->listTools();
     test:assertEquals(result.tools.length(), 1);
-    ToolInfo tool = result.tools[0];
+    ToolDefinition tool = result.tools[0];
     test:assertEquals(tool.name, "get_me");
     Icon[] icons = tool.icons ?: [];
     test:assertEquals(icons.length(), 3);
@@ -94,19 +86,8 @@ function testClientDecodesSpecCompliantIcons() returns error? {
     test:assertEquals(icons[0].theme, "light");
     test:assertEquals(icons[1].theme, "dark");
     test:assertEquals(icons[2].sizes, ["any"]);
-    test:assertFalse(result.hasKey("ttlMs"));
-    test:assertFalse(result.hasKey("cacheScope"));
-}
-
-@test:Config {}
-function testLegacyListToolsIgnoresInvalidCacheHints() returns error? {
-    StreamableHttpClient2 'client = check new (ICONS_MOCK_SERVER_URL + "/invalidHints");
-    _ = check 'client->initializeLegacy();
-
-    ToolPage result = check 'client->listTools();
-    test:assertEquals(result.tools.length(), 1);
-    test:assertFalse(result.hasKey("ttlMs"));
-    test:assertFalse(result.hasKey("cacheScope"));
+    test:assertEquals(result["ttlMs"], 60000);
+    test:assertEquals(result["cacheScope"], "session");
 }
 
 @test:Config {}
