@@ -33,14 +33,14 @@ isolated function invokeOnCallTool(AdvancedService 'service, CallToolParams para
 isolated function invokeAdvancedOnListTools(StreamableHttpAdvancedService 'service, Cursor? cursor,
         http:Headers headers, http:Request request, map<string[]> headerValues, boolean treatNilableAsOptional,
         AuthContext? authContext)
-        returns ToolPage|Error = @java:Method {
+        returns ListToolsResult|ToolPage|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
 isolated function invokeAdvancedOnCallTool(StreamableHttpAdvancedService 'service, CallToolParams params,
         Session? session, http:Headers headers, http:Request request, map<string[]> headerValues,
         boolean treatNilableAsOptional, AuthContext? authContext)
-        returns ToolResult|InputRequiredResult|Error = @java:Method {
+        returns CallToolResult|ToolResult|InputRequiredResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 

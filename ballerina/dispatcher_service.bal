@@ -467,13 +467,16 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 boolean treatNilableAsOptional, readonly & AuthContext? authContext) returns ListToolsResult|ToolPage|Error {
             McpService mcpService = check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
-                ToolPage|error advancedResult =
+                ListToolsResult|ToolPage|error advancedResult =
                         trap invokeAdvancedOnListTools(mcpService, cursor, headers, httpRequest,
                             extractHeaderValues(headers), treatNilableAsOptional, authContext);
                 if advancedResult is error {
                     return trapListToolsFailure(advancedResult);
                 }
-                ToolPage|error legacyResult = legacyToolListResult(advancedResult);
+                if advancedResult is ListToolsResult {
+                    return advancedResult;
+                }
+                ToolPage|error legacyResult = legacyToolListResult(<ToolPage>advancedResult);
                 return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
             if mcpService is AdvancedService {
@@ -484,7 +487,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 return result;
             }
             if mcpService is Service|StreamableHttpService {
-                return trapListToolsFailure(trap listToolsForRemoteFunctions(mcpService));
+                return trapListToolsFailure(trap listToolsForRemoteFunctions(mcpService, ToolPage));
             }
             return error DispatcherError("MCP service is not available");
         }
@@ -498,7 +501,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 CallToolParams legacyParams = params.clone();
                 _ = legacyParams.removeIfHasKey("requestState");
                 _ = legacyParams.removeIfHasKey("inputResponses");
-                ToolResult|InputRequiredResult|error result =
+                CallToolResult|ToolResult|InputRequiredResult|error result =
                         trap invokeAdvancedOnCallTool(mcpService, legacyParams.cloneReadOnly(), session, headers,
                             httpRequest, extractHeaderValues(headers), treatNilableAsOptional, authContext);
                 if result is InputRequiredResult {
@@ -509,6 +512,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }
                 if result is error {
                     return toServerError(result, params.name);
+                }
+                if result is CallToolResult {
+                    return result;
                 }
                 ToolResult|error completedResult = result.cloneWithType();
                 if completedResult is error {

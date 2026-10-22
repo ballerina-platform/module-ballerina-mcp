@@ -209,8 +209,9 @@ isolated function toServerError(error cause, string toolName) returns ServerErro
 #
 # + result - The listing result, or the error or trapped panic from the invocation
 # + return - The listing result, or a `ServerError`
-isolated function trapListToolsFailure(ToolPage|error result) returns ToolPage|ServerError {
-    if result is ToolPage {
+isolated function trapListToolsFailure(ListToolsResult|ToolPage|error result)
+        returns ListToolsResult|ToolPage|ServerError {
+    if result is ListToolsResult|ToolPage {
         return result;
     }
     if result is ServerError {

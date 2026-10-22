@@ -284,9 +284,9 @@ isolated function findTool(ToolPage toolList, string toolName) returns ToolInfo?
 isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig,
         readonly & AuthContext? authContext, Cursor? cursor = ()) returns ToolPage|error {
-    ToolPage|Error listResult = error ServerError("Unsupported MCP service");
+    ListToolsResult|ToolPage|Error listResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
-        ToolPage|error advancedResult =
+        ListToolsResult|ToolPage|error advancedResult =
                 trap invokeAdvancedOnListTools(mcpService, cursor, requestHeaders, httpRequest,
                     extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
                     authContext);
@@ -318,9 +318,9 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
     } else {
         applicationParams._meta = applicationMeta;
     }
-    ToolResult|error callResult = error ServerError("Unsupported MCP service");
+    CallToolResult|ToolResult|error callResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
-        ToolResult|InputRequiredResult|error advancedResult =
+        CallToolResult|ToolResult|InputRequiredResult|error advancedResult =
                 trap invokeAdvancedOnCallTool(mcpService, applicationParams, (), requestHeaders, httpRequest,
                     extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
                     authContext);

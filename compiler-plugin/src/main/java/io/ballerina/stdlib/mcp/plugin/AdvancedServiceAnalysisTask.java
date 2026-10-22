@@ -58,10 +58,11 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
     private static final String AUTH_CONTEXT_DISPLAY = "mcp:AuthContext";
     private static final String CURSOR_DISPLAY = "mcp:Cursor";
     private static final String CALL_TOOL_PARAMS_DISPLAY = "mcp:CallToolParams";
+    // The 1.x types close each list, so the 1.x wording stays a substring of the message.
     private static final String CALL_TOOL_RESULT_DISPLAY =
-            "mcp:ToolResult|mcp:InputRequiredResult|mcp:ServerError";
+            "mcp:ToolResult|mcp:InputRequiredResult|mcp:CallToolResult|mcp:ServerError";
     private static final String LIST_TOOLS_RESULT_DISPLAY =
-            "mcp:ToolPage|mcp:ServerError";
+            "mcp:ToolPage|mcp:ListToolsResult|mcp:ServerError";
 
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
@@ -194,9 +195,9 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
 
         String expectedDisplay = isCallTool ? CALL_TOOL_RESULT_DISPLAY : LIST_TOOLS_RESULT_DISPLAY;
         boolean validResult = isCallTool
-                ? returnTypeContainsAny(functionType, Utils.CALL_TOOL_RESULT_TYPE_NAME,
+                ? returnTypeContainsAny(functionType, Utils.CALL_TOOL_RESULT_TYPE_NAME, Utils.TOOL_RESULT_TYPE_NAME,
                     Utils.INPUT_REQUIRED_RESULT_TYPE_NAME)
-                : returnTypeContainsAny(functionType, Utils.LIST_TOOLS_RESULT_TYPE_NAME);
+                : returnTypeContainsAny(functionType, Utils.LIST_TOOLS_RESULT_TYPE_NAME, Utils.TOOL_PAGE_TYPE_NAME);
         if (!validResult) {
             report(context, CompilationDiagnostic.ADVANCED_INVALID_RETURN_TYPE, location, methodName, expectedDisplay);
         }
