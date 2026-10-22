@@ -38,7 +38,7 @@ Server starts at `http://localhost:9090/mcp`
 A sample MCP client that connects to the weather server, discovers tools, and calls them.
 
 **Features:**
-- Connects to MCP server using StreamableHttpClient2
+- Connects to MCP server using StreamableHttpClient
 - Demonstrates client initialization with server info
 - Lists available tools
 - Calls tools with sample parameters
@@ -87,7 +87,7 @@ Server starts at `http://localhost:9091/mcp`
 A sample MCP client that connects to the crypto server, discovers tools, and calls them.
 
 **Features:**
-- Connects to MCP crypto server using StreamableHttpClient2
+- Connects to MCP crypto server using StreamableHttpClient
 - Demonstrates client initialization with server info
 - Lists available tools
 - Tests hash generation with different algorithms
@@ -114,14 +114,14 @@ A comprehensive example demonstrating STATEFUL session mode with persistent shop
 **Features:**
 - Session-based shopping cart management
 - Persistent state across multiple requests within a session
-- Demonstrates session parameter usage
+- Demonstrates proper session parameter usage as first parameter
 - Basic Service pattern with automatic tool discovery
 - Thread-safe session storage
 
 **Available Tools:**
-- `addToCart(session: mcp:HttpSession, productName: string, price: decimal)` - Add item to cart
-- `viewCart(session: mcp:HttpSession)` - View current cart contents
-- `clearCart(session: mcp:HttpSession)` - Clear all items from cart
+- `addToCart(session: mcp:Session, productName: string, price: decimal)` - Add item to cart
+- `viewCart(session: mcp:Session)` - View current cart contents
+- `clearCart(session: mcp:Session)` - Clear all items from cart
 
 **How to run:**
 ```bash
@@ -154,6 +154,52 @@ bal run
 cd clients/mcp-shopping-client-demo
 bal run
 ```
+
+## Modern protocol examples
+
+The examples above use the 1.x APIs and run unchanged on 1.5.0, where their servers also answer modern clients. The
+following examples use `mcp:StreamableHttpService` with the modern protocol and the new `mcp:StreamableHttpClient2`.
+
+### Shopping with explicit cart handles (modern and legacy)
+
+**Location:** `servers/mcp-shopping-server-modern/`
+
+This example carries cart identity in ordinary tool arguments, so it works with modern sessionless requests and legacy
+clients. Call `createCart`, then pass the returned `cartId` to `addItem`, `viewCart`, and `closeCart`. Handles expire after
+30 minutes, and the demonstration store is limited to 1,000 carts. The store is in memory; a multi-instance deployment
+should use shared application storage and bind cart access to its authorization context.
+
+```sh
+cd servers/mcp-shopping-server-modern
+bal run -- -CcartPort=9092
+```
+
+The MCP endpoint is `http://127.0.0.1:9092/mcp`. The original shopping server remains the example for legacy protocol sessions.
+
+### Connecting a calendar through URL elicitation
+
+**Location:** `servers/mcp-calendar-connect-server/` and `clients/mcp-calendar-connect-client/`
+
+The `listEvents` tool needs the user's calendar connected first. Until it is, the tool returns a URL elicitation
+pointing at a connect page served by the same program, and carries the pending link's id in the request state.
+Accepting the elicitation only means the user agreed to open the link, so the tool asks again on each continuation
+until the page has recorded the connection. The page completes a link only for the user it was issued to, which is
+the MCP phishing defence: the demo client shows Mallory opening Alice's link and being rejected.
+
+Both programs issue demonstration HS256 access tokens with a shared secret, standing in for an authorization server,
+and the connect page signs the user in with the same bearer token instead of a browser login.
+
+```sh
+cd servers/mcp-calendar-connect-server
+bal run -- -CtokenSecret=demo-secret-of-at-least-32-characters
+
+# In another terminal
+cd clients/mcp-calendar-connect-client
+bal run -- -CtokenSecret=demo-secret-of-at-least-32-characters
+```
+
+The MCP endpoint is `http://localhost:9093/mcp` and the connect page is `http://localhost:9093/connect`. Run
+`bal test` in the server directory to check the flow, including the rejection of another user.
 
 ## Common Testing Workflow
 
@@ -203,44 +249,3 @@ cd clients/mcp-shopping-client-demo && bal run
 # Build and publish to local central
 ./gradlew clean build -x test -x check -PpublishToLocalCentral=true
 ```
-
-### Shopping with explicit cart handles (modern and legacy)
-
-**Location:** `servers/mcp-shopping-server-modern/`
-
-This example carries cart identity in ordinary tool arguments, so it works with modern sessionless requests and legacy
-clients. Call `createCart`, then pass the returned `cartId` to `addItem`, `viewCart`, and `closeCart`. Handles expire after
-30 minutes, and the demonstration store is limited to 1,000 carts. The store is in memory; a multi-instance deployment
-should use shared application storage and bind cart access to its authorization context.
-
-```sh
-cd servers/mcp-shopping-server-modern
-bal run -- -CcartPort=9092
-```
-
-The MCP endpoint is `http://127.0.0.1:9092/mcp`. The original shopping server remains the example for legacy protocol sessions.
-
-### Connecting a calendar through URL elicitation
-
-**Location:** `servers/mcp-calendar-connect-server/` and `clients/mcp-calendar-connect-client/`
-
-The `listEvents` tool needs the user's calendar connected first. Until it is, the tool returns a URL elicitation
-pointing at a connect page served by the same program, and carries the pending link's id in the request state.
-Accepting the elicitation only means the user agreed to open the link, so the tool asks again on each continuation
-until the page has recorded the connection. The page completes a link only for the user it was issued to, which is
-the MCP phishing defence: the demo client shows Mallory opening Alice's link and being rejected.
-
-Both programs issue demonstration HS256 access tokens with a shared secret, standing in for an authorization server,
-and the connect page signs the user in with the same bearer token instead of a browser login.
-
-```sh
-cd servers/mcp-calendar-connect-server
-bal run -- -CtokenSecret=demo-secret-of-at-least-32-characters
-
-# In another terminal
-cd clients/mcp-calendar-connect-client
-bal run -- -CtokenSecret=demo-secret-of-at-least-32-characters
-```
-
-The MCP endpoint is `http://localhost:9093/mcp` and the connect page is `http://localhost:9093/connect`. Run
-`bal test` in the server directory to check the flow, including the rejection of another user.

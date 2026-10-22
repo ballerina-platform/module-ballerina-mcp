@@ -1,8 +1,13 @@
 ## Overview
 
-The `ballerina/mcp` module builds MCP clients and servers over Streamable HTTP. Version 2.0 supports MCP
-`2026-07-28` and can still communicate with servers and clients using the initialize-based protocol through
-`2025-11-25`.
+The `ballerina/mcp` module builds MCP clients and servers over Streamable HTTP. It speaks both protocol generations:
+the modern protocol (MCP `2026-07-28`), which negotiates on each request, and the legacy initialize-based protocol
+(`2024-10-07` to `2025-11-25`).
+
+Version 1.5.0 adds the modern protocol without breaking 1.4.0 code. Existing `mcp:StreamableHttpService` and
+`mcp:StreamableHttpAdvancedService` services answer modern clients with no change. For a client, use
+`mcp:StreamableHttpClient2`; the 1.x `mcp:StreamableHttpClient` is deprecated and keeps speaking only the legacy protocol
+(see [Upgrading from 1.4](#upgrading-from-14)).
 
 ### Key Features
 
@@ -13,7 +18,7 @@ The `ballerina/mcp` module builds MCP clients and servers over Streamable HTTP. 
 
 ## Protocol modes
 
-Set `protocolMode` on the client or in `@mcp:StreamableHttpServiceConfig`.
+Set `protocolMode` on `mcp:StreamableHttpClient2` or in `@mcp:StreamableHttpServiceConfig`.
 
 | Mode | Client behavior | Server behavior |
 | --- | --- | --- |
@@ -24,9 +29,9 @@ Set `protocolMode` on the client or in `@mcp:StreamableHttpServiceConfig`.
 `"auto"` is the default. Existing MCP clients can continue to connect to an auto-mode Ballerina server. The server
 recognizes the request form and follows the corresponding lifecycle.
 
-Modern MCP requests are sessionless. A service that requires an `mcp:HttpSession` parameter can serve legacy requests
+Modern MCP requests are sessionless. A service that requires an `mcp:Session` parameter can serve legacy requests
 in `"auto"` or `"legacy"` mode. It cannot serve modern tool calls. The compiler reports this combination. A nilable
-`mcp:HttpSession?` is permitted and receives `()` for a modern request; the compiler warns so that application code
+`mcp:Session?` is permitted and receives `()` for a modern request; the compiler warns so that application code
 can handle that case deliberately.
 
 ## Basic server
@@ -42,7 +47,7 @@ listener mcp:StreamableHttpListener mcpListener = check new (9090);
 @mcp:StreamableHttpServiceConfig {
     info: {
         name: "calculator",
-        version: "2.0.0"
+        version: "1.0.0"
     },
     protocolMode: "auto",
     sessionMode: mcp:AUTO
@@ -50,19 +55,25 @@ listener mcp:StreamableHttpListener mcpListener = check new (9090);
 service mcp:StreamableHttpService /mcp on mcpListener {
     # Add two numbers.
     remote isolated function add(int left, int right,
-            mcp:RequestMeta? meta) returns int {
+            mcp:Meta? meta) returns int {
         return left + right;
     }
 }
 ```
 
 The annotation has one `httpConfig` field for Ballerina HTTP service settings. Its CORS origin list is also used for
-the MCP transport's required inbound `Origin` validation, on modern and legacy requests and before authentication. A
-request without an `Origin` header is accepted; one whose origin is not listed, or matched by `*`, gets `403 Forbidden`.
+the MCP transport's required inbound `Origin` validation, on modern and legacy requests and before authentication:
+
+- A request without an `Origin` header, which clients other than browsers send, is accepted.
+- When `cors.allowOrigins` is empty (the default), only loopback origins are accepted: `http` or `https` with host
+  `localhost`, `127.0.0.1` or `[::1]`, on any port. Local browser tools such as the MCP Inspector keep working.
+- When `cors.allowOrigins` is set, only the listed origins (or every origin, with `*`) are accepted.
+
+Any other origin gets `403 Forbidden`. Configure the origins of browser clients that run elsewhere:
 
 ```ballerina
 @mcp:StreamableHttpServiceConfig {
-    info: {name: "calculator", version: "2.0.0"},
+    info: {name: "calculator", version: "1.0.0"},
     httpConfig: {
         cors: {
             allowOrigins: ["https://example.com"],
@@ -77,8 +88,8 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 
 A tool may bind these runtime values in addition to ordinary `anydata` arguments:
 
-- `mcp:HttpSession` or `mcp:HttpSession?`, at any position, for legacy HTTP session state.
-- `mcp:RequestMeta?`, at any position, for the request's `_meta` value.
+- `mcp:Session` or `mcp:Session?`, at any position, for legacy HTTP session state.
+- `mcp:Meta?`, at any position, for the request's `_meta` value.
 - `@http:Header` parameters, `http:Headers`, and `http:Request` for Streamable HTTP request data.
 - `mcp:Context`, at any position, for the input responses and request state of a continuation (see
   [Eliciting input from a basic service](#eliciting-input-from-a-basic-service)).
@@ -279,7 +290,7 @@ including a connect page that rejects other users.
 
 ## Sessions
 
-Legacy requests support three `HttpSessionMode` values:
+Legacy requests support three `SessionMode` values:
 
 - `mcp:STATEFUL`: require and maintain an MCP session ID.
 - `mcp:STATELESS`: process every request independently.
@@ -287,12 +298,12 @@ Legacy requests support three `HttpSessionMode` values:
 
 ```ballerina
 @mcp:StreamableHttpServiceConfig {
-    info: {name: "cart", version: "2.0.0"},
+    info: {name: "cart", version: "1.0.0"},
     protocolMode: "auto",
     sessionMode: mcp:STATEFUL
 }
 service mcp:StreamableHttpService /mcp on mcpListener {
-    remote isolated function addItem(mcp:HttpSession session, string item) returns string {
+    remote isolated function addItem(mcp:Session session, string item) returns string {
         string[] items = session.hasKey("items")
             ? checkpanic session.getWithType("items")
             : [];
@@ -311,8 +322,8 @@ Use `mcp:StreamableHttpAdvancedService` when the application must define tool di
 
 ```ballerina
 service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
-    remote isolated function onListTools() returns mcp:ToolPage|mcp:ServerError {
-        return {
+    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ToolPage|mcp:ServerError {
+        return <mcp:ToolPage>{
             tools: [{
                 name: "echo",
                 inputSchema: {
@@ -326,12 +337,12 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
     }
 
     remote isolated function onCallTool(mcp:CallToolParams params)
-            returns mcp:ToolResult|mcp:InputRequiredResult|mcp:ServerError {
+            returns mcp:CallToolResult|mcp:ToolResult|mcp:InputRequiredResult|mcp:ServerError {
         if params.name != "echo" {
             return error mcp:ServerError("Unknown tool");
         }
         json value = params.arguments?.value ?: "";
-        return {
+        return <mcp:ToolResult>{
             content: [{type: "text", text: value.toJsonString()}],
             structuredContent: value
         };
@@ -339,8 +350,11 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
 }
 ```
 
-`onListTools` and `onCallTool` are required. `onCallTool` may return `InputRequiredResult` for a modern
-continuation. Both handlers can bind the same HTTP request values as basic tools (`http:Headers`, `http:Request`,
+`onListTools` and `onCallTool` are required. They may return the 1.x types `ListToolsResult` and `CallToolResult`,
+which legacy clients receive exactly as returned, or `ToolPage` and `ToolResult`, which can also carry what 1.x types
+cannot: output schemas and structured content of any JSON root. For a legacy client the library removes the fields the
+legacy schema does not allow from a `ToolPage` or `ToolResult`. `onCallTool` may return `InputRequiredResult` for a
+modern continuation. Both handlers can bind the same HTTP request values as basic tools (`http:Headers`, `http:Request`,
 `@http:Header` and `mcp:AuthContext`). `onCallTool` reads request metadata from `CallToolParams._meta`.
 
 A handler returns an `mcp:InvalidParamsError` to reject the request's parameters, such as an unknown cursor or a
@@ -562,7 +576,7 @@ public function main() returns error? {
         protocolMode = "auto"
     );
 
-    mcp:ConnectionInfo connection = check client->connect({name: "example-client", version: "2.0.0"});
+    mcp:ConnectionInfo connection = check client->connect({name: "example-client", version: "1.0.0"});
     io:println("Using MCP ", connection.protocolVersion);
 
     mcp:ToolPage listed = check client->listTools();
@@ -740,42 +754,45 @@ A token refreshed on expiry keeps the cache. A negative `ttlMs` from a server is
 touching the cache. Set `resultCache = ()` in the client configuration to disable reuse, or adjust `maxTtlMs` and
 `maxEntries` in `resultCache` to bound it.
 
-## Migrating from 1.x
+## Upgrading from 1.4
 
-Version 2.0 removes the transport-neutral listener, service types and annotation, and gives Streamable HTTP concepts
-explicit names.
+1.5.0 compiles and runs 1.4.0 code unchanged. Services gain the modern protocol in place, and two APIs are deprecated.
 
-| 1.x API | 2.0 API |
+### The Deprecated client
+
+`mcp:StreamableHttpClient` keeps its 1.4.0 behaviour: `initialize()`, `listTools()`, `callTool()`,
+`subscribeToServerMessages()` and `close()`, with `mcp:StreamableHttpClientTransportConfig`. It speaks only the legacy
+protocol and receives bug fixes only. Migrate to `mcp:StreamableHttpClient2`:
+
+| `mcp:StreamableHttpClient` | `mcp:StreamableHttpClient2` |
 | --- | --- |
-| `mcp:Listener` | `mcp:StreamableHttpListener` |
-| `mcp:Service` | `mcp:StreamableHttpService` |
-| `mcp:AdvancedService` | `mcp:StreamableHttpAdvancedService` |
-| `@mcp:ServiceConfig` | `@mcp:StreamableHttpServiceConfig` |
-| `mcp:Session`, `mcp:SessionEntry` | `mcp:HttpSession`, `mcp:HttpSessionEntry` |
-| `mcp:SessionMode` | `mcp:HttpSessionMode` |
-| `mcp:Meta` | `mcp:RequestMeta` |
-| `mcp:StreamableHttpClientTransportConfig` | `mcp:StreamableHttpClientConfig` |
-| `http:ClientConfiguration` fields at the top level of the client configuration | The same fields under `httpConfig`, an `mcp:HttpClientConfig` |
-| An `http:HttpServiceConfig` value for `httpConfig` | `mcp:HttpServiceConfig`: the same fields, with `auth` also accepting `mcp:OAuthProtectedResourceConfig` |
-| `initialize()` | `connect()` or `initializeLegacy()` |
-| `subscribeToServerMessages()` | Removed |
+| `mcp:StreamableHttpClientTransportConfig`, with `http:ClientConfiguration` fields at the top level | `mcp:StreamableHttpClientConfig`, with the same fields under `httpConfig` (an `mcp:HttpClientConfig`) |
+| `initialize()`, optional | `connect()`, required before other calls; or `initializeLegacy()` |
+| `listTools()` returns `mcp:ListToolsResult` | `listTools()` returns `mcp:ToolPage`, whose `mcp:ToolInfo` entries may carry an output schema of any root |
+| `callTool()` returns `mcp:CallToolResult` | `callTool()` returns `mcp:ToolResult`, whose `structuredContent` may be any JSON; `callToolOnce()` returns input-required results |
+| `subscribeToServerMessages()` | No equivalent: change notifications are not supported on the new client |
 
-1.x did not validate `Origin`. A 2.0 service rejects browser requests from origins that are not listed in
-`httpConfig.cors.allowOrigins`, which is empty by default.
+`mcp:StreamableHttpClient2` returns the same types on both protocols and reports the same `mcp:ClientError` types, plus
+`mcp:AuthorizationError` and `mcp:OAuthTokenError` for authorization. It never sends the `task` field.
 
-The client must now call `connect()`, or `initializeLegacy()`, before other operations; 1.x did not enforce
-`initialize()`.
+### Transport-neutral services
 
-2.0 does not support change notifications. `subscribeToServerMessages()` has no replacement, a modern service answers
-`subscriptions/listen` with `METHOD_NOT_FOUND`, and `tools.listChanged` is advertised as `false`. Proper support for
-change notification subscriptions is planned for a later release.
+`mcp:Listener`, `mcp:Service`, `mcp:AdvancedService` and `@mcp:ServiceConfig` are deprecated. They keep their 1.4.0
+behaviour and speak only the legacy protocol: a modern request gets the `Unsupported MCP-Protocol-Version header`
+error, so an `"auto"` client falls back to the legacy protocol. To serve modern clients, move to
+`mcp:StreamableHttpListener`, `mcp:StreamableHttpService`, `mcp:StreamableHttpAdvancedService` and
+`@mcp:StreamableHttpServiceConfig`.
 
-A legacy client keeps receiving the legacy wire shapes from a 2.0 server. The text content of a tool that returns a
-structured value is now its JSON serialization.
+### Legacy wire changes
 
-The `2025-11-25` task fields are removed: `CallToolParams.task`, `ToolInfo.execution` and the `tasks` client and
-server capabilities. A client still connects to a server that advertises tasks.
+Legacy clients get the same responses as from 1.4.0, except for these fixes:
 
-The public error hierarchy is `mcp:Error`, `mcp:ClientError`, `mcp:TransportError`, `mcp:ProtocolError`,
-`mcp:ToolCallError`, `mcp:StreamError`, and `mcp:ServerError` with `mcp:InvalidParamsError`; transport and decoder
-implementation errors are internal.
+- `Origin` is validated on every request, with loopback origins allowed by default (see [Basic server](#basic-server)).
+  Browser clients on other origins need `httpConfig.cors.allowOrigins`.
+- A `task` field on `tools/call` is ignored instead of rejected.
+- A tool that returns `()` produces `content: []` instead of an empty text block.
+- A tool that returns a non-string value gets its JSON serialization as text, so xml becomes a quoted JSON string.
+- A non-string `cursor` on `tools/list` gets `-32602 "Invalid cursor"`, and a wrongly typed `requestState` or
+  `inputResponses` on `tools/call` gets `-32602`.
+- The `initialize` result carries `options.instructions` when the service configures them.
+- `DELETE` with a modern `MCP-Protocol-Version` header gets `405`.

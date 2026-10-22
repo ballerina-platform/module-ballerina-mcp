@@ -10,11 +10,11 @@ This module provides APIs for building MCP (Model Context Protocol) clients and 
 
 ## MCP 2026-07-28
 
-Version 2.0.0 adds automatic modern/legacy protocol selection, modern discovery, per-request metadata and headers,
-automatic output schemas and raw structured results for regular services, modern tool-result APIs, and bounded
-input-required continuations. Existing session-dependent services remain on the legacy path in auto mode. Change
-notification subscriptions are not part of 2.0; proper support is planned for a later release. See the [protocol compatibility and migration guide](ballerina/README.md#migrating-from-1x).
-General JSON Schema evaluation is deferred until Ballerina language support is available; existing type binding remains.
+Version 1.5.0 adds the modern protocol (MCP `2026-07-28`) without breaking 1.4.0 code. `mcp:StreamableHttpService` and
+`mcp:StreamableHttpAdvancedService` services answer modern and legacy clients in the default `"auto"` protocol mode, and
+the new `mcp:StreamableHttpClient2` selects the protocol through discovery and falls back to the legacy handshake. The
+1.x client and the transport-neutral services are deprecated and stay on the legacy protocol. Change notification
+subscriptions are not part of the modern support. See [Upgrading from 1.4](ballerina/README.md#upgrading-from-14).
 
 ### Interoperability checks
 

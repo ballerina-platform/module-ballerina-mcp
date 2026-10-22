@@ -16,6 +16,7 @@
 
 import ballerina/log;
 import ballerina/mcp;
+import ballerina/random;
 import ballerina/time;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9090);
@@ -27,7 +28,7 @@ listener mcp:StreamableHttpListener mcpListener = check new (9090);
     },
     sessionMode: mcp:AUTO
 }
-service mcp:StreamableHttpService /mcp on mcpListener {
+service mcp:Service /mcp on mcpListener {
     @mcp:Tool {
         description: string `
             **Description**: Get current weather conditions for a location
@@ -43,14 +44,13 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 
         log:printInfo(string `Getting current weather for: ${city}`);
 
-        // Generate stable sample weather data from the requested city.
-        int seed = city.length();
-        decimal temperature = 10.0d + <decimal>(seed % 25);
-        int humidity = 30 + seed % 60;
-        int pressure = 980 + seed % 50;
+        // Generate random weather data
+        decimal temperature = 10.0 + <decimal>(check random:createIntInRange(0, 25)) + <decimal>(random:createDecimal()) * 1.0;
+        int humidity = check random:createIntInRange(30, 90);
+        int pressure = check random:createIntInRange(980, 1030);
 
         string[] conditions = ["Sunny", "Partly cloudy", "Cloudy", "Light rain", "Heavy rain", "Snow", "Foggy"];
-        string condition = conditions[seed % conditions.length()];
+        string condition = conditions[check random:createIntInRange(0, conditions.length())];
 
         time:Utc currentTime = time:utcNow();
         string timestamp = time:utcToString(currentTime);
@@ -82,20 +82,20 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 
         log:printInfo(string `Getting ${days}-day weather forecast for: ${location}`);
 
-        // Generate stable sample forecast data.
+        // Generate forecast items with random data
         ForecastItem[] forecastItems = [];
         time:Utc currentTime = time:utcNow();
 
         foreach int i in 0 ..< days {
-            int seed = location.length() + i;
-            int high = 15 + seed % 20;
-            int low = 5 + seed % (high - 6);
+            // Generate random weather data for each day
+            int high = check random:createIntInRange(15, 35);
+            int low = check random:createIntInRange(5, high - 2);
 
             string[] conditions = ["Sunny", "Partly cloudy", "Cloudy", "Light rain", "Heavy rain", "Snow", "Thunderstorm"];
-            string condition = conditions[seed % conditions.length()];
+            string condition = conditions[check random:createIntInRange(0, conditions.length())];
 
-            int precipitationChance = (seed * 17) % 101;
-            int windSpeed = 5 + (seed * 7) % 20;
+            int precipitationChance = check random:createIntInRange(0, 100);
+            int windSpeed = check random:createIntInRange(5, 25);
 
             // Calculate future date
             time:Utc futureTime = time:utcAddSeconds(currentTime, <decimal>(i * 24 * 60 * 60));

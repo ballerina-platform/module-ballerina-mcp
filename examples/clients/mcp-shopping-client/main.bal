@@ -66,27 +66,25 @@ function runClientSession(string customerName, record {|string name; decimal pri
     log:printInfo(string `\n=== ${customerName}'s Shopping Session ===`);
 
     // Create a new client (each client gets its own session)
-    mcp:StreamableHttpClientConfig config = {
-        httpConfig: {
-            auth: {
-                username: "ballerina",
-                issuer: "wso2",
-                audience: ["ballerina", "ballerina.org", "ballerina.io"],
-                keyId: "5a0b754-895f-4279-8843-b745e11a57e9",
-                jwtId: "JlbmMiOiJBMTI4Q0JDLUhTMjU2In",
-                expTime: 3600,
-                signatureConfig: {
-                    config: {
-                        keyFile: "./resource/private.key"
-                    }
+    mcp:StreamableHttpClientTransportConfig config = {
+        auth: {
+            username: "ballerina",
+            issuer: "wso2",
+            audience: ["ballerina", "ballerina.org", "ballerina.io"],
+            keyId: "5a0b754-895f-4279-8843-b745e11a57e9",
+            jwtId: "JlbmMiOiJBMTI4Q0JDLUhTMjU2In",
+            expTime: 3600,
+            signatureConfig: {
+                config: {
+                    keyFile: "./resource/private.key"
                 }
             }
         }
     };
-    mcp:StreamableHttpClient2 mcpClient = check new ("http://localhost:9092/mcp", config);
+    mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9092/mcp", config);
 
     // Initialize client
-    _ = check mcpClient->connect({
+    check mcpClient->initialize({
         name: string `${customerName}'s Shopping Client`,
         version: "1.0.0"
     });
@@ -95,7 +93,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
 
     // Add items to cart
     foreach var item in items {
-        mcp:ToolResult result = check mcpClient->callTool({
+        mcp:CallToolResult result = check mcpClient->callTool({
             name: "addToCart",
             arguments: {
                 "productName": item.name,
@@ -107,7 +105,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
     }
 
     // View cart
-    mcp:ToolResult cartResult = check mcpClient->callTool({
+    mcp:CallToolResult cartResult = check mcpClient->callTool({
         name: "viewCart",
         arguments: {}
     });
@@ -124,7 +122,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
     return;
 }
 
-function getTextContent(mcp:ToolResult result) returns string {
+function getTextContent(mcp:CallToolResult result) returns string {
     if result.content.length() > 0 && result.content[0] is mcp:TextContent {
         mcp:TextContent textContent = <mcp:TextContent>result.content[0];
         return textContent.text;

@@ -40,7 +40,7 @@ listener mcp:StreamableHttpListener mcpListener = check new (9092);
         ]
     }
 }
-service mcp:StreamableHttpService /mcp on mcpListener {
+service mcp:Service /mcp on mcpListener {
 
     @mcp:Tool {
         description: "Add an item to the shopping cart"

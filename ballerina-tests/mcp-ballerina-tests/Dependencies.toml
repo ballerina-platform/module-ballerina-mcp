@@ -246,7 +246,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "2.0.0"
+version = "1.5.0"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "crypto"},
@@ -369,7 +369,7 @@ dependencies = [
 [[package]]
 org = "ballerinatests"
 name = "mcp_ballerina_tests"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "mcp"},
