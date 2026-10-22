@@ -17,17 +17,13 @@
 import ballerina/http;
 import ballerina/log;
 
+// Only a known modern version header selects the modern protocol; any other value keeps 1.4.0's answers.
 isolated function isModernRequest(JsonRpcRequest|JsonRpcNotification requestMessage, http:Headers requestHeaders) returns boolean {
     // initialize always belongs to the legacy handshake, including older clients with a version header.
     if requestMessage.method == REQUEST_INITIALIZE {
         return false;
     }
-    record {}? requestMeta = requestMessage.params?._meta;
-    if requestMeta is record {} && requestMeta.hasKey(PROTOCOL_META_KEY) {
-        return true;
-    }
-    string? headerVersion = getProtocolVersionFromHeaders(requestHeaders);
-    return headerVersion is string && !isLegacyProtocolVersion(headerVersion);
+    return isModernProtocolVersion(getProtocolVersionFromHeaders(requestHeaders));
 }
 
 isolated function advertisedProtocolVersions(StreamableHttpServiceConfiguration serviceConfig) returns string[] =>

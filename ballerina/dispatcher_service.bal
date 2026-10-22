@@ -267,6 +267,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }).cloneReadOnly(),
                 serverInfo: serviceConfig.info.cloneReadOnly()
             };
+            string? instructions = serviceConfig.options?.instructions;
+            if instructions is string {
+                initResult.instructions = instructions;
+            }
 
             // A session must belong to the principal that creates it. A token naming neither a subject
             // nor a client cannot own one, so it gets a sessionless connection, or none if sessions are required.
@@ -360,6 +364,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if listToolsResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, listToolsResult);
             }
+            // Header-binding failures keep 1.4.0's message prefix.
+            if listToolsResult is ParameterBindingError {
+                return createJsonRpcErrorResponse(INVALID_PARAMS,
+                        string `Failed to list tools: ${listToolsResult.message()}`, request.id);
+            }
             if listToolsResult is InvalidParamsError {
                 return createJsonRpcErrorResponse(INVALID_PARAMS, listToolsResult.message(), request.id);
             }
@@ -443,6 +452,10 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                     serviceConfig.httpConfig.treatNilableAsOptional, authContext);
             if callToolResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, callToolResult);
+            }
+            if callToolResult is ParameterBindingError {
+                return createJsonRpcErrorResponse(INVALID_PARAMS,
+                        string `Failed to call tool '${params.name}': ${callToolResult.message()}`, request.id);
             }
             if callToolResult is InvalidParamsError {
                 return createJsonRpcErrorResponse(INVALID_PARAMS, callToolResult.message(), request.id);

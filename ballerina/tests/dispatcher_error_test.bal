@@ -360,9 +360,10 @@ function testDispatcherValidatesProtocolNegotiation() returns error? {
             metaProtocolVersion = LATEST_LEGACY_PROTOCOL_VERSION);
     check assertJsonRpcError(headerMetaMismatch, 400, HEADER_MISMATCH, "MCP-Protocol-Version must match");
 
+    // Only a known modern version header selects the modern protocol; others get 1.4.0's answer.
     http:Response unsupportedVersion = check dispatcherPost("/tools", REQUEST_LIST_TOOLS,
             protocolVersion = "1999-01-01");
-    check assertJsonRpcError(unsupportedVersion, 400, UNSUPPORTED_PROTOCOL_VERSION, "Unsupported protocol version");
+    check assertJsonRpcError(unsupportedVersion, 400, INVALID_REQUEST, "Unsupported MCP-Protocol-Version header");
 
     http:Response methodMismatch = check dispatcherPost("/tools", REQUEST_LIST_TOOLS,
             extraHeaders = {[METHOD_HEADER]: "server/discover"});
