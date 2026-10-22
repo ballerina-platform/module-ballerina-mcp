@@ -1,6 +1,86 @@
 ## Overview
 
-This module provides APIs for building MCP (Model Context Protocol) clients and servers in Ballerina, enabling standardized integration between LLMs and external data sources, tools, and services via JSON-RPC 2.0 over HTTP. It supports automatic tool discovery, type-safe schema generation, flexible session management, and streamable HTTP transport with Server-Sent Events for bidirectional communication.
+This package provides APIs for building MCP (Model Context Protocol) clients and servers in Ballerina, enabling standardized integration between LLMs and external data sources, tools, and services via JSON-RPC 2.0 over HTTP. It contains two modules:
+
+| Module | Import | Protocol |
+| --- | --- | --- |
+| `ballerina/mcp.v2`, the v2 module | `import ballerina/mcp.v2 as mcp;` | MCP `2026-07-28`, which can still communicate with servers and clients using the initialize-based protocol through `2025-11-25` |
+| `ballerina/mcp`, the 1.x API | `import ballerina/mcp;` | The initialize-based protocol through `2025-11-25` |
+
+Use the v2 module for new code. The 1.x API keeps working unchanged, but its client and its transport-agnostic services are deprecated in favour of the v2 module.
+
+## The v2 module
+
+Import the v2 module with the `mcp` prefix, so that its documentation and examples apply as written:
+
+```ballerina
+import ballerina/mcp.v2 as mcp;
+```
+
+### Key Features
+
+- MCP client and server implementation for LLM tool integration, with automatic selection between the modern and the legacy protocol
+- Automatic tool discovery and type-safe input and output schema generation
+- Input-required results with form and URL elicitation
+- OAuth for clients, and OAuth protected resource support for services
+- Streamable HTTP transport with Server-Sent Events (SSE)
+
+### Server
+
+A basic service exposes each remote method as a tool. The compiler derives its input and output schemas from the method signature.
+
+```ballerina
+import ballerina/mcp.v2 as mcp;
+
+listener mcp:StreamableHttpListener mcpListener = check new (9090);
+
+@mcp:StreamableHttpServiceConfig {
+    info: {
+        name: "calculator",
+        version: "1.0.0"
+    }
+}
+service mcp:StreamableHttpService /mcp on mcpListener {
+    # Add two numbers.
+    remote isolated function add(int left, int right) returns int {
+        return left + right;
+    }
+}
+```
+
+### Client
+
+```ballerina
+import ballerina/io;
+import ballerina/mcp.v2 as mcp;
+
+public function main() returns error? {
+    final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp");
+    _ = check mcpClient->connect({name: "example-client", version: "1.0.0"});
+
+    mcp:CallToolResult result = check mcpClient->callTool({
+        name: "add",
+        arguments: {"left": 2, "right": 3}
+    });
+    io:println(result?.structuredContent);
+    check mcpClient->close();
+}
+```
+
+See the `mcp.v2` module documentation for protocol modes, sessions, advanced services, elicitation, authorization, caching, and how to migrate from the 1.x API.
+
+### Examples
+
+The [examples directory](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/) uses the v2 module:
+
+1. [Weather MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-weather-server) and [client](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-weather-client) - A basic service with AUTO session mode
+2. [Crypto MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-crypto-server) and [client](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-crypto-client) - An advanced service with STATELESS session mode
+3. [Shopping Cart Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-shopping-server) and [client](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-shopping-client) - STATEFUL session mode, and a [modern-protocol variant](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-shopping-server-modern)
+4. [Calendar Connect Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-calendar-connect-server) and [client](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-calendar-connect-client) - URL elicitation for an out-of-band connection step
+
+## The 1.x API
+
+The root module, `ballerina/mcp`, is the API of the 1.x releases. Its behaviour, wire format and compiler diagnostics are unchanged in this release.
 
 ### Key Features
 
@@ -9,13 +89,25 @@ This module provides APIs for building MCP (Model Context Protocol) clients and 
 - Flexible session management (STATEFUL, STATELESS, AUTO modes)
 - Streamable HTTP transport with Server-Sent Events (SSE)
 
-## Quickstart
+### Deprecations
 
-To use the `mcp` module in your Ballerina application, update the `.bal` file as follows:
+These 1.x symbols are deprecated in favour of the v2 module:
 
-### MCP Server Implementation
+| Deprecated | Replacement in the v2 module |
+| --- | --- |
+| `mcp:StreamableHttpClient` | `mcp.v2:StreamableHttpClient` |
+| `mcp:Service` | `mcp.v2:StreamableHttpService` on an `mcp.v2:StreamableHttpListener` |
+| `mcp:AdvancedService` | `mcp.v2:StreamableHttpAdvancedService` on an `mcp.v2:StreamableHttpListener` |
+| `@mcp:ServiceConfig` | `@mcp.v2:StreamableHttpServiceConfig` |
+| `mcp:Listener` | `mcp:StreamableHttpListener`, or `mcp.v2:StreamableHttpListener` |
 
-#### Step 1: Import the module
+### Quickstart
+
+To use the 1.x API in your Ballerina application, update the `.bal` file as follows:
+
+#### MCP Server Implementation
+
+##### Step 1: Import the module
 
 Import the `mcp` module.
 
@@ -23,7 +115,7 @@ Import the `mcp` module.
 import ballerina/mcp;
 ```
 
-#### Step 2: Initialize the MCP Listener
+##### Step 2: Initialize the MCP Listener
 
 Create a Streamable HTTP listener to expose tools to AI applications:
 
@@ -33,7 +125,7 @@ listener mcp:StreamableHttpListener mcpListener = check new (9090);
 
 > **Note:** The `mcp:Listener` class is deprecated. Use `mcp:StreamableHttpListener` instead.
 
-#### Step 3: Create the MCP Service
+##### Step 3: Create the MCP Service
 
 Create an MCP service using the Basic Service pattern with automatic tool discovery. Server information and session management can be configured using the `@mcp:StreamableHttpServiceConfig` annotation. If not provided, default values are used:
 
@@ -158,7 +250,7 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 }
 ```
 
-#### Step 4: Advanced Service Implementation (Optional)
+##### Step 4: Advanced Service Implementation (Optional)
 
 For more control over tool management, use the Advanced Service pattern:
 
@@ -210,9 +302,11 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
 2. `onCallTool` must accept exactly one `mcp:CallToolParams` parameter, and may accept an `mcp:Session?` parameter for stateful services. An `mcp:Meta?` parameter is not accepted here, unlike on the tools of a basic service; read the metadata from the `_meta` field of the `mcp:CallToolParams` value instead.
 3. As with the tools of an `mcp:StreamableHttpService`, both methods can additionally bind HTTP request information, such as `@http:Header` parameters, an `http:Headers` parameter, or an `http:Request` parameter.
 
-### MCP Client Implementation
+#### MCP Client Implementation
 
-#### Step 1: Import the module
+> **Note:** The 1.x client, `mcp:StreamableHttpClient`, is deprecated. Use the client of the v2 module instead.
+
+##### Step 1: Import the module
 
 Import the `mcp` module.
 
@@ -220,7 +314,7 @@ Import the `mcp` module.
 import ballerina/mcp;
 ```
 
-#### Step 2: Initialize the MCP Client
+##### Step 2: Initialize the MCP Client
 
 Create an MCP client to connect to an external MCP server:
 
@@ -228,7 +322,7 @@ Create an MCP client to connect to an external MCP server:
 final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:3000/mcp");
 ```
 
-#### Step 3: Initialize Connection and Discover Tools
+##### Step 3: Initialize Connection and Discover Tools
 
 Initialize the connection with client information and discover available tools:
 
@@ -248,7 +342,7 @@ public function main() returns error? {
 }
 ```
 
-#### Step 4: Invoke Tools
+##### Step 4: Invoke Tools
 
 Call specific tools with parameters and optional custom headers:
 
@@ -273,7 +367,7 @@ public function main() returns error? {
 }
 ```
 
-#### Step 5: Handle Client Configuration (Optional)
+##### Step 5: Handle Client Configuration (Optional)
 
 Configure the client with additional capabilities and custom headers:
 
@@ -303,17 +397,3 @@ public function main() returns error? {
     );
 }
 ```
-
-## Examples
-
-The `mcp` module provides practical examples illustrating usage in various scenarios. Explore these examples in the [examples directory](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/), covering the following use cases:
-
-### Server Examples
-1. [Weather MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-weather-server) - Demonstrates the Basic Service pattern with AUTO session mode for weather-related tools
-2. [Crypto MCP Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-crypto-server) - Shows the Advanced Service pattern with STATELESS session mode for cryptographic operations
-3. [Shopping Cart Server](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/servers/mcp-shopping-server) - Demonstrates STATEFUL session mode with persistent shopping cart functionality across session interactions
-
-### Client Examples
-1. [Weather Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-weather-client-demo) - Shows how to build an MCP client that discovers and invokes weather tools
-2. [Crypto Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-crypto-client-demo) - Demonstrates client interaction with cryptographic MCP services
-3. [Shopping Client Demo](https://github.com/ballerina-platform/module-ballerina-mcp/tree/main/examples/clients/mcp-shopping-client-demo) - Shows session-based client usage with parallel session execution for stateful services

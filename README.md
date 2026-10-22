@@ -6,17 +6,25 @@
 
 ## Overview
 
-This module provides APIs for building MCP (Model Context Protocol) clients and servers in Ballerina, enabling standardized integration between LLMs and external data sources, tools, and services via JSON-RPC 2.0 over HTTP. It supports automatic tool discovery, type-safe schema generation, flexible session management, and streamable HTTP transport with Server-Sent Events for bidirectional communication.
+This package provides APIs for building MCP (Model Context Protocol) clients and servers in Ballerina, enabling standardized integration between LLMs and external data sources, tools, and services via JSON-RPC 2.0 over HTTP. It supports automatic tool discovery, type-safe schema generation, flexible session management, and streamable HTTP transport with Server-Sent Events for bidirectional communication.
 
-## MCP 2026-07-28
+## Modules
 
-Version 2.0.0 adds automatic modern/legacy protocol selection, modern discovery, per-request metadata and headers,
-automatic output schemas and raw structured results for regular services, modern tool-result APIs, and bounded
-input-required continuations. Existing session-dependent services remain on the legacy path in auto mode. Change
-notification subscriptions are not part of 2.0; proper support is planned for a later release. See the [protocol compatibility and migration guide](ballerina/README.md#migrating-from-1x).
-General JSON Schema evaluation is deferred until Ballerina language support is available; existing type binding remains.
+The `ballerina/mcp` package has two modules:
 
-### Interoperability checks
+- [`ballerina/mcp.v2`](ballerina/modules/v2/README.md), the v2 module, for MCP `2026-07-28`. Import it with
+  `import ballerina/mcp.v2 as mcp;`. It adds automatic modern/legacy protocol selection, modern discovery,
+  per-request metadata and headers, automatic output schemas and raw structured results for regular services, modern
+  tool-result APIs, and bounded input-required continuations. Existing session-dependent services remain on the legacy
+  path in auto mode. Change notification subscriptions are not supported yet; proper support is planned for a later
+  release. General JSON Schema evaluation is deferred until Ballerina language support is available; existing type
+  binding remains. See the [migration guide](ballerina/modules/v2/README.md#migrating-from-the-1x-api).
+- [`ballerina/mcp`](ballerina/README.md), the 1.x API, unchanged from 1.4.x. Its client and its transport-agnostic
+  services are deprecated in favour of the v2 module.
+
+## Interoperability checks
+
+The interoperability fixtures exercise the v2 module.
 
 After `./gradlew build -x commitTomlFiles`, use `target/ballerina-runtime/bin/bal` to clean and build the
 `ballerina-tests/interop-server` and `ballerina-tests/interop-client` packages. Cleaning matters when testing multiple

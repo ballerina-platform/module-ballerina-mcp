@@ -1,8 +1,14 @@
 ## Overview
 
-The `ballerina/mcp` module builds MCP clients and servers over Streamable HTTP. Version 2.0 supports MCP
-`2026-07-28` and can still communicate with servers and clients using the initialize-based protocol through
+The `ballerina/mcp.v2` module of the `ballerina/mcp` package builds MCP clients and servers over Streamable HTTP. It
+supports MCP `2026-07-28` and can still communicate with servers and clients using the initialize-based protocol through
 `2025-11-25`.
+
+Import it with the `mcp` prefix, which the rest of this documentation uses:
+
+```ballerina
+import ballerina/mcp.v2 as mcp;
+```
 
 ### Key Features
 
@@ -35,7 +41,7 @@ A basic service exposes each remote method as a tool. The compiler derives its i
 signature.
 
 ```ballerina
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9090);
 
@@ -108,13 +114,13 @@ Use `@mcp:Tool` to override generated metadata:
     schema: {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         'type: "object",
-        properties: {accountId: {type: "string"}},
+        properties: {accountId: {'type: "string"}},
         required: ["accountId"]
     },
     outputSchema: {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        type: "array",
-        items: {type: "number"}
+        "type": "array",
+        "items": {"type": "number"}
     }
 }
 remote isolated function balances(string accountId) returns decimal[] {
@@ -317,10 +323,10 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
                 name: "echo",
                 inputSchema: {
                     'type: "object",
-                    properties: {value: {type: "string"}},
+                    properties: {value: {'type: "string"}},
                     required: ["value"]
                 },
-                outputSchema: {type: "string"}
+                outputSchema: {"type": "string"}
             }]
         };
     }
@@ -330,11 +336,12 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
         if params.name != "echo" {
             return error mcp:ServerError("Unknown tool");
         }
-        json value = params.arguments?.value ?: "";
-        return {
-            content: [{type: "text", text: value.toJsonString()}],
+        json value = (params.arguments ?: {})["value"].toJson();
+        mcp:CallToolResult result = {
+            content: [{'type: "text", text: value.toJsonString()}],
             structuredContent: value
         };
+        return result;
     }
 }
 ```
@@ -554,25 +561,25 @@ Creating a client configures its transport. `connect()` performs protocol select
 
 ```ballerina
 import ballerina/io;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 public function main() returns error? {
-    final mcp:StreamableHttpClient client = check new (
+    final mcp:StreamableHttpClient mcpClient = check new (
         "http://localhost:9090/mcp",
         protocolMode = "auto"
     );
 
-    mcp:ConnectionInfo connection = check client->connect({name: "example-client", version: "2.0.0"});
+    mcp:ConnectionInfo connection = check mcpClient->connect({name: "example-client", version: "2.0.0"});
     io:println("Using MCP ", connection.protocolVersion);
 
-    mcp:ListToolsResult listed = check client->listTools();
-    mcp:CallToolResult result = check client->callTool({
+    mcp:ListToolsResult listed = check mcpClient->listTools();
+    mcp:CallToolResult result = check mcpClient->callTool({
         name: "add",
-        arguments: {left: 2, right: 3}
+        arguments: {"left": 2, "right": 3}
     });
 
-    io:println(result.structuredContent);
-    check client->close();
+    io:println(result?.structuredContent);
+    check mcpClient->close();
 }
 ```
 
@@ -584,7 +591,7 @@ it needs a Resource Authorization Server access token, after discovery has resol
 Resource-AS client ID, and scopes.
 
 ```ballerina
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 configurable string resourceAsClientSecret = ?;
 configurable string idpClientSecret = ?;
@@ -606,7 +613,7 @@ isolated function provideIdJag(mcp:IdentityAssertionContext context)
     });
 }
 
-final mcp:StreamableHttpClient client = check new (
+final mcp:StreamableHttpClient mcpClient = check new (
     "https://tools.example.com/mcp",
     httpConfig = {
         auth: {
@@ -670,7 +677,7 @@ mcp:StreamableHttpClientConfig config = {
     },
     httpConfig: {timeout: 30}
 };
-final mcp:StreamableHttpClient client = check new ("http://localhost:9090/mcp", config);
+final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp", config);
 ```
 
 HTTP settings go under `httpConfig`, an `mcp:HttpClientConfig` with the fields and defaults of
@@ -740,12 +747,22 @@ A token refreshed on expiry keeps the cache. A negative `ttlMs` from a server is
 touching the cache. Set `resultCache = ()` in the client configuration to disable reuse, or adjust `maxTtlMs` and
 `maxEntries` in `resultCache` to bound it.
 
-## Migrating from 1.x
+## Migrating from the 1.x API
 
-Version 2.0 removes the transport-neutral listener, service types and annotation, and gives Streamable HTTP concepts
+The 1.x API stays available in the root module, `ballerina/mcp`, and its behaviour is unchanged. To move code to the
+v2 module, change its import:
+
+```ballerina
+import ballerina/mcp.v2 as mcp;
+```
+
+Both modules can be used in one package, or even in one file with different prefixes, so services can move one at a
+time. Each module's services are validated and generated by that module's compiler rules only.
+
+The v2 module removes the transport-neutral listener, service types and annotation, and gives Streamable HTTP concepts
 explicit names.
 
-| 1.x API | 2.0 API |
+| 1.x API | v2 module |
 | --- | --- |
 | `mcp:Listener` | `mcp:StreamableHttpListener` |
 | `mcp:Service` | `mcp:StreamableHttpService` |
@@ -760,22 +777,83 @@ explicit names.
 | `initialize()` | `connect()` or `initializeLegacy()` |
 | `subscribeToServerMessages()` | Removed |
 
-1.x did not validate `Origin`. A 2.0 service rejects browser requests from origins that are not listed in
-`httpConfig.cors.allowOrigins`, which is empty by default.
+Other differences from the 1.x API:
 
-The client must now call `connect()`, or `initializeLegacy()`, before other operations; 1.x did not enforce
-`initialize()`.
+- The client must call `connect()`, or `initializeLegacy()`, before other operations; 1.x did not enforce
+  `initialize()`.
+- An `mcp:HttpSession` parameter may be declared at any position of a tool. A second one is a duplicate parameter.
+- A service validates `Origin`. It rejects browser requests from origins that are not listed in
+  `httpConfig.cors.allowOrigins`, which is empty by default, with `403 Forbidden`. 1.x did not validate `Origin`.
+- The text content of a tool result follows the return value: a `string` is used as is, `()` produces no content
+  block, and any other value becomes its JSON serialization. A legacy client otherwise keeps receiving the legacy wire
+  shapes.
+- Tool failures are mapped the same way on both protocols. A request value that cannot be bound to a parameter, or an
+  `mcp:InvalidParamsError` from an advanced service, is a JSON-RPC `INVALID_PARAMS` error. An `mcp:ServerError` from an
+  advanced service gets a JSON-RPC error with its message, and another error or a panic gets an `INTERNAL_ERROR` with a
+  generic message.
+- Change notifications are not supported. `subscribeToServerMessages()` has no replacement, a modern service answers
+  `subscriptions/listen` with `METHOD_NOT_FOUND`, and `tools.listChanged` is advertised as `false`. Proper support for
+  change notification subscriptions is planned for a later release.
+- The `2025-11-25` task fields are removed: `CallToolParams.task`, `ToolDefinition.execution` with the
+  `mcp:ToolExecution` and `mcp:TaskSupport` types, and the `tasks` client and server capabilities. A service ignores a
+  `task` field on `tools/call`, and a client still connects to a server that advertises tasks.
+- The non-standard `data` and `size` fields of `mcp:Icon` are removed, and `src` is required, as in the MCP
+  `2025-11-25` icon schema. Put inline image data in `src` as a `data:` URI.
+- The public error hierarchy is `mcp:Error`, `mcp:ClientError`, `mcp:TransportError`, `mcp:ProtocolError`,
+  `mcp:ToolCallError`, `mcp:StreamError`, and `mcp:ServerError`, with `mcp:InvalidParamsError`,
+  `mcp:InsufficientScopeError`, `mcp:AuthorizationError`, and `mcp:OAuthTokenError`. The transport and decoder error
+  types of 1.x, such as `mcp:ServerResponseError` and `mcp:MissingSseDataError`, are internal.
 
-2.0 does not support change notifications. `subscribeToServerMessages()` has no replacement, a modern service answers
-`subscriptions/listen` with `METHOD_NOT_FOUND`, and `tools.listChanged` is advertised as `false`. Proper support for
-change notification subscriptions is planned for a later release.
+### Importing the v2 module in a locked project
 
-A legacy client keeps receiving the legacy wire shapes from a 2.0 server. The text content of a tool that returns a
-structured value is now its JSON serialization.
+The v2 module first ships in `ballerina/mcp` 1.5.0. A project whose `Dependencies.toml` locks an older `ballerina/mcp`
+cannot resolve `ballerina/mcp.v2` until the lock moves to 1.5.0 or later. Do one of the following:
 
-The `2025-11-25` task fields are removed: `CallToolParams.task`, `ToolDefinition.execution` and the `tasks` client and
-server capabilities. A client still connects to a server that advertises tasks.
+- Declare the version in `Ballerina.toml`:
 
-The public error hierarchy is `mcp:Error`, `mcp:ClientError`, `mcp:TransportError`, `mcp:ProtocolError`,
-`mcp:ToolCallError`, `mcp:StreamError`, and `mcp:ServerError` with `mcp:InvalidParamsError`; transport and decoder
-implementation errors are internal.
+  ```toml
+  [[dependency]]
+  org = "ballerina"
+  name = "mcp"
+  version = "1.5.0"
+  ```
+
+- Pull the package with `bal pull ballerina/mcp:1.5.0`.
+- Delete `Dependencies.toml` and build again, so that it is regenerated.
+
+Resolving the `mcp.v2` module name contacts Ballerina Central unless the project's `Dependencies.toml` already records
+it, so build an unlocked project online once, or pass `--offline` when the package is in a local repository.
+
+### Compiler diagnostic codes
+
+The v2 module's compiler diagnostics have their own codes, so that they never mix with the 1.x codes. Their messages
+are unchanged.
+
+| 1.x code | v2 module code | Diagnostic |
+| --- | --- | --- |
+| `MCP_101` | `MCP_201` | The tool's parameter schema cannot be generated |
+| `MCP_102` | `MCP_202` | A tool parameter has an unsupported type |
+| `MCP_104` | `MCP_204` | An `mcp:HttpSession` parameter in a stateless service |
+| `MCP_105` | `MCP_205` | Retained; request metadata no longer has to be the last parameter |
+| `MCP_106` | `MCP_206` | Request metadata is not optional |
+| `MCP_107` | `MCP_207` | Duplicate parameter |
+| `MCP_108` | `MCP_208` | Invalid type of an `@http:Header` parameter |
+| `MCP_110` | `MCP_210` | An advanced service lacks `onListTools` or `onCallTool` |
+| `MCP_111` | `MCP_211` | Invalid parameters of an advanced service method |
+| `MCP_112` | `MCP_212` | Invalid return type of an advanced service method |
+| `MCP_113` | `MCP_213` | An unsupported remote method in an advanced service |
+| - | `MCP_214` | A required `mcp:HttpSession` parameter in modern protocol mode |
+| - | `MCP_215` | Invalid type of an `@mcp:Argument` parameter |
+| - | `MCP_216` | Invalid `@mcp:Argument` header name |
+| - | `MCP_217` | Duplicate `@mcp:Argument` header name |
+| - | `MCP_218` | `@mcp:Argument` with an explicit `@mcp:Tool` schema |
+| - | `MCP_219` | A record field that cannot be a form field |
+| - | `MCP_220` | An `mcp:elicitForm` schema that is not a form schema value or a named record type |
+| - | `MCP_221` | `structuredOutput: false` with an explicit `outputSchema` |
+| `MCP_WARNING_101` | `MCP_WARNING_201` | Endpoint metadata is not supported by the Ballerina version |
+| - | `MCP_WARNING_202` | A required `mcp:HttpSession` parameter in auto protocol mode |
+| - | `MCP_WARNING_203` | An `mcp:HttpSession` parameter in modern protocol mode |
+| - | `MCP_WARNING_204` | An optional `mcp:HttpSession` parameter in auto protocol mode |
+
+The 1.x codes `MCP_103` and `MCP_109` have no v2 counterpart: an `mcp:HttpSession` parameter may be declared at any
+position, and every v2 basic service is a Streamable HTTP service.
