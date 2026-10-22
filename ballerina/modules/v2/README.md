@@ -821,6 +821,8 @@ cannot resolve `ballerina/mcp.v2` until the lock moves to 1.5.0 or later. Do one
 - Pull the package with `bal pull ballerina/mcp:1.5.0`.
 - Delete `Dependencies.toml` and build again, so that it is regenerated.
 
+Changing `lockingMode` does not help: the module lookup always asks for the locked minor version.
+
 Resolving the `mcp.v2` module name contacts Ballerina Central unless the project's `Dependencies.toml` already records
 it, so build an unlocked project online once, or pass `--offline` when the package is in a local repository.
 
