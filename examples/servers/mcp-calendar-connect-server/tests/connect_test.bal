@@ -16,7 +16,7 @@
 
 import ballerina/http;
 import ballerina/jwt;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 import ballerina/test;
 
 final http:Client browser = check new (origin);

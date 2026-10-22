@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 import ballerina/test;
 
 // An advanced Streamable HTTP service whose onListTools/onCallTool bind transport-specific request

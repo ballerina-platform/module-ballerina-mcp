@@ -8,6 +8,11 @@ fixes:
   - "ballerina/global_vars/::ballerina/"
   - "ballerina/constants/::ballerina/"
   - "ballerina/typedescs/::ballerina/"
+  - "ballerina/modules/v2/values/::ballerina/modules/v2/"
+  - "ballerina/modules/v2/lambdas/::ballerina/modules/v2/"
+  - "ballerina/modules/v2/global_vars/::ballerina/modules/v2/"
+  - "ballerina/modules/v2/constants/::ballerina/modules/v2/"
+  - "ballerina/modules/v2/typedescs/::ballerina/modules/v2/"
 
 ignore:
   - "ballerina-tests"

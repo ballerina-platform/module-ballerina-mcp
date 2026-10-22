@@ -17,7 +17,7 @@
 import ballerina/http;
 import ballerina/io;
 import ballerina/jwt;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 configurable int port = 9093;
 # Secret of the demo's HS256 access tokens, shared with the calendar server.

@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/io;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 configurable string interopUrl = ?;
 

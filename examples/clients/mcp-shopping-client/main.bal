@@ -16,7 +16,7 @@
 
 import ballerina/io;
 import ballerina/log;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 
 public function main() returns mcp:ClientError? {
     log:printInfo("=== MCP Shopping Cart Demo - Two Sessions ===");

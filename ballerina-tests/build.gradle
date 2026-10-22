@@ -38,7 +38,7 @@ def testCommonTomlFilePlaceHolder = new File("${project.rootDir}/build-config/re
 def ballerinaDist = "${project.rootDir}/target/ballerina-runtime"
 def distributionBinPath =  "${ballerinaDist}/bin"
 def testCoverageParam = "--code-coverage --coverage-format=xml --includes=io.ballerina.stdlib.mcp.*:ballerina.mcp*"
-def testSuites = ["mcp-ballerina-tests"]
+def testSuites = ["mcp-ballerina-tests", "mcp-v2-ballerina-tests"]
 
 def stripBallerinaExtensionVersion(String extVersion) {
     if (extVersion.matches(project.ext.timestampedVersionRegex)) {

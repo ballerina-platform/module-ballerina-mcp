@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 import ballerina/test;
 
 type CartItem record {|
@@ -417,7 +417,7 @@ function testConversionFailureDoesNotExposeInternalTypes() returns error? {
     [boolean, string] [isError, message] = check getToolError(check response.getJsonPayload());
     test:assertTrue(isError);
     test:assertEquals(message, "invalid value for argument 'item': " +
-            "missing required field 'qty' of type 'int' in record 'mcp_ballerina_tests:CartItem'");
+            "missing required field 'qty' of type 'int' in record 'mcp_v2_ballerina_tests:CartItem'");
     test:assertFalse(message.includes("anydata"), message);
     test:assertFalse(message.includes("readonly"), message);
 }

@@ -17,7 +17,7 @@
 import ballerina/crypto;
 import ballerina/lang.array;
 import ballerina/log;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 import ballerina/time;
 
 listener mcp:StreamableHttpListener mcpListener = check new (9091);

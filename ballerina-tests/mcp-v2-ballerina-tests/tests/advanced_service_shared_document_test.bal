@@ -24,7 +24,7 @@
 // These two services MUST stay in the same document for this test to be meaningful.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 import ballerina/test;
 
 // The tool-bearing basic service. Its presence is what makes the modifier rewrite this document.

@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 import ballerina/test;
 
 // A nilable field binds to nil when the header is absent; an optional field is left out entirely.

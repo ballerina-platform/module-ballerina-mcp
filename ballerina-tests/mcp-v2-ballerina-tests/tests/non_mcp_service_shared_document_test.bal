@@ -24,7 +24,7 @@
 // MUST stay in the same document as the mcp service for this test to be meaningful.
 
 import ballerina/http;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 import ballerina/test;
 
 // A plain http:Service -- not an mcp service at all.

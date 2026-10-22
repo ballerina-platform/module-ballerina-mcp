@@ -16,7 +16,7 @@
 
 import ballerina/io;
 import ballerina/log;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcp;
 import ballerina/uuid;
 
 final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9091/mcp");
