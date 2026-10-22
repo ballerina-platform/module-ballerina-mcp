@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "transport_neutral_stateless"
+version = "0.1.0"

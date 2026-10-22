@@ -58,11 +58,9 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
     private static final String AUTH_CONTEXT_DISPLAY = "mcp:AuthContext";
     private static final String CURSOR_DISPLAY = "mcp:Cursor";
     private static final String CALL_TOOL_PARAMS_DISPLAY = "mcp:CallToolParams";
-    // The 1.x types close each list, so the 1.x wording stays a substring of the message.
-    private static final String CALL_TOOL_RESULT_DISPLAY =
-            "mcp:ToolResult|mcp:InputRequiredResult|mcp:CallToolResult|mcp:ServerError";
-    private static final String LIST_TOOLS_RESULT_DISPLAY =
-            "mcp:ToolPage|mcp:ListToolsResult|mcp:ServerError";
+    // 1.4.0's wording; the new result types are accepted as well.
+    private static final String CALL_TOOL_RESULT_DISPLAY = "mcp:CallToolResult|mcp:ServerError";
+    private static final String LIST_TOOLS_RESULT_DISPLAY = "mcp:ListToolsResult|mcp:ServerError";
 
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {

@@ -22,6 +22,7 @@ import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
 import io.ballerina.compiler.syntax.tree.ExpressionNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
+import io.ballerina.compiler.syntax.tree.ImportDeclarationNode;
 import io.ballerina.compiler.syntax.tree.MetadataNode;
 import io.ballerina.compiler.syntax.tree.ModuleMemberDeclarationNode;
 import io.ballerina.compiler.syntax.tree.ModulePartNode;
@@ -50,6 +51,7 @@ import static io.ballerina.compiler.syntax.tree.SyntaxKind.CLOSE_BRACE_TOKEN;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.OBJECT_METHOD_DEFINITION;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.OPEN_BRACE_TOKEN;
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.SERVICE_DECLARATION;
+import static io.ballerina.stdlib.mcp.plugin.Utils.BALLERINA_ORG;
 import static io.ballerina.stdlib.mcp.plugin.Utils.MCP_PACKAGE_NAME;
 import static io.ballerina.stdlib.mcp.plugin.Utils.TOOL_ANNOTATION_NAME;
 import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
@@ -96,14 +98,16 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
     private ModulePartNode modifyModulePartRoot(SemanticModel semanticModel, ModulePartNode modulePartNode,
                                                 ModifierContext modifierContext, DocumentId documentId) {
         List<ModuleMemberDeclarationNode> modifiedMembers = getModifiedModuleMembers(semanticModel,
-                modulePartNode.members(), modifierContext);
+                modulePartNode.members(), modifierContext, mcpPrefix(modulePartNode));
         return modulePartNode.modify().withMembers(NodeFactory.createNodeList(modifiedMembers)).apply();
     }
 
     private List<ModuleMemberDeclarationNode> getModifiedModuleMembers(SemanticModel semanticModel,
                                                                        NodeList<ModuleMemberDeclarationNode> members,
-                                                                       ModifierContext modifierContext) {
-        Map<FunctionDefinitionNode, AnnotationNode> modifiedAnnotations = getModifiedAnnotations(modifierContext);
+                                                                       ModifierContext modifierContext,
+                                                                       String mcpPrefix) {
+        Map<FunctionDefinitionNode, AnnotationNode> modifiedAnnotations =
+                getModifiedAnnotations(modifierContext, mcpPrefix);
         FormSchemaModifier formSchemaModifier = new FormSchemaModifier(modifierContext.getFormSchemaMap());
         List<ModuleMemberDeclarationNode> modifiedMembers = new ArrayList<>();
 
@@ -115,19 +119,34 @@ public class McpSourceModifier implements ModifierTask<SourceModifierContext> {
         return modifiedMembers;
     }
 
-    private Map<FunctionDefinitionNode, AnnotationNode> getModifiedAnnotations(ModifierContext modifierContext) {
+    private Map<FunctionDefinitionNode, AnnotationNode> getModifiedAnnotations(ModifierContext modifierContext,
+                                                                               String mcpPrefix) {
         Map<FunctionDefinitionNode, AnnotationNode> updatedAnnotationMap = new HashMap<>();
         for (Map.Entry<FunctionDefinitionNode, ToolAnnotationConfig> entry : modifierContext
                 .getAnnotationConfigMap().entrySet()) {
-            updatedAnnotationMap.put(entry.getKey(), getModifiedAnnotation(entry.getValue()));
+            updatedAnnotationMap.put(entry.getKey(), getModifiedAnnotation(entry.getValue(), mcpPrefix));
         }
         return updatedAnnotationMap;
     }
 
-    private AnnotationNode getModifiedAnnotation(ToolAnnotationConfig config) {
+    private AnnotationNode getModifiedAnnotation(ToolAnnotationConfig config, String mcpPrefix) {
         String mappingConstructorExpression = generateConfigMappingConstructor(config);
-        String annotationString = "@" + MCP_PACKAGE_NAME + ":" + TOOL_ANNOTATION_NAME + mappingConstructorExpression;
+        String annotationString = "@" + mcpPrefix + ":" + TOOL_ANNOTATION_NAME + mappingConstructorExpression;
         return NodeParser.parseAnnotation(annotationString);
+    }
+
+    // The prefix this document imports `ballerina/mcp` under, which an alias such as `as m` changes.
+    private static String mcpPrefix(ModulePartNode modulePartNode) {
+        for (ImportDeclarationNode importNode : modulePartNode.imports()) {
+            boolean isMcpImport = importNode.orgName()
+                    .map(org -> BALLERINA_ORG.equals(org.orgName().text())).orElse(false)
+                    && importNode.moduleName().size() == 1
+                    && MCP_PACKAGE_NAME.equals(importNode.moduleName().get(0).text());
+            if (isMcpImport) {
+                return importNode.prefix().map(prefix -> prefix.prefix().text()).orElse(MCP_PACKAGE_NAME);
+            }
+        }
+        return MCP_PACKAGE_NAME;
     }
 
     private String generateConfigMappingConstructor(ToolAnnotationConfig config) {

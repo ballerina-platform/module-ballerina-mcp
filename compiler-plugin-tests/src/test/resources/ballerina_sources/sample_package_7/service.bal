@@ -16,7 +16,7 @@
 
 import ballerina/mcp;
 
-// sessionMode declared via the @mcp:StreamableHttpServiceConfig annotation
+// sessionMode declared via the transport-specific @mcp:StreamableHttpServiceConfig annotation
 // must be honored by the plugin: a Session parameter under STATELESS is an error (MCP_104).
 @mcp:StreamableHttpServiceConfig {
     info: {name: "sample-7", version: "1.0.0"},

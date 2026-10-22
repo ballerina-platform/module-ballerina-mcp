@@ -16,10 +16,10 @@
 
 import ballerina/mcp;
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:ServiceConfig {
     info: {name: "sample-18", version: "1.0.0"}
 }
-service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9318) {
+service mcp:Service /mcp on new mcp:StreamableHttpListener(9318) {
 
     @mcp:Tool {description: "metadata can be injected between tool arguments"}
     remote function metaInMiddle(string name, mcp:Meta? meta, string greeting) returns string {

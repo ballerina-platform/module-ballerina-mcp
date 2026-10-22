@@ -1,0 +1,445 @@
+/*
+ * Copyright (c) 2026, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package io.ballerina.stdlib.mcp.plugin;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import io.ballerina.compiler.syntax.tree.FunctionCallExpressionNode;
+import io.ballerina.compiler.syntax.tree.NodeVisitor;
+import io.ballerina.projects.DiagnosticResult;
+import io.ballerina.projects.Module;
+import io.ballerina.projects.Package;
+import io.ballerina.projects.ProjectEnvironmentBuilder;
+import io.ballerina.projects.directory.BuildProject;
+import io.ballerina.projects.environment.Environment;
+import io.ballerina.projects.environment.EnvironmentBuilder;
+import io.ballerina.tools.diagnostics.Diagnostic;
+import io.ballerina.tools.diagnostics.DiagnosticSeverity;
+import io.swagger.v3.core.util.Json;
+import org.testng.Assert;
+import org.testng.annotations.Test;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Tests for the MCP compiler plugin diagnostics on '@http:Header' and 'http:Headers' tool parameters.
+ */
+public class CompilerPluginV2Test {
+
+    private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "ballerina_sources")
+            .toAbsolutePath();
+    private static final Path DISTRIBUTION_PATH = Paths.get("../", "target", "ballerina-runtime")
+            .toAbsolutePath();
+
+    private static final String MCP_102 = "MCP_102";
+    private static final String MCP_104 = "MCP_104";
+    private static final String MCP_107 = "MCP_107";
+    private static final String MCP_108 = "MCP_108";
+    private static final String MCP_110 = "MCP_110";
+    private static final String MCP_111 = "MCP_111";
+    private static final String MCP_112 = "MCP_112";
+    private static final String MCP_113 = "MCP_113";
+
+    private Package loadPackage(String path) {
+        Path projectDirPath = RESOURCE_DIRECTORY.resolve(path);
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(), projectDirPath);
+        return project.currentPackage();
+    }
+
+    private static ProjectEnvironmentBuilder getEnvironmentBuilder() {
+        Environment environment = EnvironmentBuilder.getBuilder().setBallerinaHome(DISTRIBUTION_PATH).build();
+        return ProjectEnvironmentBuilder.getBuilder(environment);
+    }
+
+    private DiagnosticResult compile(String path) {
+        Package currentPackage = loadPackage(path);
+        // The MCP compiler plugin is registered as a CodeModifier, so its diagnostics are
+        // reported by the code-generate/modify phase, not by getCompilation() alone
+        return currentPackage.runCodeGenAndModifyPlugins();
+    }
+
+    private long errorCount(DiagnosticResult diagnosticResult) {
+        return diagnosticResult.diagnostics().stream()
+                .filter(d -> d.diagnosticInfo().severity().equals(DiagnosticSeverity.ERROR)).count();
+    }
+
+    private void assertError(DiagnosticResult diagnosticResult, int index, String messagePart, String code) {
+        Diagnostic diagnostic = (Diagnostic) diagnosticResult.errors().toArray()[index];
+        Assert.assertTrue(diagnostic.message().contains(messagePart),
+                "expected message containing '" + messagePart + "' but found: " + diagnostic.message());
+        Assert.assertEquals(diagnostic.diagnosticInfo().code(), code);
+    }
+
+    @Test
+    public void testValidHeaderParameterTypes() {
+        DiagnosticResult diagnosticResult = compile("sample_package_1");
+        Assert.assertEquals(errorCount(diagnosticResult), 0,
+                "valid header parameter shapes must not produce errors: "
+                        + diagnosticResult.errors().toString());
+    }
+
+    @Test
+    public void testInvalidUnionHeaderParamType() {
+        DiagnosticResult diagnosticResult = compile("sample_package_2");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0, "Invalid type of header param 'mixed'", MCP_108);
+    }
+
+    @Test
+    public void testHeaderRecordWithRestFields() {
+        DiagnosticResult diagnosticResult = compile("sample_package_3");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0, "Invalid type of header param 'hdrs'", MCP_108);
+    }
+
+    @Test
+    public void testDuplicateHttpHeadersParams() {
+        DiagnosticResult diagnosticResult = compile("sample_package_4");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0, "Duplicate parameter 'second'", MCP_107);
+        assertError(diagnosticResult, 0, "type 'http:Headers'", MCP_107);
+    }
+
+    @Test
+    public void testInvalidHeaderParamType() {
+        DiagnosticResult diagnosticResult = compile("sample_package_5");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0, "Invalid type of header param 'payload'", MCP_108);
+    }
+
+    @Test
+    public void testSessionParamStatelessViaTransportConfig() {
+        DiagnosticResult diagnosticResult = compile("v2_sample_package_7");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0, "is not allowed when sessionMode is STATELESS", MCP_104);
+    }
+
+    @Test
+    public void testSessionParamAtAnyPosition() {
+        DiagnosticResult diagnosticResult = compile("session_param_any_position");
+        Assert.assertEquals(errorCount(diagnosticResult), 0, diagnosticResult.errors().toString());
+    }
+
+    @Test
+    public void testDuplicateSessionParams() {
+        DiagnosticResult diagnosticResult = compile("duplicate_session_param");
+        Assert.assertEquals(errorCount(diagnosticResult), 1, diagnosticResult.errors().toString());
+        assertError(diagnosticResult, 0, "Duplicate parameter 'second'", MCP_107);
+        assertError(diagnosticResult, 0, "type 'mcp:Session'", MCP_107);
+    }
+
+    @Test
+    public void testDuplicateHttpRequestParams() {
+        DiagnosticResult diagnosticResult = compile("sample_package_10");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0, "Duplicate parameter 'second'", MCP_107);
+        assertError(diagnosticResult, 0, "type 'http:Request'", MCP_107);
+    }
+
+    @Test
+    public void testValidAdvancedService() {
+        DiagnosticResult diagnosticResult = compile("v2_sample_package_11");
+        Assert.assertEquals(errorCount(diagnosticResult), 0,
+                "valid advanced service shapes must not produce errors: "
+                        + diagnosticResult.errors().toString());
+    }
+
+    @Test
+    public void testAdvancedServiceMissingOnCallTool() {
+        DiagnosticResult diagnosticResult = compile("v2_sample_package_12");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0, "must define a remote method 'onCallTool'", MCP_110);
+    }
+
+    @Test
+    public void testAdvancedOnCallToolMissingCallToolParams() {
+        DiagnosticResult diagnosticResult = compile("v2_sample_package_13");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0, "must declare exactly one parameter of type mcp:CallToolParams", MCP_111);
+    }
+
+    @Test
+    public void testAdvancedUnsupportedParam() {
+        DiagnosticResult diagnosticResult = compile("v2_sample_package_14");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0, "Parameter 'extra' in function 'onCallTool' has an unsupported type",
+                MCP_102);
+    }
+
+    @Test
+    public void testAdvancedInvalidReturnType() {
+        DiagnosticResult diagnosticResult = compile("v2_sample_package_15");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0,
+                "must return 'mcp:CallToolResult|mcp:ServerError'",
+                MCP_112);
+    }
+
+    @Test
+    public void testAdvancedUnknownRemoteMethod() {
+        DiagnosticResult diagnosticResult = compile("v2_sample_package_16");
+        Assert.assertEquals(errorCount(diagnosticResult), 2);
+        assertError(diagnosticResult, 0, "Remote method 'doSomething' is not supported", MCP_113);
+        assertError(diagnosticResult, 0, "Only onListTools and onCallTool are allowed", MCP_113);
+        assertError(diagnosticResult, 1, "Remote method 'onSubscribe' is not supported", MCP_113);
+    }
+
+    @Test
+    public void testAdvancedListToolsUnsupportedParam() {
+        DiagnosticResult diagnosticResult = compile("v2_sample_package_17");
+        Assert.assertEquals(errorCount(diagnosticResult), 1);
+        assertError(diagnosticResult, 0,
+                "Parameter 'params' in function 'onListTools' has an unsupported type", MCP_102);
+        // The supported-types message for 'onListTools' must not advertise the 'onCallTool'-only types.
+        Diagnostic diagnostic = (Diagnostic) diagnosticResult.errors().toArray()[0];
+        Assert.assertFalse(diagnostic.message().contains("mcp:CallToolParams"),
+                "onListTools supported-types message must not list 'mcp:CallToolParams': " + diagnostic.message());
+        Assert.assertFalse(diagnostic.message().contains("mcp:Session"),
+                "onListTools supported-types message must not list 'mcp:Session': " + diagnostic.message());
+    }
+
+    @Test
+    public void testMetaParameterCanAppearBeforeDataParameters() {
+        DiagnosticResult diagnosticResult = compile("v2_sample_package_18");
+        Assert.assertEquals(errorCount(diagnosticResult), 0,
+                "an optional mcp:Meta parameter must be accepted outside the final position: "
+                        + diagnosticResult.errors().toString());
+    }
+
+    @Test
+    public void testRequestMetaParameterMustBeOptional() {
+        DiagnosticResult diagnosticResult = compile("required_request_meta");
+        Assert.assertEquals(errorCount(diagnosticResult), 1, diagnosticResult.errors().toString());
+        assertError(diagnosticResult, 0, "(e.g., mcp:Meta?)", "MCP_106");
+    }
+
+    @Test
+    public void testProtocolSessionDiagnostics() {
+        String[] codes = {"MCP_WARNING_102", "MCP_114", "MCP_WARNING_104", "MCP_WARNING_103"};
+        for (int index = 0; index < codes.length; index++) {
+            DiagnosticResult result = compile("sample_package_" + (19 + index));
+            String code = codes[index];
+            Assert.assertTrue(result.diagnostics().stream().anyMatch(d -> d.diagnosticInfo().code().equals(code)),
+                    "Expected " + code + ": " + result.diagnostics());
+            Assert.assertEquals(errorCount(result), index == 1 ? 1L : 0L);
+        }
+        DiagnosticResult legacy = compile("sample_package_23");
+        Assert.assertEquals(errorCount(legacy), 0L);
+        Assert.assertFalse(legacy.diagnostics().stream()
+                .anyMatch(d -> d.diagnosticInfo().code().startsWith("MCP_WARNING_10")));
+    }
+    @Test
+    public void testOptionalSessionAliasInModernStatelessService() {
+        DiagnosticResult result = compile("sample_package_24");
+        Assert.assertEquals(errorCount(result), 0L);
+        Assert.assertEquals(result.diagnostics().stream()
+                .filter(d -> d.diagnosticInfo().code().equals("MCP_WARNING_103")).count(), 1L);
+    }
+
+    @Test
+    public void testModernResultsOnExistingAdvancedService() {
+        DiagnosticResult result = compile("sample_package_25");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testAdvancedHandlersBindHttpValuesAndCursor() {
+        DiagnosticResult result = compile("advanced_handler_http_parameters");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testAdvancedHandlerUnsupportedParameters() {
+        DiagnosticResult result = compile("advanced_handler_unsupported_parameters");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "Parameter 'cursor' in function 'onListTools' has an unsupported type", MCP_102);
+    }
+
+    @Test
+    public void testMcpArgumentHeaderAnnotation() {
+        DiagnosticResult result = compile("sample_package_26");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testMcpArgumentHeaderDiagnostics() {
+        DiagnosticResult invalidType = compile("sample_package_27");
+        Assert.assertEquals(errorCount(invalidType), 1L);
+        assertError(invalidType, 0, "cannot use '@mcp:Argument'", "MCP_115");
+
+        DiagnosticResult numberTypes = compile("argument_number_headers");
+        Assert.assertEquals(errorCount(numberTypes), 2L, numberTypes.errors().toString());
+        assertError(numberTypes, 0, "cannot use '@mcp:Argument'", "MCP_115");
+        assertError(numberTypes, 1, "cannot use '@mcp:Argument'", "MCP_115");
+
+        DiagnosticResult invalidName = compile("sample_package_28");
+        Assert.assertEquals(errorCount(invalidName), 1L);
+        assertError(invalidName, 0, "Invalid MCP argument header name 'Bad Header'", "MCP_116");
+
+        DiagnosticResult duplicateName = compile("sample_package_29");
+        Assert.assertEquals(errorCount(duplicateName), 1L);
+        assertError(duplicateName, 0, "Duplicate MCP argument header name 'region'", "MCP_117");
+
+        DiagnosticResult explicitSchema = compile("sample_package_30");
+        Assert.assertEquals(errorCount(explicitSchema), 1L);
+        assertError(explicitSchema, 0, "cannot combine '@mcp:Argument'", "MCP_118");
+
+        DiagnosticResult conflictingBinding = compile("sample_package_31");
+        Assert.assertEquals(errorCount(conflictingBinding), 1L);
+        assertError(conflictingBinding, 0, "cannot use '@mcp:Argument'", "MCP_115");
+    }
+
+    @Test
+    public void testUnstructuredOutputWithExplicitOutputSchema() {
+        DiagnosticResult result = compile("unstructured_output_with_output_schema");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "cannot combine 'structuredOutput: false'", "MCP_121");
+    }
+
+    @Test
+    public void testUnstructuredOutputSkipsReturnSchemaGeneration() {
+        DiagnosticResult result = compile("unstructured_unmappable_return");
+        Assert.assertEquals(result.diagnostics().size(), 0, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testContextAndInputRequiredResultStayOutOfToolSchemas() {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve("sample_package_32"));
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+
+        Module module = project.currentPackage().getDefaultModule();
+        String source = module.documentIds().stream()
+                .map(documentId -> module.document(documentId).syntaxTree().toSourceCode())
+                .collect(Collectors.joining());
+        Assert.assertTrue(source.contains("\"required\":[\"path\"]"), source);
+        Assert.assertFalse(source.contains("\"context\""), source);
+        Assert.assertTrue(source.contains("outputSchema:{\"type\":\"string\"}"), source);
+    }
+
+    @Test
+    public void testRecordTypeFormSchema() throws JsonProcessingException {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve("sample_package_33"));
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+
+        JsonNode expected = Json.mapper().readTree("""
+                {"type": "object",
+                 "properties": {
+                   "name": {"type": "string", "description": "The guest's name"},
+                   "guests": {"type": "integer", "description": "How many people are coming"},
+                   "outdoor": {"type": "boolean", "description": "Whether to sit outside"},
+                   "area": {"type": "string", "description": "The seating area", "enum": ["indoor", "patio"]},
+                   "diets": {"type": "array", "description": "Dietary needs",
+                             "items": {"type": "string", "enum": ["vegan", "gluten-free"]}},
+                   "deposit": {"type": "number", "description": "The deposit to hold"}},
+                 "required": ["name", "guests", "area", "diets", "deposit"]}""");
+        Assert.assertEquals(Json.mapper().readTree(elicitFormSchemaArgument(project)), expected);
+        DiagnosticResult compilation = project.currentPackage().getCompilation().diagnosticResult();
+        Assert.assertEquals(compilation.errorCount(), 0, compilation.errors().toString());
+    }
+
+    @Test
+    public void testUnsupportedFormFieldTypes() {
+        DiagnosticResult result = compile("sample_package_34");
+        Assert.assertEquals(errorCount(result), 4L, result.diagnostics().toString());
+        assertError(result, 0, "Field 'address' of record type 'Shipping'", "MCP_119");
+        assertError(result, 1, "Field 'details' of record type 'Note'", "MCP_119");
+        assertError(result, 2, "Field 'stops' of record type 'Delivery'", "MCP_119");
+        assertError(result, 3, "Field 'phone' of record type 'Contact'", "MCP_119");
+    }
+
+    @Test
+    public void testFormSchemaTypeMustBeStaticRecordType() {
+        DiagnosticResult result = compile("sample_package_35");
+        Assert.assertEquals(errorCount(result), 3L, result.diagnostics().toString());
+        assertError(result, 0, "must be a form schema value or a named record type", "MCP_120");
+        assertError(result, 1, "must be a form schema value or a named record type", "MCP_120");
+        assertError(result, 2, "must be a form schema value or a named record type", "MCP_120");
+    }
+
+    @Test
+    public void testAliasedMcpImportGetsSchemas() {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(),
+                RESOURCE_DIRECTORY.resolve("aliased_mcp_import"));
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+
+        Module module = project.currentPackage().getDefaultModule();
+        String source = module.documentIds().stream()
+                .map(documentId -> module.document(documentId).syntaxTree().toSourceCode())
+                .collect(Collectors.joining());
+        Assert.assertTrue(source.contains("@m:Tool{"), source);
+        Assert.assertTrue(source.contains("\"required\":[\"name\"]"), source);
+    }
+
+    @Test
+    public void testAliasedMcpImportIsValidated() {
+        DiagnosticResult result = compile("aliased_mcp_import_invalid");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "is not allowed when sessionMode is STATELESS", MCP_104);
+    }
+
+    @Test
+    public void testServiceConfigSessionModeAppliesToTransportNeutralServices() {
+        DiagnosticResult result = compile("transport_neutral_stateless");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "is not allowed when sessionMode is STATELESS", MCP_104);
+    }
+
+    @Test
+    public void testAuthContextIsTransportSpecificOnTransportNeutralServices() {
+        DiagnosticResult result = compile("transport_neutral_auth_context");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "accesses transport-specific properties", "MCP_109");
+    }
+
+    @Test
+    public void testTransportNeutralServicesAreDeprecated() {
+        DiagnosticResult result = compile("transport_neutral_stateless");
+        Assert.assertTrue(result.diagnostics().stream()
+                .anyMatch(d -> d.diagnosticInfo().code().equals("MCP_WARNING_105")
+                        && d.message().contains("'mcp:Service' is deprecated")
+                        && d.message().contains("'mcp:StreamableHttpService'")), result.diagnostics().toString());
+        // Transport-neutral services are legacy-only, so the protocol-mode session warnings do not apply.
+        Assert.assertFalse(result.diagnostics().stream()
+                .anyMatch(d -> d.diagnosticInfo().code().matches("MCP_WARNING_10[234]")), result.diagnostics().toString());
+    }
+
+    private static String elicitFormSchemaArgument(BuildProject project) {
+        Module module = project.currentPackage().getDefaultModule();
+        List<String> arguments = new ArrayList<>();
+        NodeVisitor visitor = new NodeVisitor() {
+            @Override
+            public void visit(FunctionCallExpressionNode call) {
+                if (call.functionName().toSourceCode().trim().equals("mcp:elicitForm")) {
+                    arguments.add(call.arguments().get(1).toSourceCode().trim());
+                }
+                super.visit(call);
+            }
+        };
+        module.documentIds().forEach(id -> module.document(id).syntaxTree().rootNode().accept(visitor));
+        Assert.assertEquals(arguments.size(), 1, arguments.toString());
+        return arguments.get(0);
+    }
+}

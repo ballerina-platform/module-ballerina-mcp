@@ -45,7 +45,6 @@ import io.ballerina.compiler.syntax.tree.MappingFieldNode;
 import io.ballerina.compiler.syntax.tree.MetadataNode;
 import io.ballerina.compiler.syntax.tree.Node;
 import io.ballerina.compiler.syntax.tree.NodeList;
-import io.ballerina.compiler.syntax.tree.QualifiedNameReferenceNode;
 import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
@@ -95,6 +94,7 @@ public class Utils {
     public static final String REQUEST_TYPE_NAME = "Request";
     public static final String HEADER_ANNOTATION_NAME = "Header";
     public static final String UNKNOWN_SYMBOL = "unknown";
+    public static final String SERVICE_CONFIG_ANNOTATION_NAME = "ServiceConfig";
     public static final String STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME = "StreamableHttpServiceConfig";
     public static final String SESSION_MODE_FIELD = "sessionMode";
     private static final Pattern MCP_HEADER_NAME = Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
@@ -228,12 +228,30 @@ public class Utils {
                 .anyMatch(Utils::isListenerFromMcpModule);
 
         boolean isServiceType = serviceSymbol.typeDescriptor()
+                .filter(Utils::isMcpModuleSymbol)
                 .flatMap(TypeSymbol::getName)
                 .map(name -> MCP_BASIC_SERVICE_NAME.equals(name)
                         || STREAMABLE_HTTP_BASIC_SERVICE_NAME.equals(name))
                 .orElse(false);
 
         return isFromMcpModule && isServiceType;
+    }
+
+    /**
+     * Returns whether the service enclosing the given remote function is the transport-agnostic {@code mcp:Service},
+     * whose tools cannot bind transport-specific (HTTP) request information.
+     */
+    static boolean isTransportNeutralServiceFunction(FunctionDefinitionNode functionDefinitionNode,
+                                                     SemanticModel semanticModel) {
+        Optional<Symbol> parentSymbol = semanticModel.symbol(functionDefinitionNode.parent());
+        if (parentSymbol.isEmpty() || parentSymbol.get().kind() != SymbolKind.SERVICE_DECLARATION) {
+            return false;
+        }
+        return ((ServiceDeclarationSymbol) parentSymbol.get()).typeDescriptor()
+                .filter(Utils::isMcpModuleSymbol)
+                .flatMap(TypeSymbol::getName)
+                .map(MCP_BASIC_SERVICE_NAME::equals)
+                .orElse(false);
     }
 
     public static boolean isAnydataType(TypeSymbol typeSymbol, SyntaxNodeAnalysisContext context) {
@@ -271,6 +289,21 @@ public class Utils {
             boolean isAuthContextParam = isAuthContextType(parameterType);
             boolean isContextParam = isContextType(parameterType);
             boolean hasMcpArgument = hasMcpArgumentAnnotation(parameterSymbol);
+
+            // HTTP-bound parameters (and the HTTP-derived auth context and argument headers) expose
+            // transport-specific request information, which the transport-agnostic 'mcp:Service' cannot access.
+            boolean isTransportSpecificParam = hasHttpHeaderAnnotation(parameterSymbol)
+                    || isHttpHeadersType(parameterType) || isHttpRequestType(parameterType)
+                    || isAuthContextParam || hasMcpArgument;
+            if (isTransportSpecificParam && isTransportNeutralServiceFunction(functionDefinitionNode,
+                    context.semanticModel())) {
+                Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
+                        CompilationDiagnostic.TRANSPORT_SPECIFIC_PARAM_NOT_ALLOWED,
+                        parameterSymbol.getLocation().orElse(alternativeLocation),
+                        functionName, parameterName);
+                context.reportDiagnostic(diagnostic);
+                return false;
+            }
 
             if (hasMcpArgument) {
                 if (hasHttpHeaderAnnotation(parameterSymbol) || isSessionType || isMetaParam || isAuthContextParam
@@ -685,17 +718,24 @@ public class Utils {
             return SessionMode.AUTO;
         }
 
+        // The transport annotation wins; the deprecated @mcp:ServiceConfig still configures transport-neutral services.
         AnnotationNode transportConfigAnnotation =
-                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME);
+                findMcpAnnotation(serviceNode, STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME, semanticModel);
         if (transportConfigAnnotation != null) {
             return getSessionModeFieldValue(transportConfigAnnotation, semanticModel);
+        }
+        AnnotationNode serviceConfigAnnotation =
+                findMcpAnnotation(serviceNode, SERVICE_CONFIG_ANNOTATION_NAME, semanticModel);
+        if (serviceConfigAnnotation != null) {
+            return getSessionModeFieldValue(serviceConfigAnnotation, semanticModel);
         }
         return SessionMode.AUTO;
     }
 
-    private static AnnotationNode findMcpAnnotation(ServiceDeclarationNode serviceNode, String annotationName) {
+    private static AnnotationNode findMcpAnnotation(ServiceDeclarationNode serviceNode, String annotationName,
+                                                    SemanticModel semanticModel) {
         for (AnnotationNode annotation : serviceNode.metadata().get().annotations()) {
-            if (isMcpAnnotation(annotation, annotationName)) {
+            if (isMcpAnnotation(annotation, annotationName, semanticModel)) {
                 return annotation;
             }
         }
@@ -754,16 +794,14 @@ public class Utils {
         return SessionMode.AUTO;
     }
 
-    private static boolean isMcpAnnotation(AnnotationNode annotation, String annotationName) {
-        if (annotation.annotReference().kind() != SyntaxKind.QUALIFIED_NAME_REFERENCE) {
-            return false;
-        }
-
-        QualifiedNameReferenceNode qualifiedRef = (QualifiedNameReferenceNode) annotation.annotReference();
-        String modulePrefix = qualifiedRef.modulePrefix().text();
-        String identifier = qualifiedRef.identifier().text();
-
-        return MCP_PACKAGE_NAME.equals(modulePrefix) && annotationName.equals(identifier);
+    // Resolved by symbol, so an aliased import (`import ballerina/mcp as m;`) is recognised too.
+    private static boolean isMcpAnnotation(AnnotationNode annotation, String annotationName,
+                                           SemanticModel semanticModel) {
+        return semanticModel.symbol(annotation)
+                .filter(symbol -> symbol.kind() == SymbolKind.ANNOTATION)
+                .filter(symbol -> annotationName.equals(symbol.getName().orElse("")))
+                .map(Utils::isMcpModuleSymbol)
+                .orElse(false);
     }
 
     /**

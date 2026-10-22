@@ -23,11 +23,11 @@ import ballerina/mcp;
 }
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9317) {
 
-    remote function onListTools(mcp:CallToolParams params) returns mcp:ToolPage|mcp:ServerError {
+    remote function onListTools(mcp:CallToolParams params) returns mcp:ListToolsResult|mcp:ServerError {
         return {tools: []};
     }
 
-    remote function onCallTool(mcp:CallToolParams params) returns mcp:ToolResult|mcp:ServerError {
+    remote function onCallTool(mcp:CallToolParams params) returns mcp:CallToolResult|mcp:ServerError {
         return {content: []};
     }
 }

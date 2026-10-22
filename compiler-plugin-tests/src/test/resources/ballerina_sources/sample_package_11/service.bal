@@ -25,13 +25,13 @@ import ballerina/mcp;
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9311) {
 
     remote function onListTools(@http:Header {name: "X-Filter"} string? filter, http:Headers headers)
-            returns mcp:ToolPage|mcp:ServerError {
+            returns mcp:ListToolsResult|mcp:ServerError {
         return {tools: []};
     }
 
     remote function onCallTool(mcp:CallToolParams params, mcp:Session? session,
             @http:Header {name: "Authorization"} string? auth, http:Headers headers, http:Request request)
-            returns mcp:ToolResult|mcp:ServerError {
+            returns mcp:CallToolResult|mcp:ServerError {
         return {content: []};
     }
 }

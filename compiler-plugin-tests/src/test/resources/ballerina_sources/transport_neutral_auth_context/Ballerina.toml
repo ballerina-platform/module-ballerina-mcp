@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "transport_neutral_auth_context"
+version = "0.1.0"

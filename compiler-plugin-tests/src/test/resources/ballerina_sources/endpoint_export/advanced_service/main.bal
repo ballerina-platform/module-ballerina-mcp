@@ -1,15 +1,15 @@
 import ballerina/mcp;
 
-listener mcp:StreamableHttpListener mcpListener = check new (9090);
+listener mcp:Listener mcpListener = check new (9090);
 
-service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
+service mcp:AdvancedService /mcp on mcpListener {
 
-    remote isolated function onListTools() returns mcp:ToolPage|mcp:ServerError {
+    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {tools: []};
     }
 
     remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session)
-            returns mcp:ToolResult|mcp:ServerError {
+            returns mcp:CallToolResult|mcp:ServerError {
         return error mcp:ServerError("not implemented");
     }
 }
