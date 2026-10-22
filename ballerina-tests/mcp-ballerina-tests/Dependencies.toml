@@ -138,9 +138,6 @@ dependencies = [
 	{org = "ballerina", name = "log"},
 	{org = "ballerina", name = "time"}
 ]
-modules = [
-	{org = "ballerina", packageName = "jwt", moduleName = "jwt"}
-]
 
 [[package]]
 org = "ballerina"
@@ -375,7 +372,6 @@ name = "mcp_ballerina_tests"
 version = "2.0.0"
 dependencies = [
 	{org = "ballerina", name = "http"},
-	{org = "ballerina", name = "jwt"},
 	{org = "ballerina", name = "mcp"},
 	{org = "ballerina", name = "test"}
 ]

@@ -38,11 +38,18 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 }
 
+// Precedence: @mcp:StreamableHttpServiceConfig is the configuration home for a Streamable HTTP
+// service and must take precedence over the deprecated sessionMode field of @mcp:ServiceConfig
+// (STATEFUL below would otherwise reject session-less calls).
+@mcp:ServiceConfig {
+    info: {name: "transport-config-precedence-server", version: "1.0.0"},
+    sessionMode: mcp:STATEFUL
+}
 @mcp:StreamableHttpServiceConfig {
     info: {name: "transport-config-precedence-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8791) {
+isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8784) {
 
     @mcp:Tool {description: "Returns a fixed value"}
     isolated remote function echo() returns string {
@@ -51,7 +58,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
 }
 
 final http:Client rawTransportClient = check new ("http://localhost:8769");
-final http:Client rawPrecedenceClient = check new ("http://localhost:8791");
+final http:Client rawPrecedenceClient = check new ("http://localhost:8784");
 
 @test:Config
 function testHeaderBindingOnStreamableHttpListener() returns error? {
@@ -80,13 +87,13 @@ function testStrictModeViaTransportConfigAnnotation() returns error? {
 }
 
 @test:Config
-function testTransportConfigSessionMode() returns error? {
+function testTransportConfigSessionModePrecedence() returns error? {
     // No initialize handshake and no mcp-session-id header: only works if the effective
-    // session mode is STATELESS as configured by @mcp:StreamableHttpServiceConfig.
+    // session mode is STATELESS, i.e. @mcp:StreamableHttpServiceConfig overrode @mcp:ServiceConfig
     json payload = check rawCallTool(rawPrecedenceClient, "echo", {});
     json|error errorField = payload.'error;
     if errorField is json {
-        test:assertFail("expected STATELESS behavior from @mcp:StreamableHttpServiceConfig, got: "
+        test:assertFail("expected STATELESS behavior from @mcp:StreamableHttpServiceConfig precedence, got: "
             + errorField.toString());
     }
     test:assertEquals(check getRawTextResult(payload), "ok");

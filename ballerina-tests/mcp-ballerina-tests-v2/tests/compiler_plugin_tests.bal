@@ -1,0 +1,96 @@
+// Copyright (c) 2026 WSO2 LLC (http://www.wso2.com).
+//
+// WSO2 LLC. licenses this file to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+import ballerina/mcp;
+import ballerina/test;
+
+@mcp:StreamableHttpServiceConfig {
+    info: {name: "inline-listener-test-server", version: "1.0.0"},
+    sessionMode: mcp:STATELESS
+}
+isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8765) {
+
+    # Returns a greeting for the given name.
+    # 
+    # + name - The name to greet
+    # + return - A greeting message
+    isolated remote function getGreeting(string name) returns string {
+        return "Hello, " + name + "!";
+    }
+}
+
+final mcp:StreamableHttpClient2 mcpClient = check new ("http://localhost:8765/mcp");
+final mcp:Implementation clientInfo = {name: "test-client", version: "1.0.0"};
+
+@test:Config
+function testInlineListenerToolDiscovery() returns error? {
+    _ = check mcpClient->connect(clientInfo);
+    mcp:ToolPage result = check mcpClient->listTools();
+
+    test:assertEquals(result.tools.length(), 1,
+        msg = "Expected 1 tool — compiler plugin must have processed the inline-listener service");
+    test:assertEquals(result.tools[0].name, "getGreeting");
+}
+
+@test:Config {dependsOn: [testInlineListenerToolDiscovery]}
+function testInlineListenerToolSchema() returns error? {
+    mcp:ToolPage result = check mcpClient->listTools();
+
+    var inputSchema = result.tools[0].inputSchema;
+    test:assertEquals(inputSchema.'type, "object");
+    map<anydata> properties = inputSchema.properties ?: {};
+    test:assertTrue(properties.hasKey("name"),
+        msg = "Schema must include the 'name' parameter — compiler plugin generates the schema");
+}
+
+@test:Config {dependsOn: [testInlineListenerToolDiscovery]}
+function testInlineListenerCallTool() returns error? {
+    mcp:ToolResult result = check mcpClient->callTool({name: "getGreeting", arguments: {"name": "World"}});
+
+    test:assertFalse(result.isError ?: false);
+    mcp:TextContent textContent = check result.content[0].ensureType();
+    test:assertEquals(textContent.text, "Hello, World!");
+}
+
+listener mcp:StreamableHttpListener ln = check new (8766);
+
+@mcp:StreamableHttpServiceConfig {
+    info: {name: "inline-listener-test-server-2", version: "1.0.0"},
+    sessionMode: mcp:STATELESS
+}
+isolated service mcp:StreamableHttpService /mcp on ln {
+
+    # Returns a greeting for the given name.
+    # 
+    # + name - The name to greet
+    # + return - A greeting message
+    isolated remote function getGreetingStr(string name) returns string {
+        return "Hello, " + name + "!";
+    }
+}
+
+final mcp:StreamableHttpClient2 mcpClient2 = check new ("http://localhost:8766/mcp");
+final mcp:Implementation clientInfo2 = {name: "test-client-2", version: "1.0.0"};
+
+@test:Config
+function testListenerDeclToolDiscovery() returns error? {
+    _ = check mcpClient2->connect(clientInfo2);
+    mcp:ToolPage result = check mcpClient2->listTools();
+
+    test:assertEquals(result.tools.length(), 1,
+        msg = "Expected 1 tool — compiler plugin must have processed the declared-listener service");
+    test:assertEquals(result.tools[0].name, "getGreetingStr");
+}

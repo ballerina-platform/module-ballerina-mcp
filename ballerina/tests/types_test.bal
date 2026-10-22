@@ -29,8 +29,8 @@ function testImplementation() {
         description: "An MCP server",
         websiteUrl: "https://example.com",
         icons: [
-            {src: "data:image/png;base64,icon16", mimeType: "image/png", sizes: ["16x16"]},
-            {src: "data:image/svg+xml;base64,svg", mimeType: "image/svg+xml", sizes: ["any"]}
+            {mimeType: "image/png", data: "icon16", size: 16},
+            {mimeType: "image/svg+xml", data: "<svg/>"}
         ]
     };
     test:assertEquals(impl.title, "My Server");
@@ -38,21 +38,54 @@ function testImplementation() {
     test:assertEquals(impl.websiteUrl, "https://example.com");
     Icon[] icons = impl.icons ?: [];
     test:assertEquals(icons.length(), 2);
-    test:assertEquals(icons[0].sizes, ["16x16"]);
+    test:assertEquals(icons[0].size, 16);
 }
 
 // ---------------------------------------------------------------------------
-// ClientCapabilities — verifies new fields: elicitation
+// ClientCapabilities — verifies new fields: elicitation, tasks
+// Note: task types are defined for protocol compatibility but server-side
+// task execution is not yet supported.
 // ---------------------------------------------------------------------------
 
 @test:Config {}
 function testClientCapabilities() {
     ClientCapabilities capabilities = {
         sampling: {context: {}, tools: {}},
-        elicitation: {form: {}, url: {}}
+        elicitation: {form: {}, url: {}},
+        tasks: {
+            list: {},
+            cancel: {},
+            requests: {
+                sampling: {createMessage: {}},
+                elicitation: {create: {}}
+            }
+        }
     };
     test:assertTrue(capabilities.elicitation?.form != ());
     test:assertTrue(capabilities.elicitation?.url != ());
+    test:assertTrue(capabilities.tasks?.list != ());
+    test:assertTrue(capabilities.tasks?.cancel != ());
+    test:assertTrue(capabilities.tasks?.requests?.sampling?.createMessage != ());
+    test:assertTrue(capabilities.tasks?.requests?.elicitation?.create != ());
+}
+
+// ---------------------------------------------------------------------------
+// ServerCapabilities — verifies new tasks field
+// ---------------------------------------------------------------------------
+
+@test:Config {}
+function testServerCapabilities() {
+    ServerCapabilities capabilities = {
+        tools: {listChanged: true},
+        tasks: {
+            list: {},
+            cancel: {},
+            requests: {tools: {call: {}}}
+        }
+    };
+    test:assertEquals(capabilities.tools?.listChanged, true);
+    test:assertTrue(capabilities.tasks?.list != ());
+    test:assertTrue(capabilities.tasks?.requests?.tools?.call != ());
 }
 
 // ---------------------------------------------------------------------------
@@ -94,12 +127,14 @@ function testContentBlockUnion() {
 }
 
 // ---------------------------------------------------------------------------
-// ToolInfo — verifies new fields: title, icons, outputSchema
+// ToolDefinition — verifies new fields: title, icons, execution, outputSchema
+// Note: execution.taskSupport describes protocol capability; server-side task
+// execution is not yet supported.
 // ---------------------------------------------------------------------------
 
 @test:Config {}
 function testToolDefinition() {
-    ToolInfo tool = {
+    ToolDefinition tool = {
         name: "calculate",
         title: "Calculate",
         description: "Performs a calculation",
@@ -109,14 +144,16 @@ function testToolDefinition() {
             required: ["x", "y"]
         },
         outputSchema: {
-            "type": "object",
-            "properties": {"result": {}}
+            'type: "object",
+            properties: {"result": {}}
         },
-        icons: [{src: "data:image/png;base64,icon", mimeType: "image/png", sizes: ["32x32"]}]
+        execution: {taskSupport: "optional"},
+        icons: [{mimeType: "image/png", data: "icon", size: 32}]
     };
     test:assertEquals(tool.title, "Calculate");
-    test:assertEquals(tool.outputSchema is OutputSchema ? tool.outputSchema["type"] : (), "object");
-    test:assertEquals((tool.icons ?: [])[0].sizes, ["32x32"]);
+    test:assertEquals(tool.outputSchema?.'type, "object");
+    test:assertEquals(tool.execution?.taskSupport, "optional");
+    test:assertEquals((tool.icons ?: [])[0].size, 32);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,12 +172,12 @@ function testCallToolParams() {
 }
 
 // ---------------------------------------------------------------------------
-// ToolResult — verifies structuredContent and ResourceLink in content
+// CallToolResult — verifies structuredContent and ResourceLink in content
 // ---------------------------------------------------------------------------
 
 @test:Config {}
 function testCallToolResult() {
-    ToolResult result = {
+    CallToolResult result = {
         content: [
             {'type: "text", text: "Summary"},
             {'type: "resource_link", name: "output", uri: "file:///out.json"}
@@ -149,7 +186,7 @@ function testCallToolResult() {
     };
     test:assertEquals(result.content.length(), 2);
     test:assertTrue(result.content[1] is ResourceLink);
-    test:assertTrue(result.hasKey("structuredContent"));
+    test:assertTrue(result.structuredContent != ());
     test:assertEquals(result.isError, ());
 }
 

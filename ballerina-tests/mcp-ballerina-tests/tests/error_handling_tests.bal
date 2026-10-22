@@ -55,16 +55,6 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     isolated remote function greet(string name, string? greeting) returns string {
         return string `${greeting ?: "Hello"}, ${name}`;
     }
-
-    @mcp:Tool {description: "Returns the weather for a city"}
-    isolated remote function weather(string city, string unit = "celsius") returns string {
-        return string `city=${city} unit=${unit}`;
-    }
-
-    @mcp:Tool {description: "Returns at most the given number of results"}
-    isolated remote function search(int? maxCount = 6) returns string {
-        return maxCount is () ? "maxCount=()" : string `maxCount=${maxCount}`;
-    }
 }
 
 @mcp:StreamableHttpServiceConfig {
@@ -73,12 +63,12 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
 }
 isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8779) {
 
-    isolated remote function onListTools() returns mcp:ToolPage|mcp:ServerError {
+    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return {tools: [{name: "ping", description: "Pings the server", inputSchema: {"type": "object"}}]};
     }
 
     isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
-            returns mcp:ToolResult|mcp:ServerError {
+            returns mcp:CallToolResult|mcp:ServerError {
         if params.name == "failing" {
             return error mcp:ServerError("upstream API returned 503");
         }
@@ -100,35 +90,35 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     isolated remote function greet() returns string => "hello";
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:ServiceConfig {
     info: {name: "list-tools-failing-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8781) {
+isolated service mcp:AdvancedService /mcp on new mcp:Listener(8781) {
 
-    isolated remote function onListTools() returns mcp:ToolPage|mcp:ServerError {
+    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         return error mcp:ServerError("tool registry is unavailable");
     }
 
     isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
-            returns mcp:ToolResult|mcp:ServerError {
+            returns mcp:CallToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcp:ServiceConfig {
     info: {name: "list-tools-panicking-server", version: "1.0.0"},
     sessionMode: mcp:STATELESS
 }
-isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8782) {
+isolated service mcp:AdvancedService /mcp on new mcp:Listener(8782) {
 
-    isolated remote function onListTools() returns mcp:ToolPage|mcp:ServerError {
+    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
         int[] empty = [];
         return {tools: [{name: empty[5].toString(), inputSchema: {"type": "object"}}]};
     }
 
     isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
-            returns mcp:ToolResult|mcp:ServerError {
+            returns mcp:CallToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }
 }
@@ -227,27 +217,6 @@ function testMissingRequiredArgument() returns error? {
     [boolean, string] [isError, message] = check getToolError(check response.getJsonPayload());
     test:assertTrue(isError);
     test:assertEquals(message, "missing required argument 'b'");
-}
-
-@test:Config
-function testOmittedNonNilableDefaultableArgumentUsesDefault() returns error? {
-    http:Response response = check callTool(errorHandlingClient, "weather", {city: "Colombo"});
-    test:assertEquals(response.statusCode, http:STATUS_OK);
-    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "city=Colombo unit=celsius");
-}
-
-@test:Config
-function testOmittedNilableDefaultableArgumentUsesDefault() returns error? {
-    http:Response response = check callTool(errorHandlingClient, "search");
-    test:assertEquals(response.statusCode, http:STATUS_OK);
-    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "maxCount=6");
-}
-
-@test:Config
-function testExplicitNullOnNilableDefaultableArgumentOverridesDefault() returns error? {
-    http:Response response = check callTool(errorHandlingClient, "search", {maxCount: null});
-    test:assertEquals(response.statusCode, http:STATUS_OK);
-    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "maxCount=()");
 }
 
 @test:Config
@@ -400,7 +369,7 @@ function testListToolsSucceeds() returns error? {
     http:Response response = check errorHandlingClient->post("/mcp", request);
     test:assertEquals(response.statusCode, http:STATUS_OK);
     json[] tools = check (check (check response.getJsonPayload()).result.tools).ensureType();
-    test:assertEquals(tools.length(), 7);
+    test:assertEquals(tools.length(), 5);
 }
 
 @test:Config
@@ -471,7 +440,7 @@ function testSuppliedOptionalArgumentIsBound() returns error? {
 }
 
 @test:Config
-function testTaskFieldOnToolCallIsIgnored() returns error? {
+function testTaskAugmentedToolCallIsRejected() returns error? {
     http:Response response = check postJsonRpc(errorHandlingClient, {
         jsonrpc: "2.0",
         id: 1,
@@ -479,7 +448,9 @@ function testTaskFieldOnToolCallIsIgnored() returns error? {
         params: {name: "divide", arguments: {a: 10, b: 2}, task: {ttl: 60000}}
     });
     test:assertEquals(response.statusCode, http:STATUS_OK);
-    test:assertEquals(check getRawTextResult(check response.getJsonPayload()), "5");
+    [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
+    test:assertEquals(code, mcp:INVALID_REQUEST);
+    test:assertEquals(message, "Task-augmented tool calls are not supported");
 }
 
 @test:Config
