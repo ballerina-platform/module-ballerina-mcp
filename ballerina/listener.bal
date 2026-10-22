@@ -63,7 +63,7 @@ public isolated class StreamableHttpListener {
             string[]|string? name = ()) returns Error? {
         StreamableHttpServiceConfiguration serviceConfig = getServiceConfiguration(mcpService);
         if serviceConfig.protocolMode == "modern" && requiresLegacySession(mcpService) {
-            return error DispatcherError("Modern MCP services cannot require mcp:HttpSession; use explicit application state");
+            return error DispatcherError("Modern MCP services cannot require mcp:Session; use explicit application state");
         }
         CacheHints cacheHints = serviceConfig.cacheHints;
         if (cacheHints.discover?.ttlMs ?: 0) < 0 || (cacheHints.listTools?.ttlMs ?: 0) < 0 {

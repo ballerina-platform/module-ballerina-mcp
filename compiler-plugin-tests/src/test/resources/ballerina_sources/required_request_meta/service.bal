@@ -22,7 +22,7 @@ import ballerina/mcp;
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9332) {
 
     @mcp:Tool {description: "request metadata must be nilable"}
-    remote function greet(string name, mcp:RequestMeta meta) returns string {
+    remote function greet(string name, mcp:Meta meta) returns string {
         return string `Hello, ${name}!`;
     }
 }

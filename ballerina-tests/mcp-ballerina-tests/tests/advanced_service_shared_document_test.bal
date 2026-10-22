@@ -48,7 +48,7 @@ isolated service mcp:StreamableHttpAdvancedService /sharedAdvanced on new mcp:St
         };
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
             returns mcp:ToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "shared-doc-ok"}]};
     }

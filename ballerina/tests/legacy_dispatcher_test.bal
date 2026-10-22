@@ -35,7 +35,7 @@ service StreamableHttpAdvancedService /sessionAware on legacyDispatcherListener 
         tools: [{name: "whoami", inputSchema: {'type: "object"}}]
     };
 
-    remote isolated function onCallTool(CallToolParams callParams, HttpSession session, http:Request request)
+    remote isolated function onCallTool(CallToolParams callParams, Session session, http:Request request)
             returns ToolResult {
         session.set("lastTool", callParams.name);
         return {
@@ -265,7 +265,7 @@ function testAdvancedHandlersBindTransportParameters() returns error? {
     http:Response callResponse = check legacyPost("/sessionAware",
             legacyRequest(REQUEST_CALL_TOOL, {"name": "whoami"}), {[SESSION_ID_HEADER]: sessionId});
     JsonRpcResponse callBody = check (check callResponse.getJsonPayload()).cloneWithType();
-    ToolResult callResult = check callBody.result.ensureType();
+    CallToolResult callResult = check callBody.result.ensureType();
     TextContent textContent = check callResult.content[0].ensureType();
     test:assertEquals(textContent.text, string `${sessionId}:/sessionAware`);
 }

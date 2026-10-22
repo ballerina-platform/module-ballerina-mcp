@@ -18,7 +18,7 @@
 type WireResponse record {|
     JSONRPC_VERSION jsonrpc;
     RequestId id;
-    Result result;
+    WireResult result;
 |};
 
 // Modern HTTP errors may omit an ID when the request could not be identified.

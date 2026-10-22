@@ -25,7 +25,7 @@ isolated function invokeAdvancedOnListTools(StreamableHttpAdvancedService 'servi
 } external;
 
 isolated function invokeAdvancedOnCallTool(StreamableHttpAdvancedService 'service, CallToolParams params,
-        HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
+        Session? session, http:Headers headers, http:Request request, map<string[]> headerValues,
         boolean treatNilableAsOptional, AuthContext? authContext)
         returns ToolResult|InputRequiredResult|Error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
@@ -42,14 +42,14 @@ isolated function listProtocolToolsForRemoteFunctions(StreamableHttpService 'ser
 } external;
 
 isolated function callToolForRemoteFunctions(StreamableHttpService 'service, CallToolParams params,
-        HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
+        Session? session, http:Headers headers, http:Request request, map<string[]> headerValues,
         boolean treatNilableAsOptional, AuthContext? authContext, Context toolContext,
         typedesc<ToolResult> t = ToolResult) returns ToolResult|InputRequiredResult|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"
 } external;
 
 isolated function callProtocolToolForRemoteFunctions(StreamableHttpService 'service, CallToolParams params,
-        HttpSession? session, http:Headers headers, http:Request request, map<string[]> headerValues,
+        Session? session, http:Headers headers, http:Request request, map<string[]> headerValues,
         boolean treatNilableAsOptional, AuthContext? authContext, Context toolContext,
         typedesc<ToolResult> t = ToolResult) returns ToolResult|InputRequiredResult|error = @java:Method {
     'class: "io.ballerina.stdlib.mcp.McpServiceMethodHelper"

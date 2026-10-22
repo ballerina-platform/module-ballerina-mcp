@@ -8,7 +8,7 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
         return {tools: []};
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
+    remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session)
             returns mcp:ToolResult|mcp:ServerError {
         return error mcp:ServerError("not implemented");
     }

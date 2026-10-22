@@ -60,9 +60,9 @@ isolated function modernCapabilities(StreamableHttpServiceConfiguration serviceC
     return serverCapabilities;
 }
 
-isolated function modernResult(Result resultValue, Implementation serverInfo, RequestId requestId,
+isolated function modernResult(WireResult resultValue, Implementation serverInfo, RequestId requestId,
         CacheHint? cacheHint = ()) returns http:Ok {
-    Result wireResult = {...resultValue};
+    WireResult wireResult = {...resultValue};
     wireResult["resultType"] = wireResult["resultType"] ?: "complete";
     ResultMeta resultMeta = {...(wireResult._meta ?: {})};
     Implementation effectiveServerInfo = resultMeta.serverInfo ?: serverInfo;
@@ -309,7 +309,7 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
         StreamableHttpServiceConfiguration serviceConfig, readonly & AuthContext? authContext)
         returns ToolResult|InputRequiredResult|error {
     CallToolParams applicationParams = callParams.clone();
-    RequestMeta applicationMeta = {...(callParams._meta ?: {})};
+    Meta applicationMeta = {...(callParams._meta ?: {})};
     foreach string metaKey in [PROTOCOL_META_KEY, CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LOG_LEVEL_META_KEY] {
         _ = applicationMeta.removeIfHasKey(metaKey);
     }

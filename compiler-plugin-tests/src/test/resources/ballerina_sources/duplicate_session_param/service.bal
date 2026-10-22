@@ -4,6 +4,6 @@
 import ballerina/mcp;
 
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9341) {
-    remote isolated function twoSessions(mcp:HttpSession first, string label, mcp:HttpSession? second)
+    remote isolated function twoSessions(mcp:Session first, string label, mcp:Session? second)
             returns string => string `${label}:${first.getSessionId()}`;
 }

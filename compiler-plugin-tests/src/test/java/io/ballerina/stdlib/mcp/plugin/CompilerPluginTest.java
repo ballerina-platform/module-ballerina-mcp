@@ -145,7 +145,7 @@ public class CompilerPluginTest {
         DiagnosticResult diagnosticResult = compile("duplicate_session_param");
         Assert.assertEquals(errorCount(diagnosticResult), 1, diagnosticResult.errors().toString());
         assertError(diagnosticResult, 0, "Duplicate parameter 'second'", MCP_107);
-        assertError(diagnosticResult, 0, "type 'mcp:HttpSession'", MCP_107);
+        assertError(diagnosticResult, 0, "type 'mcp:Session'", MCP_107);
     }
 
     @Test
@@ -214,15 +214,15 @@ public class CompilerPluginTest {
         Diagnostic diagnostic = (Diagnostic) diagnosticResult.errors().toArray()[0];
         Assert.assertFalse(diagnostic.message().contains("mcp:CallToolParams"),
                 "onListTools supported-types message must not list 'mcp:CallToolParams': " + diagnostic.message());
-        Assert.assertFalse(diagnostic.message().contains("mcp:HttpSession"),
-                "onListTools supported-types message must not list 'mcp:HttpSession': " + diagnostic.message());
+        Assert.assertFalse(diagnostic.message().contains("mcp:Session"),
+                "onListTools supported-types message must not list 'mcp:Session': " + diagnostic.message());
     }
 
     @Test
     public void testMetaParameterCanAppearBeforeDataParameters() {
         DiagnosticResult diagnosticResult = compile("sample_package_18");
         Assert.assertEquals(errorCount(diagnosticResult), 0,
-                "an optional mcp:RequestMeta parameter must be accepted outside the final position: "
+                "an optional mcp:Meta parameter must be accepted outside the final position: "
                         + diagnosticResult.errors().toString());
     }
 
@@ -230,7 +230,7 @@ public class CompilerPluginTest {
     public void testRequestMetaParameterMustBeOptional() {
         DiagnosticResult diagnosticResult = compile("required_request_meta");
         Assert.assertEquals(errorCount(diagnosticResult), 1, diagnosticResult.errors().toString());
-        assertError(diagnosticResult, 0, "(e.g., 'mcp:RequestMeta?')", "MCP_106");
+        assertError(diagnosticResult, 0, "(e.g., 'mcp:Meta?')", "MCP_106");
     }
 
     @Test

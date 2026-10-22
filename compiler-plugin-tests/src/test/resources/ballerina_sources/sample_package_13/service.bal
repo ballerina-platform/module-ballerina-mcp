@@ -26,7 +26,7 @@ service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener
         return {tools: []};
     }
 
-    remote function onCallTool(mcp:HttpSession? session) returns mcp:ToolResult|mcp:ServerError {
+    remote function onCallTool(mcp:Session? session) returns mcp:ToolResult|mcp:ServerError {
         return {content: []};
     }
 }

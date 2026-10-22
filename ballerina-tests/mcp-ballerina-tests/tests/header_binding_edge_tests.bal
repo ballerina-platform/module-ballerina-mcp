@@ -74,7 +74,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 
     @mcp:Tool {description: "Receives the request metadata of the tool call"}
-    isolated remote function readMeta(mcp:RequestMeta? meta) returns string {
+    isolated remote function readMeta(mcp:Meta? meta) returns string {
         return meta is () ? "<no-meta>" : (meta.progressToken ?: "<no-token>").toString();
     }
 }

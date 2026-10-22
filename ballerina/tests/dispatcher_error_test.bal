@@ -270,7 +270,7 @@ isolated function dispatcherPost(string servicePath, string methodName, RequestP
         map<string|string[]> extraHeaders = {}, string protocolVersion = LATEST_MODERN_PROTOCOL_VERSION,
         string? metaProtocolVersion = (), boolean includeCapabilities = true,
         ClientCapabilities capabilities = {}) returns http:Response|error {
-    RequestMeta requestMeta = {};
+    Meta requestMeta = {};
     requestMeta[PROTOCOL_META_KEY] = metaProtocolVersion ?: protocolVersion;
     if includeCapabilities {
         requestMeta[CAPABILITIES_META_KEY] = capabilities;

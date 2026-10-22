@@ -39,7 +39,7 @@ service mcp:StreamableHttpAdvancedService /mcp on advancedMetaListener {
         };
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
+    remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session)
             returns mcp:ToolResult|mcp:ServerError {
         // Server-originated metadata, independent of the request.
         mcp:ResultMeta responseMeta = {"serverId": "srv-1"};

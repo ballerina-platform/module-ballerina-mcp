@@ -66,6 +66,13 @@ isolated function withSubmittedContentOnly(ElicitRequest elicitRequest, ElicitRe
     return stripped;
 }
 
+// No server supports task-augmented tool calls, so the client never sends `task`.
+isolated function withoutTask(CallToolParams params) returns CallToolParams {
+    CallToolParams sentParams = params.clone();
+    _ = sentParams.removeIfHasKey("task");
+    return sentParams;
+}
+
 # Represents an MCP client built on top of the Streamable HTTP transport.
 public distinct isolated client class StreamableHttpClient2 {
     # Transport for communication with the MCP server.
@@ -288,14 +295,14 @@ public distinct isolated client class StreamableHttpClient2 {
         // A credential passed on one call is not the client's authorization context, so it never shares the cache.
         CacheMode effectiveMode = hasAuthorizationHeader(headers) ? "bypass" : cacheMode;
         if effectiveMode == "use" {
-            Result? cachedResult = resultCache.get(REQUEST_LIST_TOOLS, cursor);
-            ToolPage|error cachedList = cachedResult is Result ? cachedResult.cloneWithType() : error("Cache miss");
+            WireResult? cachedResult = resultCache.get(REQUEST_LIST_TOOLS, cursor);
+            ToolPage|error cachedList = cachedResult is WireResult ? cachedResult.cloneWithType() : error("Cache miss");
             if cachedList is ToolPage {
                 return cachedList;
             }
         }
         int fetchNumber = resultCache.beginFetch();
-        Result|ClientError wireResponse = self.sendModernRequest(REQUEST_LIST_TOOLS, listParams, headers);
+        WireResult|ClientError wireResponse = self.sendModernRequest(REQUEST_LIST_TOOLS, listParams, headers);
         if wireResponse is ClientError {
             var rpcValue = wireResponse.detail()["rpcError"];
             // A rejected cursor means the cached pages no longer describe one listing.
@@ -304,7 +311,7 @@ public distinct isolated client class StreamableHttpClient2 {
             }
             return wireResponse;
         }
-        Result wireResult = wireResponse;
+        WireResult wireResult = wireResponse;
         if wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
                 !wireResult.hasKey("cacheScope") {
             return error ListToolsError("Invalid modern tools/list result");
@@ -332,8 +339,9 @@ public distinct isolated client class StreamableHttpClient2 {
     isolated remote function callTool(CallToolParams params, map<string|string[]> headers = {})
             returns ToolResult|ClientError {
         check self.ensureConnected();
+        CallToolParams callParams = withoutTask(params);
         if self.isModern() {
-            CallToolParams currentParams = params.clone();
+            CallToolParams currentParams = callParams.clone();
             decimal stateOnlyDelay = STATE_ONLY_RETRY_DELAY;
             foreach int roundNumber in 0 ... self.maxInputRounds {
                 ToolResult|InputRequiredResult callResult = check self->callToolOnce(currentParams, headers);
@@ -371,7 +379,7 @@ public distinct isolated client class StreamableHttpClient2 {
             return error ToolCallError("Input-required continuation did not complete");
         }
         CallToolRequest toolCallRequest = {
-            params: params
+            params: callParams
         };
 
         LegacyServerResult result = check self.sendRequestMessage(toolCallRequest, headers);
@@ -454,10 +462,11 @@ public distinct isolated client class StreamableHttpClient2 {
     isolated remote function callToolOnce(CallToolParams params, map<string|string[]> headers = {})
             returns ToolResult|InputRequiredResult|ClientError {
         check self.ensureConnected();
+        CallToolParams callParams = withoutTask(params);
         if !self.isModern() {
-            return self->callTool(params, headers);
+            return self->callTool(callParams, headers);
         }
-        return self.callModernTool(params, headers, true);
+        return self.callModernTool(callParams, headers, true);
     }
 
     private isolated function callModernTool(CallToolParams params, map<string|string[]> headers, boolean refreshAllowed)
@@ -489,7 +498,7 @@ public distinct isolated client class StreamableHttpClient2 {
         if mirroredHeaders is Error {
             return error ToolCallError(mirroredHeaders.message());
         }
-        Result|ClientError responseValue = self.sendModernRequest(REQUEST_CALL_TOOL, params, headers, mirroredHeaders);
+        WireResult|ClientError responseValue = self.sendModernRequest(REQUEST_CALL_TOOL, params, headers, mirroredHeaders);
         if responseValue is ClientError {
             var rpcValue = responseValue.detail()["rpcError"];
             if refreshAllowed && rpcValue is JsonRpcError && rpcValue.'error.code == HEADER_MISMATCH {
@@ -498,7 +507,7 @@ public distinct isolated client class StreamableHttpClient2 {
             }
             return responseValue;
         }
-        Result wireResult = responseValue;
+        WireResult wireResult = responseValue;
         if wireResult["resultType"] == "input_required" {
             InputRequiredResult|error inputResult = wireResult.cloneWithType();
             if inputResult is error || (inputResult.inputRequests is () && inputResult.requestState is ()) {
@@ -559,7 +568,7 @@ public distinct isolated client class StreamableHttpClient2 {
     private isolated function discoverModern(map<string|string[]> headers) returns DiscoverResult|ClientError {
         // A discovery result that omits resultType, ttlMs or cacheScope still comes from a modern server, so
         // they default to complete, 0 and private rather than failing the probe into a legacy fallback.
-        Result wireResult = check self.sendModernRequest("server/discover", {}, headers, requireResultType = false);
+        WireResult wireResult = check self.sendModernRequest("server/discover", {}, headers, requireResultType = false);
         DiscoverResult|error discovery = applicationResult(wireResult, preserveCacheHints = true).cloneWithType();
         if discovery is error || (wireResult["resultType"] ?: "complete") != "complete" {
             return error ResponseParsingError("Invalid discovery result");
@@ -577,12 +586,12 @@ public distinct isolated client class StreamableHttpClient2 {
 
     private isolated function sendModernRequest(string methodName, RequestParams requestParams,
             map<string|string[]> headers, map<string> parameterHeaders = {}, boolean requireResultType = true)
-            returns Result|ClientError {
+            returns WireResult|ClientError {
         JsonRpcRequest requestMessage;
         lock {
             self.requestId += 1;
             RequestParams wireParams = {...requestParams.cloneReadOnly()};
-            RequestMeta requestMeta = {...(wireParams._meta ?: {})};
+            Meta requestMeta = {...(wireParams._meta ?: {})};
             requestMeta[PROTOCOL_META_KEY] = self.metaProtocolVersion();
             requestMeta[CLIENT_INFO_META_KEY] = self.clientInfo;
             requestMeta[CAPABILITIES_META_KEY] = self.clientCapabilities;

@@ -31,8 +31,8 @@ isolated service mcp:StreamableHttpService /mcp on metaListener {
     # + meta - Optional request metadata injected by the framework
     # + greeting - Greeting to prepend to the name
     # + return - A greeting message that reflects whether metadata was received
-    isolated remote function greetWithMeta(string name, mcp:RequestMeta? meta, string greeting) returns string {
-        if meta is mcp:RequestMeta {
+    isolated remote function greetWithMeta(string name, mcp:Meta? meta, string greeting) returns string {
+        if meta is mcp:Meta {
             anydata traceId = meta["traceId"];
             return string `${greeting}, ${name}! trace=${traceId.toString()}`;
         }
@@ -56,9 +56,9 @@ function testMetaToolSchemaExcludesMetaParam() returns error? {
     test:assertTrue(properties.hasKey("name"),
         msg = "Schema must include the 'name' data parameter");
     test:assertTrue(properties.hasKey("greeting"),
-        msg = "Schema must include data parameters declared after mcp:RequestMeta");
+        msg = "Schema must include data parameters declared after mcp:Meta");
     test:assertFalse(properties.hasKey("meta"),
-        msg = "The injected mcp:RequestMeta parameter must not appear in the tool input schema");
+        msg = "The injected mcp:Meta parameter must not appear in the tool input schema");
 }
 
 @test:Config {dependsOn: [testMetaToolSchemaExcludesMetaParam]}
@@ -69,11 +69,11 @@ function testMetaReceivedOnServer() returns error? {
         _meta: {"traceId": "trace-xyz"}
     });
 
-    // The server-side tool reads the injected client _meta via the mcp:RequestMeta parameter
+    // The server-side tool reads the injected client _meta via the mcp:Meta parameter
     // and reflects it in the result text.
     mcp:TextContent textContent = check result.content[0].ensureType();
     test:assertEquals(textContent.text, "Hello, World! trace=trace-xyz",
-        msg = "Server must access the client-supplied _meta via the mcp:RequestMeta parameter");
+        msg = "Server must access the client-supplied _meta via the mcp:Meta parameter");
 
     // The request _meta is not echoed. Modern responses expose only the server identity added by the transport.
     mcp:ResultMeta resultMeta = check result._meta.ensureType();

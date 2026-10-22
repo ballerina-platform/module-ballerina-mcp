@@ -17,8 +17,8 @@
 import ballerina/mcp;
 import ballerina/test;
 
-isolated function nextVisit(mcp:HttpSession session) returns int {
-    mcp:HttpSessionEntry previous = session.hasKey("visits") ? session.get("visits") : 0;
+isolated function nextVisit(mcp:Session session) returns int {
+    mcp:SessionEntry previous = session.hasKey("visits") ? session.get("visits") : 0;
     int visits = (previous is int ? previous : 0) + 1;
     session.set("visits", visits);
     return visits;
@@ -26,10 +26,10 @@ isolated function nextVisit(mcp:HttpSession session) returns int {
 
 @mcp:StreamableHttpServiceConfig {info: {name: "session-position", version: "1.0.0"}}
 service mcp:StreamableHttpService /sessionPosition on structuredListener {
-    remote isolated function sessionInMiddle(string label, mcp:HttpSession session, int step) returns string =>
+    remote isolated function sessionInMiddle(string label, mcp:Session session, int step) returns string =>
         string `${label}:${nextVisit(session)}:${step}`;
 
-    remote isolated function sessionLast(string label, mcp:HttpSession? session) returns string =>
+    remote isolated function sessionLast(string label, mcp:Session? session) returns string =>
         string `${label}:${session is () ? "none" : nextVisit(session).toString()}`;
 }
 

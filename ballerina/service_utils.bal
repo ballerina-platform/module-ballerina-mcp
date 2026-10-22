@@ -67,8 +67,8 @@ isolated function extractHeaderValues(http:Headers headers) returns map<string[]
 # + headers - HTTP request headers
 # + requestMethod - The MCP request method (optional, used for AUTO mode logic)
 # + return - Effective session mode to use
-isolated function determineEffectiveSessionMode(StreamableHttpServiceConfiguration config, http:Headers headers, RequestMethod? requestMethod = ()) returns HttpSessionMode {
-    HttpSessionMode configuredMode = config.sessionMode;
+isolated function determineEffectiveSessionMode(StreamableHttpServiceConfiguration config, http:Headers headers, RequestMethod? requestMethod = ()) returns SessionMode {
+    SessionMode configuredMode = config.sessionMode;
 
     if configuredMode == STATEFUL || configuredMode == STATELESS {
         return configuredMode;

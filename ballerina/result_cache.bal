@@ -21,7 +21,7 @@ const FETCH_ORDER_LIMIT = 1024;
 
 type CachedResult record {|
     string method;
-    Result & readonly resultValue;
+    WireResult & readonly resultValue;
     decimal expiresAt;
 |};
 
@@ -50,7 +50,7 @@ isolated class ResultCache {
     }
 
     // Returns a fresh cached result for the request, or `()` on a miss.
-    isolated function get(string method, Cursor? cursor) returns Result? {
+    isolated function get(string method, Cursor? cursor) returns WireResult? {
         if !self.enabled {
             return;
         }
@@ -76,7 +76,7 @@ isolated class ResultCache {
 
     // Stores a result for as long as its hints keep it fresh, replacing the request's earlier entry. A stale
     // fetch stores nothing, and an accepted one is ordered even when its result is not kept.
-    isolated function put(string method, Cursor? cursor, Result resultValue, int fetchNumber) {
+    isolated function put(string method, Cursor? cursor, WireResult resultValue, int fetchNumber) {
         string entryKey = [method, cursor].toJsonString();
         anydata ttlValue = resultValue["ttlMs"];
         decimal ttlSeconds = ttlValue is int && ttlValue > 0 ? <decimal>ttlValue / 1000 : 0;
@@ -84,7 +84,7 @@ isolated class ResultCache {
             ttlSeconds = self.maxTtlSeconds;
         }
         decimal now = self.clock();
-        Result & readonly storedResult = resultValue.cloneReadOnly();
+        WireResult & readonly storedResult = resultValue.cloneReadOnly();
         lock {
             if self.isStaleFetch(entryKey, fetchNumber) {
                 return;

@@ -100,20 +100,20 @@ function testProcessServerResponseVariants() {
 
 @test:Config {}
 function testApplicationResultStripsWireOnlyFields() {
-    Result wireResult = {
+    WireResult wireResult = {
         "resultType": "complete",
         "ttlMs": 5000,
         "cacheScope": "public",
         "tools": []
     };
-    Result applicationValue = applicationResult(wireResult);
+    WireResult applicationValue = applicationResult(wireResult);
     test:assertFalse(applicationValue.hasKey("resultType"));
     test:assertFalse(applicationValue.hasKey("ttlMs"));
     test:assertFalse(applicationValue.hasKey("cacheScope"));
     test:assertFalse(applicationValue.hasKey("_meta"));
     test:assertEquals(applicationValue["tools"], <json>[]);
 
-    Result preservedValue = applicationResult(wireResult, preserveCacheHints = true);
+    WireResult preservedValue = applicationResult(wireResult, preserveCacheHints = true);
     test:assertEquals(preservedValue["ttlMs"], 5000);
     test:assertEquals(preservedValue["cacheScope"], "public");
     test:assertFalse(preservedValue.hasKey("resultType"));
@@ -121,22 +121,22 @@ function testApplicationResultStripsWireOnlyFields() {
 
 @test:Config {}
 function testApplicationResultLiftsWireServerInfo() {
-    Result wireResult = {
+    WireResult wireResult = {
         _meta: {[SERVER_INFO_META_KEY]: <Implementation>{name: "srv", version: "2.0.0"}},
         "resultType": "complete"
     };
-    Result applicationValue = applicationResult(wireResult);
+    WireResult applicationValue = applicationResult(wireResult);
     ResultMeta resultMeta = applicationValue._meta ?: {};
     test:assertFalse(resultMeta.hasKey(SERVER_INFO_META_KEY));
     test:assertEquals(resultMeta.serverInfo?.name, "srv");
     test:assertEquals(resultMeta.serverInfo?.version, "2.0.0");
 
     // A malformed wire serverInfo is dropped rather than surfaced.
-    Result malformedResult = applicationResult({_meta: {[SERVER_INFO_META_KEY]: <map<anydata>>{"version": 7}}});
+    WireResult malformedResult = applicationResult({_meta: {[SERVER_INFO_META_KEY]: <map<anydata>>{"version": 7}}});
     test:assertFalse(malformedResult.hasKey("_meta"));
 
     // Unrelated metadata entries survive.
-    Result otherMetaResult = applicationResult({_meta: {"vendor/custom": "value"}});
+    WireResult otherMetaResult = applicationResult({_meta: {"vendor/custom": "value"}});
     ResultMeta otherMeta = otherMetaResult._meta ?: {};
     test:assertEquals(otherMeta["vendor/custom"], "value");
 }

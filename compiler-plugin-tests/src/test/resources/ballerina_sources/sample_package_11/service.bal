@@ -29,7 +29,7 @@ service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener
         return {tools: []};
     }
 
-    remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session,
+    remote function onCallTool(mcp:CallToolParams params, mcp:Session? session,
             @http:Header {name: "Authorization"} string? auth, http:Headers headers, http:Request request)
             returns mcp:ToolResult|mcp:ServerError {
         return {content: []};

@@ -39,7 +39,7 @@ type SessionProfile record {|
 
 @test:Config {}
 function testSessionIdAndEmptyState() {
-    HttpSession session = new ("session-1");
+    Session session = new ("session-1");
     test:assertEquals(session.getSessionId(), "session-1");
     test:assertTrue(session.isEmpty());
     test:assertEquals(session.size(), 0);
@@ -49,12 +49,12 @@ function testSessionIdAndEmptyState() {
 
 @test:Config {}
 function testSessionStoresClonedValues() {
-    HttpSession session = new ("session-2");
+    Session session = new ("session-2");
     SessionProfile profile = {name: "alice", visits: 1};
     session.set("profile", profile);
     profile.visits = 99;
 
-    HttpSessionEntry storedEntry = session.get("profile");
+    SessionEntry storedEntry = session.get("profile");
     test:assertTrue(storedEntry is SessionProfile);
     if storedEntry is SessionProfile {
         // The session took a copy, so the caller's later mutation is not visible.
@@ -67,11 +67,11 @@ function testSessionStoresClonedValues() {
 
 @test:Config {}
 function testSessionStoresIsolatedObjectsByReference() {
-    HttpSession session = new ("session-3");
+    Session session = new ("session-3");
     SessionCounter counter = new;
     session.set("counter", counter);
 
-    HttpSessionEntry storedEntry = session.get("counter");
+    SessionEntry storedEntry = session.get("counter");
     test:assertTrue(storedEntry is SessionCounter);
     if storedEntry is SessionCounter {
         storedEntry.increment();
@@ -82,7 +82,7 @@ function testSessionStoresIsolatedObjectsByReference() {
 
 @test:Config {}
 function testSessionKeysSizeAndClear() {
-    HttpSession session = new ("session-4");
+    Session session = new ("session-4");
     session.set("a", 1);
     session.set("b", "two");
     int[] numbers = [1, 2, 3];
@@ -108,8 +108,8 @@ function testSessionKeysSizeAndClear() {
 
 @test:Config {}
 function testSessionGetAndRemovePanicOnMissingKey() {
-    HttpSession session = new ("session-5");
-    HttpSessionEntry|error missingGet = trap session.get("absent");
+    Session session = new ("session-5");
+    SessionEntry|error missingGet = trap session.get("absent");
     test:assertTrue(missingGet is error);
     error? missingRemove = trap session.remove("absent");
     test:assertTrue(missingRemove is error);
@@ -117,7 +117,7 @@ function testSessionGetAndRemovePanicOnMissingKey() {
 
 @test:Config {}
 function testSessionGetWithType() {
-    HttpSession session = new ("session-6");
+    Session session = new ("session-6");
     session.set("count", 7);
     session.set("profile", <SessionProfile>{name: "bob", visits: 3});
 

@@ -45,7 +45,7 @@ service mcp:StreamableHttpService /mcp on mcpListener {
     @mcp:Tool {
         description: "Add an item to the shopping cart"
     }
-    remote function addToCart(mcp:HttpSession session, string productName, decimal price) returns string|error {
+    remote function addToCart(mcp:Session session, string productName, decimal price) returns string|error {
         log:printInfo(string `Adding ${productName} (${price}) to cart for session ${session.getSessionId()}`);
 
         // Get current cart or create new one
@@ -71,7 +71,7 @@ service mcp:StreamableHttpService /mcp on mcpListener {
     @mcp:Tool {
         description: "View all items in the current shopping cart"
     }
-    remote function viewCart(mcp:HttpSession session) returns CartView|error {
+    remote function viewCart(mcp:Session session) returns CartView|error {
         log:printInfo(string `Viewing cart for session ${session.getSessionId()}`);
 
         CartItem[] cart = [];
@@ -95,7 +95,7 @@ service mcp:StreamableHttpService /mcp on mcpListener {
     @mcp:Tool {
         description: "Clear all items from the shopping cart"
     }
-    remote function clearCart(mcp:HttpSession session) returns string|error {
+    remote function clearCart(mcp:Session session) returns string|error {
         log:printInfo(string `Clearing cart for session ${session.getSessionId()}`);
 
         session.set("cart", <CartItem[]>[]);

@@ -128,7 +128,7 @@ service StreamableHttpAdvancedService /listing on serverAuthListener {
 }
 service StreamableHttpService /sessionRequired on serverAuthListener {
     @Tool {description: "Returns the required session ID", schema: {'type: "object"}}
-    remote isolated function sessionId(HttpSession session) returns string => session.getSessionId();
+    remote isolated function sessionId(Session session) returns string => session.getSessionId();
 }
 
 @StreamableHttpServiceConfig {

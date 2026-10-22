@@ -78,7 +78,7 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
         };
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session) returns mcp:ToolResult|mcp:ServerError {
+    remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session) returns mcp:ToolResult|mcp:ServerError {
         record {} arguments = params.arguments ?: {};
 
         // Extract metadata from client request if present

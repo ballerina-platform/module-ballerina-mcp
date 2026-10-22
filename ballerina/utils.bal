@@ -96,8 +96,8 @@ isolated function toLegacyMessage(json payload) returns LegacyMessage|error {
 }
 
 // Keep wire-only additions out of the established application result APIs.
-isolated function applicationResult(Result resultValue, boolean preserveCacheHints = false) returns Result {
-    Result applicationValue = {...resultValue};
+isolated function applicationResult(WireResult resultValue, boolean preserveCacheHints = false) returns WireResult {
+    WireResult applicationValue = {...resultValue};
     string[] wireFields = preserveCacheHints ? ["resultType"] : ["resultType", "ttlMs", "cacheScope"];
     foreach string fieldName in wireFields {
         _ = applicationValue.removeIfHasKey(fieldName);

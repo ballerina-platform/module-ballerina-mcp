@@ -36,7 +36,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
         };
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session,
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session,
             @http:Header {name: "Authorization"} string? auth, http:Headers headers)
             returns mcp:ToolResult|mcp:ServerError {
         string viaAnnotation = auth ?: "<none>";

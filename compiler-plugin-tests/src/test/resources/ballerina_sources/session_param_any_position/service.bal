@@ -4,9 +4,9 @@
 import ballerina/mcp;
 
 service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9340) {
-    remote isolated function sessionInMiddle(string label, mcp:HttpSession session, int count) returns string =>
+    remote isolated function sessionInMiddle(string label, mcp:Session session, int count) returns string =>
         string `${label}:${session.getSessionId()}:${count}`;
 
-    remote isolated function sessionLast(string label, mcp:HttpSession? session) returns string =>
+    remote isolated function sessionLast(string label, mcp:Session? session) returns string =>
         string `${label}:${session is () ? "" : session.getSessionId()}`;
 }

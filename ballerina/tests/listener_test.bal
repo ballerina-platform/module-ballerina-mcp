@@ -90,7 +90,7 @@ function testModernServicesCannotRequireLegacySessions() returns error? {
         service object {
             remote isolated function onListTools() returns ToolPage => {tools: []};
 
-            remote isolated function onCallTool(CallToolParams callParams, HttpSession session)
+            remote isolated function onCallTool(CallToolParams callParams, Session session)
                     returns ToolResult => {content: []};
         };
 
@@ -98,7 +98,7 @@ function testModernServicesCannotRequireLegacySessions() returns error? {
     Error? attachError = mcpListener.attach(sessionService, "/sessionBound");
     test:assertTrue(attachError is DispatcherError);
     if attachError is DispatcherError {
-        test:assertTrue(attachError.message().includes("cannot require mcp:HttpSession"));
+        test:assertTrue(attachError.message().includes("cannot require mcp:Session"));
     }
     check mcpListener.immediateStop();
 }

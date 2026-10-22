@@ -82,7 +82,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
 
     @mcp:Tool {description: "Defaultable parameter followed by an injected meta"}
     isolated remote function withDefaultBeforeMeta(string city, string unit = "celsius",
-            mcp:RequestMeta? meta = ()) returns string {
+            mcp:Meta? meta = ()) returns string {
         return string `city=${city} unit=${unit} meta=${meta is () ? "()" : "present"}`;
     }
 }

@@ -18,6 +18,14 @@ import ballerina/http;
 import ballerina/log;
 
 # Configuration options for the Streamable HTTP client transport.
+#
+# + sessionId - Optional session identifier for continued interactions.
+public type StreamableHttpClientTransportConfig record {|
+    *http:ClientConfiguration;
+    string sessionId?;
+|};
+
+# Configuration options for `mcp:StreamableHttpClient2`.
 public type StreamableHttpClientConfig record {|
     # Auto probes discovery and falls back to the legacy handshake.
     ProtocolMode protocolMode = "auto";
@@ -361,7 +369,7 @@ isolated class StreamableHttpClientTransport {
     }
 
     isolated function sendProtocolRequest(JsonRpcRequest requestMessage, map<string|string[]> additionalHeaders,
-            map<string> parameterHeaders = {}, boolean requireResultType = true) returns Result|ClientError {
+            map<string> parameterHeaders = {}, boolean requireResultType = true) returns WireResult|ClientError {
         map<string|string[]> requestHeaders = check prepareProtocolRequestHeaders(requestMessage, additionalHeaders, parameterHeaders);
         http:Response httpResponse = check self.execute(POST, requestHeaders, requestMessage);
         return readProtocolResponse(httpResponse, requestMessage.id, requireResultType);

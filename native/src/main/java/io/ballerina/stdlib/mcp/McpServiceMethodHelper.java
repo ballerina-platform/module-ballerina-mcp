@@ -90,8 +90,8 @@ public final class McpServiceMethodHelper {
 
     // MCP HTTP session and metadata-related constants
     private static final String MCP_PACKAGE_NAME = "mcp";
-    private static final String SESSION_TYPE_NAME = "HttpSession";
-    private static final String META_TYPE_NAME = "RequestMeta";
+    private static final String SESSION_TYPE_NAME = "Session";
+    private static final String META_TYPE_NAME = "Meta";
     private static final String META_FIELD_NAME = "_meta";
     private static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
     private static final String AUTH_CONTEXT_TYPE_NAME = "AuthContext";
@@ -168,7 +168,7 @@ public final class McpServiceMethodHelper {
 
     /**
      * Invoke the 'onCallTool' remote method of a Streamable HTTP advanced service. The method's
-     * declared parameters are inspected and bound flexibly (CallToolParams, HttpSession, AuthContext,
+     * declared parameters are inspected and bound flexibly (CallToolParams, Session, AuthContext,
      * http:Headers, http:Request, and '@http:Header' parameters), mirroring how basic service tools are bound.
      *
      * @param env                    The Ballerina runtime environment.
@@ -554,7 +554,7 @@ public final class McpServiceMethodHelper {
     }
 
     private static boolean isSessionParameter(Parameter param) {
-        // HttpSession is commonly declared nilable, so look through the union as well.
+        // Session is commonly declared nilable, so look through the union as well.
         return isMcpType(param.type, SESSION_TYPE_NAME);
     }
 
@@ -807,7 +807,7 @@ public final class McpServiceMethodHelper {
             return true;
         }
 
-        // Check if it is an optional request metadata type (mcp:RequestMeta?).
+        // Check if it is an optional request metadata type (mcp:Meta?).
         if (paramType instanceof UnionType unionType) {
             return unionType.getMemberTypes().stream()
                     .anyMatch(type -> type.getPackage() != null

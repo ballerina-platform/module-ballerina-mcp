@@ -65,7 +65,7 @@ isolated class ProtocolMessageStream {
 }
 
 isolated function readProtocolResponse(http:Response httpResponse, RequestId requestId, boolean modernResponse = true)
-        returns Result|ClientError {
+        returns WireResult|ClientError {
     WireMessage messageValue;
     if httpResponse.getContentType().includes(CONTENT_TYPE_SSE) {
         stream<http:SseEvent, error?>|error eventStream = httpResponse.getSseEventStream();
@@ -73,7 +73,7 @@ isolated function readProtocolResponse(http:Response httpResponse, RequestId req
             return error ResponseParsingError(eventStream.message());
         }
         ProtocolMessageStream messageStream = new (eventStream);
-        Result|ClientError responseValue = readProtocolStream(messageStream, requestId, modernResponse);
+        WireResult|ClientError responseValue = readProtocolStream(messageStream, requestId, modernResponse);
         StreamError? closeError = messageStream.close();
         if closeError is StreamError && responseValue !is ClientError {
             return closeError;
@@ -93,7 +93,7 @@ isolated function readProtocolResponse(http:Response httpResponse, RequestId req
 }
 
 isolated function readProtocolStream(ProtocolMessageStream messageStream, RequestId requestId, boolean modernResponse)
-        returns Result|ClientError {
+        returns WireResult|ClientError {
     while true {
         var streamItem = messageStream.next();
         if streamItem is StreamError {
@@ -110,7 +110,7 @@ isolated function readProtocolStream(ProtocolMessageStream messageStream, Reques
 }
 
 isolated function protocolMessageResult(WireMessage messageValue, RequestId requestId, boolean modernResponse, int statusCode)
-        returns Result|ClientError {
+        returns WireResult|ClientError {
     if messageValue is WireError {
         RequestId? responseId = messageValue?.id;
         if responseId is RequestId && responseId != requestId {
@@ -125,7 +125,7 @@ isolated function protocolMessageResult(WireMessage messageValue, RequestId requ
     if statusCode < 200 || statusCode >= 300 {
         return error HttpClientError("HTTP error response contained a success result", statusCode = statusCode);
     }
-    Result resultValue = messageValue.result;
+    WireResult resultValue = messageValue.result;
     anydata resultType = resultValue["resultType"];
     if modernResponse && resultType !is string {
         return error ResponseParsingError("Modern result is missing required resultType");

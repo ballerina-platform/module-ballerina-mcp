@@ -159,7 +159,7 @@ function testCallToolResult() {
 
 @test:Config {}
 function testJsonRpcResponseTypes() {
-    ToolResult toolResult = {content: [{'type: "text", text: "done"}]};
+    CallToolResult toolResult = {content: [{'type: "text", text: "done"}]};
     JsonRpcResponse resultResponse = {jsonrpc: "2.0", id: 1, result: toolResult};
     JsonRpcError errorResponse = {
         jsonrpc: "2.0",

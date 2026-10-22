@@ -77,7 +77,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
         return {tools: [{name: "ping", description: "Pings the server", inputSchema: {"type": "object"}}]};
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
             returns mcp:ToolResult|mcp:ServerError {
         if params.name == "failing" {
             return error mcp:ServerError("upstream API returned 503");
@@ -110,7 +110,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
         return error mcp:ServerError("tool registry is unavailable");
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
             returns mcp:ToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }
@@ -127,7 +127,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
         return {tools: [{name: empty[5].toString(), inputSchema: {"type": "object"}}]};
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
+    isolated remote function onCallTool(mcp:CallToolParams params, mcp:Session? session)
             returns mcp:ToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }

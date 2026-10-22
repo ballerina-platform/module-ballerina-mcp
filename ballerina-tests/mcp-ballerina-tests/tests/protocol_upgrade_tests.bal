@@ -24,7 +24,7 @@ listener mcp:StreamableHttpListener upgradeListener = check new (8788);
     protocolMode: "auto"
 }
 service mcp:StreamableHttpService /upgrade on upgradeListener {
-    remote isolated function versionedEcho(string inputValue, mcp:RequestMeta? requestMeta) returns string {
+    remote isolated function versionedEcho(string inputValue, mcp:Meta? requestMeta) returns string {
         return inputValue + (requestMeta is () ? ":no-meta" : ":meta");
     }
 }

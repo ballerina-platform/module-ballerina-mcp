@@ -29,7 +29,7 @@ service mcp:StreamableHttpService /mcp on interopListener {
 
 @mcp:StreamableHttpServiceConfig {info: {name: "ballerina-stateful-interop", version: "2.0.0"}}
 service mcp:StreamableHttpService /stateful on interopListener {
-    remote isolated function sessionIdentity(mcp:HttpSession sessionValue) returns string => sessionValue.getSessionId();
+    remote isolated function sessionIdentity(mcp:Session sessionValue) returns string => sessionValue.getSessionId();
 }
 
 @mcp:StreamableHttpServiceConfig {info: {name: "ballerina-modern-interop", version: "2.0.0"}, protocolMode: "modern"}

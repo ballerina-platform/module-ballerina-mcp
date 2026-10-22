@@ -27,7 +27,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
     return @http:ServiceConfig {
         ...httpServiceConfig
     } isolated service object {
-        private map<HttpSession> sessionMap = {};
+        private map<Session> sessionMap = {};
         // Principal that created each session, when the service uses an `mcp:OAuthProtectedResourceConfig`.
         private map<string> sessionOwners = {};
         private final ServerAuthenticator? authenticator = serviceAuthenticator;
@@ -68,7 +68,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if protocolVersionError !is () {
                 return protocolVersionError;
             }
-            HttpSessionMode sessionMode = config.sessionMode;
+            SessionMode sessionMode = config.sessionMode;
 
             if sessionMode == STATELESS {
                 return <http:BadRequest>{
@@ -249,7 +249,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), id);
             }
-            HttpSessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_INITIALIZE);
+            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_INITIALIZE);
 
             string requestedVersion = initRequest.params.protocolVersion;
             string protocolVersion = selectProtocolVersion(requestedVersion);
@@ -300,7 +300,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }
 
                 string newSessionId = uuid:createRandomUuid();
-                HttpSession session = new (newSessionId);
+                Session session = new (newSessionId);
                 self.sessionMap[newSessionId] = session;
                 if sessionOwner is string {
                     // A session belongs to the principal that created it; others cannot use it.
@@ -325,7 +325,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
             }
-            HttpSessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_LIST_TOOLS);
+            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_LIST_TOOLS);
 
             string? sessionId = ();
 
@@ -368,7 +368,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             foreach string fieldName in ["resultType", "ttlMs", "cacheScope"] {
                 _ = legacyResult.removeIfHasKey(fieldName);
             }
-            JsonRpcResponse responseBody = {
+            WireResponse responseBody = {
                 jsonrpc: JSONRPC_VERSION,
                 id: request.id,
                 result: legacyResult.cloneReadOnly()
@@ -387,7 +387,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if serviceConfig is Error {
                 return createJsonRpcErrorResponse(INTERNAL_ERROR, serviceConfig.message(), request.id);
             }
-            HttpSessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_CALL_TOOL);
+            SessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_CALL_TOOL);
 
             string? sessionId = ();
 
@@ -422,7 +422,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 }
             }
 
-            HttpSession? session;
+            Session? session;
             lock {
                 session = sessionId is string ? self.sessionMap[sessionId] : ();
             }
@@ -440,7 +440,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                         string `Failed to call tool '${params.name}': ${callToolResult.message()}`, request.id);
             }
 
-            JsonRpcResponse responseBody = {
+            WireResponse responseBody = {
                 jsonrpc: JSONRPC_VERSION,
                 id: request.id,
                 result: callToolResult.cloneReadOnly()
@@ -472,7 +472,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             return error DispatcherError("MCP service is not available");
         }
 
-        private isolated function executeOnCallTool(CallToolParams params, HttpSession? session, http:Headers headers,
+        private isolated function executeOnCallTool(CallToolParams params, Session? session, http:Headers headers,
                 http:Request httpRequest, boolean treatNilableAsOptional, readonly & AuthContext? authContext)
                 returns ToolResult|Error {
             StreamableHttpService|StreamableHttpAdvancedService mcpService =
