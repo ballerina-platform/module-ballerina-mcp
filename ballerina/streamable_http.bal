@@ -1,0 +1,240 @@
+// Copyright (c) 2025 WSO2 LLC (http://www.wso2.com).
+//
+// WSO2 LLC. licenses this file to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+import ballerina/http;
+
+# Configuration options for the Streamable HTTP client transport.
+#
+# + sessionId - Optional session identifier for continued interactions.
+public type StreamableHttpClientTransportConfig record {|
+    *http:ClientConfiguration;
+    string sessionId?;
+|};
+
+# Provides HTTP-based client transport with support for streaming.
+isolated class StreamableHttpClientTransport {
+    private final string serverUrl;
+    private final http:Client httpClient;
+    private string? sessionId;
+    # Protocol version negotiated during initialization, sent on all subsequent requests.
+    private string? protocolVersion = ();
+
+    # Initializes the HTTP client transport with the provided server URL.
+    #
+    # + serverUrl - The URL of the server endpoint.
+    # + config - Optional configuration, such as session ID.
+    # + return - A StreamableHttpTransportError if initialization fails; otherwise, nil.
+    isolated function init(string serverUrl, *StreamableHttpClientTransportConfig config)
+            returns StreamableHttpTransportError? {
+        self.serverUrl = serverUrl;
+
+        StreamableHttpClientTransportConfig {sessionId, ...clientConfig} = config;
+        clientConfig.followRedirects = clientConfig.followRedirects ?: {
+            enabled: true
+        };
+        do {
+            self.httpClient = check new (serverUrl, clientConfig);
+        } on fail error e {
+            return error HttpClientError(string `Unable to initialize HTTP client for '${serverUrl}': ${e.message()}`);
+        }
+        self.sessionId = sessionId;
+    }
+
+    # Sends a JSON-RPC message to the server and returns the response.
+    #
+    # + message - The JSON-RPC message to send
+    # + additionalHeaders - Optional additional headers to include with the request
+    # + return - A JSON-RPC response message, a stream of messages, or a transport error.
+    isolated function sendMessage(JsonRpcMessage message, map<string|string[]> additionalHeaders = {})
+            returns JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? {
+        map<string|string[]> headers = self.prepareRequestHeaders();
+        headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
+        headers[ACCEPT_HEADER] = string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`;
+
+        // Merge additional headers, with additional headers overriding defaults
+        foreach var [key, value] in additionalHeaders.entries() {
+            foreach string headerName in headers.keys().filter(k => k.toLowerAscii() == key.toLowerAscii()) {
+                _ = headers.remove(headerName);
+            }
+            headers[key] = value;
+        }
+
+        do {
+            http:Response response = check self.httpClient->post("", message, headers = headers);
+
+            // Handle session ID in the initialization response.
+            string|error sessionIdHeader = response.getHeader(SESSION_ID_HEADER);
+            if sessionIdHeader is string {
+                lock {
+                    self.sessionId = sessionIdHeader;
+                }
+            }
+
+            if response.statusCode < 200 || response.statusCode >= 300 {
+                return error HttpClientError(
+                    string `Server returned error status ${response.statusCode}: ${response.reasonPhrase}`
+                );
+            }
+
+            // If response is 202 Accepted, there is no content to process.
+            if response.statusCode == http:STATUS_ACCEPTED {
+                return;
+            }
+
+            if message !is JsonRpcRequest {
+                return;
+            }
+
+            string contentType = response.getContentType();
+            if contentType.includes(CONTENT_TYPE_SSE) {
+                return self.processServerSentEvents(response);
+            }
+            if contentType.includes(CONTENT_TYPE_JSON) {
+                return self.processJsonResponse(response);
+            }
+            return error UnsupportedContentTypeError(
+                string `Server returned unsupported content type '${contentType}'.`
+            );
+        } on fail error e {
+            return error HttpClientError(string `Failed to send message to server: ${e.message()}`);
+        }
+    }
+
+    # Establishes a Server-Sent Events (SSE) stream with the server.
+    #
+    # + return - A stream of JsonRpcMessages, or a StreamableHttpTransportError.
+    isolated function establishEventStream() returns stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError {
+        map<string> headers = self.prepareRequestHeaders();
+        headers[ACCEPT_HEADER] = CONTENT_TYPE_SSE;
+
+        do {
+            stream<http:SseEvent, error?> sseEventStream = check self.httpClient->get("", headers = headers);
+
+            JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
+            return new stream<JsonRpcMessage, StreamError?>(streamTransformer);
+        } on fail error e {
+            return error SseStreamEstablishmentError(
+                string `Failed to establish SSE connection with server: ${e.message()}`
+            );
+        }
+    }
+
+    # Terminates the current session with the server.
+    #
+    # + return - A StreamableHttpTransportError if termination fails; otherwise, nil.
+    isolated function terminateSession() returns StreamableHttpTransportError? {
+        lock {
+            if self.sessionId is () {
+                return;
+            }
+
+            map<string> headers = self.prepareRequestHeaders();
+            headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
+
+            do {
+                http:Response response = check self.httpClient->delete("", headers = headers);
+
+                if response.statusCode == 405 {
+                    return error SessionOperationError("Server does not support session termination.");
+                }
+
+                self.sessionId = ();
+                self.protocolVersion = ();
+                return;
+            } on fail error e {
+                return error SessionOperationError(
+                    string `Failed to terminate session: ${e.message()}`
+                );
+            }
+        }
+    }
+
+    # Returns the current session ID, or nil if no session is active.
+    #
+    # + return - The current session ID as a string, or nil if not set.
+    isolated function getSessionId() returns string? {
+        lock {
+            return self.sessionId;
+        }
+    }
+
+    # Records the protocol version negotiated during initialization. Once set, it is included as the
+    # `MCP-Protocol-Version` header on all subsequent requests, as required by the Streamable HTTP transport.
+    #
+    # + protocolVersion - The negotiated protocol version.
+    isolated function setProtocolVersion(string protocolVersion) {
+        lock {
+            self.protocolVersion = protocolVersion;
+        }
+    }
+
+    # Prepares common HTTP headers for requests, including the session ID if present.
+    #
+    # + return - Map of common headers to include in each request.
+    private isolated function prepareRequestHeaders() returns map<string> {
+        lock {
+            map<string> headers = {};
+            string? currentSessionId = self.sessionId;
+            if currentSessionId is string {
+                headers[SESSION_ID_HEADER] = currentSessionId;
+            }
+            string? currentProtocolVersion = self.protocolVersion;
+            if currentProtocolVersion is string {
+                headers[PROTOCOL_VERSION_HEADER] = currentProtocolVersion;
+            }
+            return headers.clone();
+        }
+    }
+
+    # Processes a Server-Sent Events HTTP response into a stream of JsonRpcMessages.
+    #
+    # + response - The HTTP response containing SSE data.
+    # + return - A stream of JsonRpcMessages, or a StreamableHttpTransportError.
+    private isolated function processServerSentEvents(http:Response response)
+            returns stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError {
+        do {
+            stream<http:SseEvent, error?> sseEventStream = check response.getSseEventStream();
+            JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
+            return new stream<JsonRpcMessage, StreamError?>(streamTransformer);
+        } on fail error e {
+            return error ResponseParsingError(
+                string `Unable to process SSE response: ${e.message()}`
+            );
+        }
+    }
+
+    # Processes a JSON HTTP response into a JsonRpcMessage.
+    #
+    # + response - The HTTP response containing JSON data.
+    # + return - A JsonRpcMessage, or a StreamableHttpTransportError.
+    private isolated function processJsonResponse(http:Response response)
+            returns JsonRpcMessage|StreamableHttpTransportError {
+        do {
+            json payload = check response.getJsonPayload();
+            JsonRpcMessage|http:ErrorPayload result = check payload.cloneWithType();
+            if result is JsonRpcMessage {
+                return result;
+            }
+            return error HttpClientError(
+                string `Received error response from server: ${result.toJsonString()}`
+            );
+        } on fail error e {
+            return error ResponseParsingError(
+                string `Unable to parse JSON response: ${e.message()}`
+            );
+        }
+    }
+}

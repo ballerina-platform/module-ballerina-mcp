@@ -1,0 +1,8 @@
+services:
+  weather-info-server:
+    build: .
+    container_name: weather-info-server
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production

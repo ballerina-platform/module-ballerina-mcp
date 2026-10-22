@@ -92,7 +92,7 @@
         },
         "metadata": {
           "label": "Service Type",
-          "description": "The MCP service type exposed over the Streamable HTTP transport."
+          "description": "The MCP service type. New services use the Streamable HTTP transport; mcp:Service is deprecated and only resolved when already present in the source."
         },
         "state": {
           "hidden": true,
@@ -262,7 +262,7 @@
             {
               "target": "$streamableHttpService.tool.meta",
               "metadata": {
-                "label": "Request Metadata",
+                "label": "Meta",
                 "description": "Binds the MCP request metadata (e.g. a progress token) attached to the tool call."
               },
               "state": {
@@ -290,8 +290,8 @@
                     "advanced": false
                   },
                   "key": "type",
-                  "placeholder": "mcp:RequestMeta?",
-                  "default": "mcp:RequestMeta?",
+                  "placeholder": "mcp:Meta?",
+                  "default": "mcp:Meta?",
                   "widget": {
                     "widgetKind": "TYPE",
                     "selected": true
@@ -750,7 +750,7 @@
             {
               "target": "$service.tool.meta",
               "metadata": {
-                "label": "Request Metadata",
+                "label": "Meta",
                 "description": "Binds the MCP request metadata (e.g. a progress token) attached to the tool call."
               },
               "state": {
@@ -778,8 +778,8 @@
                     "advanced": false
                   },
                   "key": "type",
-                  "placeholder": "mcp:RequestMeta?",
-                  "default": "mcp:RequestMeta?",
+                  "placeholder": "mcp:Meta?",
+                  "default": "mcp:Meta?",
                   "widget": {
                     "widgetKind": "TYPE",
                     "selected": true
