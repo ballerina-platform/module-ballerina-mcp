@@ -23,9 +23,9 @@ const string TEST_CLIENT_NAME = "test-client";
 const string TEST_CLIENT_NAME_2 = "test-client-2";
 const string TEST_CLIENT_VERSION = "1.0.0";
 
-final StreamableHttpClient mcpClient = check new (VALID_MCP_URL);
-final StreamableHttpClient invalidClient = check new (INVALID_URL);
-final StreamableHttpClient unreachableClient = check new (UNREACHABLE_MCP_URL);
+final StreamableHttpClient2 mcpClient = check new (VALID_MCP_URL);
+final StreamableHttpClient2 invalidClient = check new (INVALID_URL);
+final StreamableHttpClient2 unreachableClient = check new (UNREACHABLE_MCP_URL);
 final Implementation clientInfo = {
     name: TEST_CLIENT_NAME,
     version: TEST_CLIENT_VERSION
@@ -33,17 +33,17 @@ final Implementation clientInfo = {
 
 @test:Config {}
 function testClientConstructionWithValidUrl() returns error? {
-    test:assertTrue(mcpClient is StreamableHttpClient);
+    test:assertTrue(mcpClient is StreamableHttpClient2);
 }
 
 @test:Config {}
 function testClientConstructionWithInvalidUrlFormat() returns error? {
-    test:assertTrue(invalidClient is StreamableHttpClient);
+    test:assertTrue(invalidClient is StreamableHttpClient2);
 }
 
 @test:Config {}
 function testClientConstructionWithUnreachableServer() returns error? {
-    test:assertTrue(unreachableClient is StreamableHttpClient);
+    test:assertTrue(unreachableClient is StreamableHttpClient2);
 }
 
 @test:Config {}
@@ -54,15 +54,15 @@ function testClientConstructionWithConfig() returns error? {
             followRedirects: {enabled: true}
         }
     };
-    StreamableHttpClient 'client = check new (VALID_MCP_URL, config);
+    StreamableHttpClient2 'client = check new (VALID_MCP_URL, config);
 
-    test:assertTrue('client is StreamableHttpClient);
+    test:assertTrue('client is StreamableHttpClient2);
 }
 
 @test:Config {}
 function testClientOperationsRequireConnect() returns error? {
-    StreamableHttpClient disconnectedClient = check new (VALID_MCP_URL);
-    ListToolsResult|ClientError result = disconnectedClient->listTools();
+    StreamableHttpClient2 disconnectedClient = check new (VALID_MCP_URL);
+    ToolPage|ClientError result = disconnectedClient->listTools();
     test:assertTrue(result is ClientInitializationError);
 }
 
@@ -186,7 +186,7 @@ function testInitializationWithoutCapabilities() returns error? {
 
 @test:Config {}
 function testMultipleClientsInitialization() returns error? {
-    StreamableHttpClient mcpClient2 = check new (VALID_MCP_URL);
+    StreamableHttpClient2 mcpClient2 = check new (VALID_MCP_URL);
     Implementation clientInfo2 = {
         name: TEST_CLIENT_NAME_2,
         version: TEST_CLIENT_VERSION

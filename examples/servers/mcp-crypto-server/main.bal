@@ -31,7 +31,7 @@ listener mcp:StreamableHttpListener mcpListener = check new (9091);
 }
 service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
 
-    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    remote isolated function onListTools() returns mcp:ToolPage|mcp:ServerError {
         return {
             tools: [
                 {
@@ -78,7 +78,7 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
         };
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session) returns mcp:CallToolResult|mcp:ServerError {
+    remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session) returns mcp:ToolResult|mcp:ServerError {
         record {} arguments = params.arguments ?: {};
 
         // Extract metadata from client request if present
@@ -101,7 +101,7 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
         }
     }
 
-    private isolated function handleHashText(record {} arguments, record {} clientMeta) returns mcp:CallToolResult|mcp:ServerError {
+    private isolated function handleHashText(record {} arguments, record {} clientMeta) returns mcp:ToolResult|mcp:ServerError {
         time:Utc startTime = time:utcNow();
 
         string|error text = (arguments["text"]).cloneWithType();
@@ -176,7 +176,7 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
         };
     }
 
-    private isolated function handleBase64(record {} arguments, record {} clientMeta) returns mcp:CallToolResult|mcp:ServerError {
+    private isolated function handleBase64(record {} arguments, record {} clientMeta) returns mcp:ToolResult|mcp:ServerError {
         time:Utc startTime = time:utcNow();
 
         string|error text = (arguments["text"]).cloneWithType();

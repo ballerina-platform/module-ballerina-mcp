@@ -80,12 +80,12 @@ isolated function respondWithIcons(json payload, int ttlMs, string cacheScope) r
 
 @test:Config {}
 function testClientDecodesSpecCompliantIcons() returns error? {
-    StreamableHttpClient 'client = check new (ICONS_MOCK_SERVER_URL);
+    StreamableHttpClient2 'client = check new (ICONS_MOCK_SERVER_URL);
     _ = check 'client->initializeLegacy();
 
-    ListToolsResult result = check 'client->listTools();
+    ToolPage result = check 'client->listTools();
     test:assertEquals(result.tools.length(), 1);
-    ToolDefinition tool = result.tools[0];
+    ToolInfo tool = result.tools[0];
     test:assertEquals(tool.name, "get_me");
     Icon[] icons = tool.icons ?: [];
     test:assertEquals(icons.length(), 3);
@@ -100,10 +100,10 @@ function testClientDecodesSpecCompliantIcons() returns error? {
 
 @test:Config {}
 function testLegacyListToolsIgnoresInvalidCacheHints() returns error? {
-    StreamableHttpClient 'client = check new (ICONS_MOCK_SERVER_URL + "/invalidHints");
+    StreamableHttpClient2 'client = check new (ICONS_MOCK_SERVER_URL + "/invalidHints");
     _ = check 'client->initializeLegacy();
 
-    ListToolsResult result = check 'client->listTools();
+    ToolPage result = check 'client->listTools();
     test:assertEquals(result.tools.length(), 1);
     test:assertFalse(result.hasKey("ttlMs"));
     test:assertFalse(result.hasKey("cacheScope"));

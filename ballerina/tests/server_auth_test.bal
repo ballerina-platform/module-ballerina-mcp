@@ -75,7 +75,7 @@ service StreamableHttpService /mcp on serverAuthListener {
     }
 }
 service StreamableHttpAdvancedService /advanced on serverAuthListener {
-    remote isolated function onListTools(AuthContext auth) returns ListToolsResult => {
+    remote isolated function onListTools(AuthContext auth) returns ToolPage => {
         tools: [
             {name: "whoami", inputSchema: {'type: "object"}},
             {name: "admin", inputSchema: {'type: "object"}}
@@ -83,7 +83,7 @@ service StreamableHttpAdvancedService /advanced on serverAuthListener {
     };
 
     remote isolated function onCallTool(CallToolParams params, AuthContext auth)
-            returns CallToolResult|InsufficientScopeError {
+            returns ToolResult|InsufficientScopeError {
         if params.name == "admin" && auth.scopes.indexOf("admin") is () {
             return error InsufficientScopeError("The admin scope is required", scopes = ["admin"]);
         }
@@ -104,14 +104,14 @@ service StreamableHttpAdvancedService /advanced on serverAuthListener {
     }
 }
 service StreamableHttpAdvancedService /listing on serverAuthListener {
-    remote isolated function onListTools(AuthContext auth) returns ListToolsResult|InsufficientScopeError {
+    remote isolated function onListTools(AuthContext auth) returns ToolPage|InsufficientScopeError {
         if auth.scopes.indexOf("tools:list") is () {
             return error InsufficientScopeError("Listing tools requires the tools:list scope", scopes = ["tools:list"]);
         }
         return {tools: [{name: "echo", inputSchema: {'type: "object"}}]};
     }
 
-    remote isolated function onCallTool(CallToolParams params) returns CallToolResult =>
+    remote isolated function onCallTool(CallToolParams params) returns ToolResult =>
         {content: [{'type: "text", text: params.name}]};
 }
 
@@ -163,13 +163,13 @@ isolated function serverAuthToken(string scope = "mcp:tools", string subject = "
 isolated function protectedModernPost(string servicePath, string methodName, RequestParams requestParams = {},
         string? token = ()) returns http:Response|error {
     requestParams._meta = {
-        [PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION,
+        [PROTOCOL_META_KEY]: LATEST_MODERN_PROTOCOL_VERSION,
         [CAPABILITIES_META_KEY]: {}
     };
     map<string|string[]> requestHeaders = {
         [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_MODERN_PROTOCOL_VERSION,
         [METHOD_HEADER]: methodName
     };
     anydata toolName = requestParams["name"];
@@ -503,9 +503,9 @@ function testServerAuthConfigurationIsValidated() returns error? {
     StreamableHttpAdvancedService requiresAuth = @StreamableHttpServiceConfig {
         info: {name: "requires-auth", version: "1"}
     } isolated service object {
-        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+        remote isolated function onListTools() returns ToolPage => {tools: []};
 
-        remote isolated function onCallTool(CallToolParams params, AuthContext auth) returns CallToolResult =>
+        remote isolated function onCallTool(CallToolParams params, AuthContext auth) returns ToolResult =>
             {content: []};
     };
     Error? requiresAuthResult = validationListener.attach(requiresAuth, "/requires-auth");
@@ -526,9 +526,9 @@ isolated function newFilesVirtualHostService() returns StreamableHttpAdvancedSer
             }
         }
     } service object {
-        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+        remote isolated function onListTools() returns ToolPage => {tools: []};
 
-        remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
+        remote isolated function onCallTool(CallToolParams params) returns ToolResult => {content: []};
     };
 
 isolated function newUppercaseFilesVirtualHostService() returns StreamableHttpAdvancedService =>
@@ -544,9 +544,9 @@ isolated function newUppercaseFilesVirtualHostService() returns StreamableHttpAd
             }
         }
     } service object {
-        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+        remote isolated function onListTools() returns ToolPage => {tools: []};
 
-        remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
+        remote isolated function onCallTool(CallToolParams params) returns ToolResult => {content: []};
     };
 
 isolated function newMediaVirtualHostService() returns StreamableHttpAdvancedService =>
@@ -562,9 +562,9 @@ isolated function newMediaVirtualHostService() returns StreamableHttpAdvancedSer
             }
         }
     } service object {
-        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+        remote isolated function onListTools() returns ToolPage => {tools: []};
 
-        remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
+        remote isolated function onCallTool(CallToolParams params) returns ToolResult => {content: []};
     };
 
 isolated function newOtherFilesVirtualHostService() returns StreamableHttpAdvancedService =>
@@ -580,9 +580,9 @@ isolated function newOtherFilesVirtualHostService() returns StreamableHttpAdvanc
             }
         }
     } service object {
-        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+        remote isolated function onListTools() returns ToolPage => {tools: []};
 
-        remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
+        remote isolated function onCallTool(CallToolParams params) returns ToolResult => {content: []};
     };
 
 isolated function newDefaultHostService() returns StreamableHttpAdvancedService =>
@@ -597,9 +597,9 @@ isolated function newDefaultHostService() returns StreamableHttpAdvancedService 
             }
         }
     } service object {
-        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+        remote isolated function onListTools() returns ToolPage => {tools: []};
 
-        remote isolated function onCallTool(CallToolParams params) returns CallToolResult => {content: []};
+        remote isolated function onCallTool(CallToolParams params) returns ToolResult => {content: []};
     };
 
 @test:Config {}
@@ -1143,7 +1143,7 @@ service StreamableHttpService /mcp on e2eMcpListener {
 
 @test:Config {}
 function testClientAuthorizesAgainstProtectedServer() returns error? {
-    StreamableHttpClient mcpClient = check new (E2E_RESOURCE, httpConfig = {
+    StreamableHttpClient2 mcpClient = check new (E2E_RESOURCE, httpConfig = {
         auth: {
             grant: {
                 clientConfig: {
@@ -1158,11 +1158,11 @@ function testClientAuthorizesAgainstProtectedServer() returns error? {
     });
     _ = check mcpClient->connect();
 
-    CallToolResult whoami = check mcpClient->callTool({name: "whoami"});
+    ToolResult whoami = check mcpClient->callTool({name: "whoami"});
     test:assertEquals(whoami["structuredContent"], E2E_CLIENT_ID);
 
     // The tool's scope is missing from the first token, so the client steps up and retries.
-    CallToolResult deleted = check mcpClient->callTool({name: "deleteFile", arguments: {"path": "a"}});
+    ToolResult deleted = check mcpClient->callTool({name: "deleteFile", arguments: {"path": "a"}});
     test:assertEquals(deleted["structuredContent"], "deleted a");
     check mcpClient->close();
 

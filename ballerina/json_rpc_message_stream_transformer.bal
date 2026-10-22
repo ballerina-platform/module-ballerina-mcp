@@ -30,7 +30,7 @@ isolated class JsonRpcMessageStreamTransformer {
     # Retrieves the next JsonRpcMessage from the SSE event stream.
     #
     # + return - A record with the next JsonRpcMessage, a StreamError, or nil if the stream is complete.
-    public isolated function next() returns record {|JsonRpcMessage value;|}|StreamError? {
+    public isolated function next() returns record {|LegacyMessage value;|}|StreamError? {
         while true {
             record {|http:SseEvent value;|}|error? sseEventRecord = self.getNextSseEvent();
 
@@ -50,7 +50,7 @@ isolated class JsonRpcMessageStreamTransformer {
                 continue;
             }
 
-            JsonRpcMessage|JsonRpcMessageTransformationError jsonRpcMessage =
+            LegacyMessage|JsonRpcMessageTransformationError jsonRpcMessage =
                 self.convertSseDataToJsonRpcMessage(eventData);
             if jsonRpcMessage is JsonRpcMessageTransformationError {
                 return jsonRpcMessage;
@@ -98,9 +98,9 @@ isolated class JsonRpcMessageStreamTransformer {
     #
     # + eventData - The `data` field from an SSE event.
     # + return - A JsonRpcMessage or a JsonRpcMessageTransformationError.
-    private isolated function convertSseDataToJsonRpcMessage(string eventData) returns JsonRpcMessage|JsonRpcMessageTransformationError {
+    private isolated function convertSseDataToJsonRpcMessage(string eventData) returns LegacyMessage|JsonRpcMessageTransformationError {
         json|error payload = eventData.fromJsonString();
-        JsonRpcMessage|error message = payload is error ? payload : toLegacyMessage(payload);
+        LegacyMessage|error message = payload is error ? payload : toLegacyMessage(payload);
         if message is error {
             return error TypeConversionError(string `Failed to convert JSON data to JsonRpcMessage: ${message.message()}`);
         }

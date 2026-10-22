@@ -17,15 +17,15 @@
 import ballerina/test;
 
 // A session ID puts the client on the legacy path without a handshake.
-isolated function legacyMockClient(string scenario) returns StreamableHttpClient|ClientError {
-    StreamableHttpClient legacyClient = check new (mockUrl(scenario), sessionId = "legacy-session");
+isolated function legacyMockClient(string scenario) returns StreamableHttpClient2|ClientError {
+    StreamableHttpClient2 legacyClient = check new (mockUrl(scenario), sessionId = "legacy-session");
     _ = check legacyClient->connect();
     return legacyClient;
 }
 
 @test:Config {}
 function testLegacyTransportSurfacesHttpFailures() returns error? {
-    StreamableHttpClient errorStatus = check legacyMockClient("legacyErrorStatus");
+    StreamableHttpClient2 errorStatus = check legacyMockClient("legacyErrorStatus");
     var errorStatusResult = errorStatus->listTools();
     test:assertTrue(errorStatusResult is ClientError);
     if errorStatusResult is ClientError {
@@ -33,18 +33,18 @@ function testLegacyTransportSurfacesHttpFailures() returns error? {
     }
 
     // 202 Accepted carries no body, so there is no result to extract.
-    StreamableHttpClient accepted = check legacyMockClient("legacyAccepted");
+    StreamableHttpClient2 accepted = check legacyMockClient("legacyAccepted");
     var acceptedResult = accepted->listTools();
     test:assertTrue(acceptedResult is MalformedResponseError);
 
-    StreamableHttpClient textResponse = check legacyMockClient("legacyTextResponse");
+    StreamableHttpClient2 textResponse = check legacyMockClient("legacyTextResponse");
     var textResult = textResponse->listTools();
     test:assertTrue(textResult is ServerResponseError);
     if textResult is ServerResponseError {
         test:assertTrue(textResult.message().includes("unsupported content type"));
     }
 
-    StreamableHttpClient badJson = check legacyMockClient("legacyBadJson");
+    StreamableHttpClient2 badJson = check legacyMockClient("legacyBadJson");
     var badJsonResult = badJson->listTools();
     test:assertTrue(badJsonResult is ServerResponseError);
     if badJsonResult is ServerResponseError {
@@ -55,7 +55,7 @@ function testLegacyTransportSurfacesHttpFailures() returns error? {
 @test:Config {}
 function testLegacyTransportReportsUnreachableServers() returns error? {
     // Port 1 is never bound, so every operation fails at the socket level.
-    StreamableHttpClient deadClient = check new ("http://localhost:1/mcp", sessionId = "legacy-session");
+    StreamableHttpClient2 deadClient = check new ("http://localhost:1/mcp", sessionId = "legacy-session");
     _ = check deadClient->connect();
 
     var listResult = deadClient->listTools();
@@ -73,7 +73,7 @@ function testLegacyTransportReportsUnreachableServers() returns error? {
 
 @test:Config {}
 function testLegacyClientRejectsUnexpectedResultTypes() returns error? {
-    StreamableHttpClient wrongList = check legacyMockClient("legacyWrongResult");
+    StreamableHttpClient2 wrongList = check legacyMockClient("legacyWrongResult");
     var listResult = wrongList->listTools();
     test:assertTrue(listResult is ListToolsError);
     if listResult is ListToolsError {
@@ -89,28 +89,28 @@ function testLegacyClientRejectsUnexpectedResultTypes() returns error? {
 
 @test:Config {}
 function testLegacyClientReadsResultsFromSseResponses() returns error? {
-    StreamableHttpClient sseClient = check legacyMockClient("legacySseResult");
-    ListToolsResult toolList = check sseClient->listTools();
+    StreamableHttpClient2 sseClient = check legacyMockClient("legacySseResult");
+    ToolPage toolList = check sseClient->listTools();
     test:assertEquals(toolList.tools, []);
 }
 
 @test:Config {}
 function testLegacyHandshakeValidatesTheInitializeResult() returns error? {
-    StreamableHttpClient badInit = check new (mockUrl("legacyBadInit"), protocolMode = "legacy");
+    StreamableHttpClient2 badInit = check new (mockUrl("legacyBadInit"), protocolMode = "legacy");
     var badInitResult = badInit->initializeLegacy();
     test:assertTrue(badInitResult is ClientInitializationError);
     if badInitResult is ClientInitializationError {
         test:assertTrue(badInitResult.message().includes("unexpected response type"));
     }
 
-    StreamableHttpClient badVersion = check new (mockUrl("legacyBadVersion"), protocolMode = "legacy");
+    StreamableHttpClient2 badVersion = check new (mockUrl("legacyBadVersion"), protocolMode = "legacy");
     var badVersionResult = badVersion->initializeLegacy();
     test:assertTrue(badVersionResult is ProtocolVersionError);
     if badVersionResult is ProtocolVersionError {
         test:assertTrue(badVersionResult.message().includes("is not supported"));
     }
 
-    StreamableHttpClient goodHandshake = check new (mockUrl("legacyOk"), protocolMode = "legacy");
+    StreamableHttpClient2 goodHandshake = check new (mockUrl("legacyOk"), protocolMode = "legacy");
     ConnectionInfo connection = check goodHandshake->initializeLegacy();
     test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
     test:assertEquals(connection.serverInfo?.name, "mock");
@@ -118,11 +118,11 @@ function testLegacyHandshakeValidatesTheInitializeResult() returns error? {
 
 @test:Config {}
 function testLegacySseResponseSurfacesTransformationErrors() returns error? {
-    StreamableHttpClient malformedStream = check legacyMockClient("sseMalformedStream");
+    StreamableHttpClient2 malformedStream = check legacyMockClient("sseMalformedStream");
     var malformedResult = malformedStream->listTools();
     test:assertTrue(malformedResult is TypeConversionError);
 
-    StreamableHttpClient missingData = check legacyMockClient("sseMissingData");
+    StreamableHttpClient2 missingData = check legacyMockClient("sseMissingData");
     // An event without data is not dispatched, so the stream ends without a result.
     var missingDataResult = missingData->listTools();
     test:assertTrue(missingDataResult is InvalidMessageTypeError);
@@ -130,9 +130,9 @@ function testLegacySseResponseSurfacesTransformationErrors() returns error? {
 
 @test:Config {}
 function testAdditionalHeadersOverrideGeneratedTransportHeaders() returns error? {
-    StreamableHttpClient legacyClient = check legacyMockClient("ok");
+    StreamableHttpClient2 legacyClient = check legacyMockClient("ok");
     // Casing differs from the generated header, exercising the case-insensitive replacement.
-    ListToolsResult toolList = check legacyClient->listTools({"Accept": CONTENT_TYPE_JSON});
+    ToolPage toolList = check legacyClient->listTools({"Accept": CONTENT_TYPE_JSON});
     test:assertEquals(toolList.tools.length(), 1);
 }
 
@@ -142,21 +142,21 @@ function testCloseResetsTheClientWhenSessionTerminationFails() returns error? {
         info: {name: "closing-session", version: "1"},
         sessionMode: STATEFUL
     } isolated service object {
-        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+        remote isolated function onListTools() returns ToolPage => {tools: []};
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult => {content: []};
     };
     StreamableHttpListener sessionListener = check new (3225);
     check sessionListener.attach(sessionService, "/mcp");
     check sessionListener.'start();
-    StreamableHttpClient sessionClient = check new ("http://localhost:3225/mcp", protocolMode = "legacy");
+    StreamableHttpClient2 sessionClient = check new ("http://localhost:3225/mcp", protocolMode = "legacy");
     _ = check sessionClient->connect();
 
     // With the server gone, the session DELETE fails at the network level.
     check sessionListener.immediateStop();
     ClientError? closeResult = sessionClient->close();
     test:assertTrue(closeResult is ClientError);
-    ListToolsResult|ClientError listResult = sessionClient->listTools();
+    ToolPage|ClientError listResult = sessionClient->listTools();
     if listResult !is ClientError {
         test:assertFail("expected the client to be disconnected");
     }

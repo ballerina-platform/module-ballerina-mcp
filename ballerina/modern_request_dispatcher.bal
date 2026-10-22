@@ -31,7 +31,8 @@ isolated function isModernRequest(JsonRpcRequest|JsonRpcNotification requestMess
 }
 
 isolated function advertisedProtocolVersions(StreamableHttpServiceConfiguration serviceConfig) returns string[] =>
-    serviceConfig.protocolMode == "modern" ? MODERN_PROTOCOL_VERSIONS : SUPPORTED_PROTOCOL_VERSIONS;
+    serviceConfig.protocolMode == "modern" ? MODERN_PROTOCOL_VERSIONS :
+        [...MODERN_PROTOCOL_VERSIONS, ...LEGACY_PROTOCOL_VERSIONS];
 
 isolated function unsupportedProtocolResponse(string requestedVersion, string[] supportedVersions, RequestId? requestId)
         returns http:BadRequest => {
@@ -123,13 +124,13 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if cursor is http:Ok {
         return cursor;
     }
-    ListToolsResult|error toolList = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
+    ToolPage|error toolList = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
             serviceConfig, authContext, cursor);
     if toolList is error {
         return listingFailureResponse(toolList, authenticator, requestMessage.id);
     }
     if requestMessage.method == REQUEST_LIST_TOOLS {
-        toolList.tools = toolList.tools.sort(key = isolated function(ToolDefinition toolInfo) returns string => toolInfo.name);
+        toolList.tools = toolList.tools.sort(key = isolated function(ToolInfo toolInfo) returns string => toolInfo.name);
         return modernResult(toolList, serviceConfig.info, requestMessage.id, serviceConfig.cacheHints.listTools ?: {});
     }
     CallToolParams|error callParams = requestMessage.params.cloneWithType();
@@ -145,13 +146,13 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
         return modernError(HEADER_MISMATCH, "Mcp-Name must match the tool name", requestMessage.id);
     }
     // A paginating service may list the tool on a later page.
-    ToolDefinition? selectedTool = findTool(toolList, callParams.name);
+    ToolInfo? selectedTool = findTool(toolList, callParams.name);
     map<boolean> visitedCursors = {};
     Cursor? nextCursor = toolList.nextCursor;
     while selectedTool is () && nextCursor is Cursor && !visitedCursors.hasKey(nextCursor) &&
             visitedCursors.length() < MAX_TOOL_LIST_PAGES - 1 {
         visitedCursors[nextCursor] = true;
-        ListToolsResult|error page = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
+        ToolPage|error page = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
                 serviceConfig, authContext, nextCursor);
         if page is error {
             return listingFailureResponse(page, authenticator, requestMessage.id);
@@ -191,7 +192,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
         }
         callParams.requestState = verifiedState;
     }
-    CallToolResult|InputRequiredResult|error callResult = callProtocolTool(mcpService, callParams,
+    ToolResult|InputRequiredResult|error callResult = callProtocolTool(mcpService, callParams,
             httpRequest, requestHeaders, serviceConfig, authContext);
     if callResult is InsufficientScopeError {
         return insufficientScopeFor(authenticator, callResult);
@@ -228,7 +229,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
             callResult.requestState = signedState;
         }
     }
-    if callResult is CallToolResult && callResult.isError != true {
+    if callResult is ToolResult && callResult.isError != true {
         OutputSchema? outputSchema = selectedTool.outputSchema;
         if outputSchema is OutputSchema {
             if !callResult.hasKey("structuredContent") {
@@ -243,10 +244,10 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
 # Lists one page of a service's tools for a modern request, rejecting invalid header declarations.
 isolated function listValidatedToolPage(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig,
-        readonly & AuthContext? authContext, Cursor? cursor) returns ListToolsResult|error {
-    ListToolsResult toolList = check listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig,
+        readonly & AuthContext? authContext, Cursor? cursor) returns ToolPage|error {
+    ToolPage toolList = check listProtocolTools(mcpService, httpRequest, requestHeaders, serviceConfig,
             authContext, cursor);
-    foreach ToolDefinition toolInfo in toolList.tools {
+    foreach ToolInfo toolInfo in toolList.tools {
         _ = toolInfo.removeIfHasKey("execution");
         var headerDefinition = toolParameterHeaders(toolInfo.inputSchema, {});
         // An invalid header declaration is a defect in the service, never the caller's invalid params.
@@ -271,8 +272,8 @@ isolated function listingFailureResponse(error failure, ServerAuthenticator? aut
     return createJsonRpcErrorResponse(handlerErrorCode(failure), failure.message(), requestId);
 }
 
-isolated function findTool(ListToolsResult toolList, string toolName) returns ToolDefinition? {
-    foreach ToolDefinition toolInfo in toolList.tools {
+isolated function findTool(ToolPage toolList, string toolName) returns ToolInfo? {
+    foreach ToolInfo toolInfo in toolList.tools {
         if toolInfo.name == toolName {
             return toolInfo;
         }
@@ -282,10 +283,10 @@ isolated function findTool(ListToolsResult toolList, string toolName) returns To
 
 isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         http:Request httpRequest, http:Headers requestHeaders, StreamableHttpServiceConfiguration serviceConfig,
-        readonly & AuthContext? authContext, Cursor? cursor = ()) returns ListToolsResult|error {
-    ListToolsResult|Error listResult = error ServerError("Unsupported MCP service");
+        readonly & AuthContext? authContext, Cursor? cursor = ()) returns ToolPage|error {
+    ToolPage|Error listResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
-        ListToolsResult|error advancedResult =
+        ToolPage|error advancedResult =
                 trap invokeAdvancedOnListTools(mcpService, cursor, requestHeaders, httpRequest,
                     extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
                     authContext);
@@ -306,7 +307,7 @@ isolated function listProtocolTools(StreamableHttpService|StreamableHttpAdvanced
 isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedService mcpService,
         CallToolParams callParams, http:Request httpRequest, http:Headers requestHeaders,
         StreamableHttpServiceConfiguration serviceConfig, readonly & AuthContext? authContext)
-        returns CallToolResult|InputRequiredResult|error {
+        returns ToolResult|InputRequiredResult|error {
     CallToolParams applicationParams = callParams.clone();
     RequestMeta applicationMeta = {...(callParams._meta ?: {})};
     foreach string metaKey in [PROTOCOL_META_KEY, CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LOG_LEVEL_META_KEY] {
@@ -317,9 +318,9 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
     } else {
         applicationParams._meta = applicationMeta;
     }
-    CallToolResult|error callResult = error ServerError("Unsupported MCP service");
+    ToolResult|error callResult = error ServerError("Unsupported MCP service");
     if mcpService is StreamableHttpAdvancedService {
-        CallToolResult|InputRequiredResult|error advancedResult =
+        ToolResult|InputRequiredResult|error advancedResult =
                 trap invokeAdvancedOnCallTool(mcpService, applicationParams, (), requestHeaders, httpRequest,
                     extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
                     authContext);
@@ -333,7 +334,7 @@ isolated function callProtocolTool(StreamableHttpService|StreamableHttpAdvancedS
         }
     } else if mcpService is StreamableHttpService {
         Context toolContext = new ((callParams.inputResponses ?: {}).cloneReadOnly(), callParams.requestState);
-        CallToolResult|InputRequiredResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
+        ToolResult|InputRequiredResult|error structuredResult = trap callProtocolToolForRemoteFunctions(mcpService,
                 applicationParams, (), requestHeaders, httpRequest,
                 extractHeaderValues(requestHeaders), serviceConfig.httpConfig.treatNilableAsOptional,
                 authContext, toolContext);

@@ -34,6 +34,17 @@ type WireError record {|
 
 type WireMessage WireResponse|WireError|JsonRpcRequest|JsonRpcNotification;
 
+// Legacy responses as the Client decodes them, apart from the public JSON-RPC unions.
+type LegacyServerResult InitializeResult|ToolResult|ToolPage;
+
+type LegacyResponse record {|
+    JSONRPC_VERSION jsonrpc;
+    RequestId id;
+    LegacyServerResult result;
+|};
+
+type LegacyMessage JsonRpcRequest|JsonRpcNotification|JsonRpcError|LegacyResponse;
+
 type ModernRequestMeta record {
     string io\.modelcontextprotocol\/protocolVersion;
     ClientCapabilities io\.modelcontextprotocol\/clientCapabilities;

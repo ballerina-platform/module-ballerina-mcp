@@ -21,12 +21,12 @@ import ballerina/mcp;
     info: {name: "required-cursor", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /requiredCursor on new mcp:StreamableHttpListener(9345) {
-    remote isolated function onListTools(mcp:Cursor cursor) returns mcp:ListToolsResult|mcp:ServerError {
+    remote isolated function onListTools(mcp:Cursor cursor) returns mcp:ToolPage|mcp:ServerError {
         return {tools: []};
     }
 
     remote isolated function onCallTool(mcp:CallToolParams params)
-            returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:InputRequiredResult|mcp:ServerError {
         return {resultType: "complete", content: []};
     }
 }

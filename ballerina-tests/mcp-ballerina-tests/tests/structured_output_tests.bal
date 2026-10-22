@@ -66,69 +66,69 @@ service mcp:StreamableHttpService /argumentHeaders on structuredListener {
 
 @test:Config {}
 function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
-    mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+    mcp:StreamableHttpClient2 httpClient = check new ("http://localhost:8789/structuredHttp",
             protocolMode = "modern");
     _ = check httpClient->connect();
-    mcp:ListToolsResult listedTools = check httpClient->listTools();
-    map<mcp:ToolDefinition> toolsByName = {};
-    foreach mcp:ToolDefinition toolInfo in listedTools.tools {
+    mcp:ToolPage listedTools = check httpClient->listTools();
+    map<mcp:ToolInfo> toolsByName = {};
+    foreach mcp:ToolInfo toolInfo in listedTools.tools {
         toolsByName[toolInfo.name] = toolInfo;
     }
     check assertSchemaType(check toolsByName["stringValue"].ensureType(), "string");
     check assertSchemaType(check toolsByName["arrayValue"].ensureType(), "array");
     check assertSchemaType(check toolsByName["personValue"].ensureType(), "object");
-    mcp:ToolDefinition nullableTool = check toolsByName["nullableValue"].ensureType();
+    mcp:ToolInfo nullableTool = check toolsByName["nullableValue"].ensureType();
     mcp:OutputSchema nullableSchema = check nullableTool.outputSchema.ensureType();
     test:assertTrue(nullableSchema.hasKey("anyOf"));
-    mcp:ToolDefinition textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
+    mcp:ToolInfo textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
     test:assertEquals(textOnlyTool.outputSchema, ());
 
-    mcp:CallToolResult stringResult = check httpClient->callTool({name: "stringValue"});
+    mcp:ToolResult stringResult = check httpClient->callTool({name: "stringValue"});
     assertStructuredValue(stringResult, "hello");
-    mcp:CallToolResult arrayResult = check httpClient->callTool({name: "arrayValue"});
+    mcp:ToolResult arrayResult = check httpClient->callTool({name: "arrayValue"});
     assertStructuredValue(arrayResult, <json>[1, 2, 3]);
-    mcp:CallToolResult personResult = check httpClient->callTool({name: "personValue"});
+    mcp:ToolResult personResult = check httpClient->callTool({name: "personValue"});
     assertStructuredValue(personResult, <json>{name: "Alice", age: 30});
-    mcp:CallToolResult nullableResult = check httpClient->callTool({name: "nullableValue"});
+    mcp:ToolResult nullableResult = check httpClient->callTool({name: "nullableValue"});
     test:assertTrue(nullableResult.hasKey("structuredContent"));
     test:assertEquals(nullableResult["structuredContent"], ());
-    mcp:CallToolResult textOnlyResult = check httpClient->callTool({name: "textOnlyValue"});
+    mcp:ToolResult textOnlyResult = check httpClient->callTool({name: "textOnlyValue"});
     test:assertFalse(textOnlyResult.hasKey("structuredContent"));
     check httpClient->close();
 
-    mcp:StreamableHttpClient legacyClient = check new ("http://localhost:8789/structuredHttp",
+    mcp:StreamableHttpClient2 legacyClient = check new ("http://localhost:8789/structuredHttp",
             protocolMode = "legacy");
     _ = check legacyClient->connect();
-    mcp:ListToolsResult legacyTools = check legacyClient->listTools();
-    foreach mcp:ToolDefinition toolInfo in legacyTools.tools {
+    mcp:ToolPage legacyTools = check legacyClient->listTools();
+    foreach mcp:ToolInfo toolInfo in legacyTools.tools {
         test:assertEquals(toolInfo.outputSchema, ());
     }
-    mcp:CallToolResult legacyResult = check legacyClient->callTool({name: "arrayValue"});
+    mcp:ToolResult legacyResult = check legacyClient->callTool({name: "arrayValue"});
     test:assertFalse(legacyResult.hasKey("structuredContent"));
     check legacyClient->close();
 
-    mcp:StreamableHttpClient genericClient = check new ("http://localhost:8789/structuredGeneric",
+    mcp:StreamableHttpClient2 genericClient = check new ("http://localhost:8789/structuredGeneric",
             protocolMode = "modern");
     _ = check genericClient->connect();
-    mcp:CallToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
+    mcp:ToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
     assertStructuredValue(booleanResult, true);
     check genericClient->close();
 }
 
 @test:Config {}
 function testNilOnlyReturnsAreUnstructured() returns error? {
-    mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+    mcp:StreamableHttpClient2 httpClient = check new ("http://localhost:8789/structuredHttp",
             protocolMode = "modern");
     _ = check httpClient->connect();
-    mcp:ListToolsResult listedTools = check httpClient->listTools();
-    foreach mcp:ToolDefinition toolInfo in listedTools.tools {
+    mcp:ToolPage listedTools = check httpClient->listTools();
+    foreach mcp:ToolInfo toolInfo in listedTools.tools {
         if toolInfo.name == "noReturnValue" || toolInfo.name == "errorOrNilValue" {
             test:assertEquals(toolInfo.outputSchema, (), toolInfo.name);
         }
     }
 
     foreach string toolName in ["noReturnValue", "errorOrNilValue"] {
-        mcp:CallToolResult result = check httpClient->callTool({name: toolName});
+        mcp:ToolResult result = check httpClient->callTool({name: toolName});
         test:assertFalse(result.hasKey("structuredContent"), toolName);
         test:assertEquals(result.isError, (), toolName);
     }
@@ -138,11 +138,11 @@ function testNilOnlyReturnsAreUnstructured() returns error? {
 @test:Config {}
 function testNilResultHasNoTextContent() returns error? {
     foreach mcp:ProtocolMode mode in PROTOCOL_MODES {
-        mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+        mcp:StreamableHttpClient2 httpClient = check new ("http://localhost:8789/structuredHttp",
                 protocolMode = mode);
         _ = check httpClient->connect();
         foreach string toolName in ["nullableValue", "noReturnValue"] {
-            mcp:CallToolResult result = check httpClient->callTool({name: toolName});
+            mcp:ToolResult result = check httpClient->callTool({name: toolName});
             test:assertEquals(result.content.length(), 0, string `${mode} ${toolName}`);
         }
         check httpClient->close();
@@ -153,10 +153,10 @@ function testNilResultHasNoTextContent() returns error? {
 function testStructuredTextContentIsJson() returns error? {
     json expected = {name: string `Al "the pal" \ O'Neil` + "\nsecond line", age: 40};
     foreach mcp:ProtocolMode mode in PROTOCOL_MODES {
-        mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+        mcp:StreamableHttpClient2 httpClient = check new ("http://localhost:8789/structuredHttp",
                 protocolMode = mode);
         _ = check httpClient->connect();
-        mcp:CallToolResult result = check httpClient->callTool({name: "escapedPersonValue"});
+        mcp:ToolResult result = check httpClient->callTool({name: "escapedPersonValue"});
         test:assertEquals(result.content.length(), 1);
         mcp:TextContent textContent = check result.content[0].ensureType();
         test:assertEquals(check textContent.text.fromJsonString(), expected, mode);
@@ -169,11 +169,11 @@ function testStructuredTextContentIsJson() returns error? {
 
 @test:Config {}
 function testMcpArgumentHeadersFromGeneratedSchema() returns error? {
-    mcp:StreamableHttpClient argumentClient = check new ("http://localhost:8789/argumentHeaders",
+    mcp:StreamableHttpClient2 argumentClient = check new ("http://localhost:8789/argumentHeaders",
             protocolMode = "modern");
     _ = check argumentClient->connect();
-    mcp:ListToolsResult listedTools = check argumentClient->listTools();
-    mcp:ToolDefinition mirrorTool = check listedTools.tools[0].ensureType();
+    mcp:ToolPage listedTools = check argumentClient->listTools();
+    mcp:ToolInfo mirrorTool = check listedTools.tools[0].ensureType();
     map<json> properties = check mirrorTool.inputSchema.properties.ensureType();
     map<json> expectedHeaders = {
         "region": "Region",
@@ -185,7 +185,7 @@ function testMcpArgumentHeadersFromGeneratedSchema() returns error? {
         test:assertEquals(propertySchema["x-mcp-header"], expectedHeaders[parameterName]);
     }
 
-    mcp:CallToolResult result = check argumentClient->callTool({
+    mcp:ToolResult result = check argumentClient->callTool({
         name: "mirrorArguments",
         arguments: {
             "region": "世界",
@@ -197,11 +197,11 @@ function testMcpArgumentHeadersFromGeneratedSchema() returns error? {
     check argumentClient->close();
 }
 
-function assertSchemaType(mcp:ToolDefinition toolInfo, string expectedType) returns error? {
+function assertSchemaType(mcp:ToolInfo toolInfo, string expectedType) returns error? {
     mcp:OutputSchema outputSchema = check toolInfo.outputSchema.ensureType();
     test:assertEquals(outputSchema["type"], expectedType);
 }
 
-function assertStructuredValue(mcp:CallToolResult resultValue, json expectedValue) {
+function assertStructuredValue(mcp:ToolResult resultValue, json expectedValue) {
     test:assertEquals(resultValue["structuredContent"], expectedValue);
 }

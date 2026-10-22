@@ -350,7 +350,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if cursor is http:Ok {
                 return cursor;
             }
-            ListToolsResult|error listToolsResult = self.executeOnListTools(cursor, headers, httpRequest,
+            ToolPage|error listToolsResult = self.executeOnListTools(cursor, headers, httpRequest,
                     serviceConfig.httpConfig.treatNilableAsOptional, authContext);
             if listToolsResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, listToolsResult);
@@ -364,7 +364,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             }
 
             // Cache hints are not part of the legacy protocol.
-            ListToolsResult legacyResult = {...listToolsResult};
+            ToolPage legacyResult = {...listToolsResult};
             foreach string fieldName in ["resultType", "ttlMs", "cacheScope"] {
                 _ = legacyResult.removeIfHasKey(fieldName);
             }
@@ -427,7 +427,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 session = sessionId is string ? self.sessionMap[sessionId] : ();
             }
 
-            CallToolResult|error callToolResult = self.executeOnCallTool(params, session, headers, httpRequest,
+            ToolResult|error callToolResult = self.executeOnCallTool(params, session, headers, httpRequest,
                     serviceConfig.httpConfig.treatNilableAsOptional, authContext);
             if callToolResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, callToolResult);
@@ -453,17 +453,17 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         }
 
         private isolated function executeOnListTools(Cursor? cursor, http:Headers headers, http:Request httpRequest,
-                boolean treatNilableAsOptional, readonly & AuthContext? authContext) returns ListToolsResult|Error {
+                boolean treatNilableAsOptional, readonly & AuthContext? authContext) returns ToolPage|Error {
             StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
-                ListToolsResult|error advancedResult =
+                ToolPage|error advancedResult =
                         trap invokeAdvancedOnListTools(mcpService, cursor, headers, httpRequest,
                             extractHeaderValues(headers), treatNilableAsOptional, authContext);
                 if advancedResult is error {
                     return trapListToolsFailure(advancedResult);
                 }
-                ListToolsResult|error legacyResult = legacyToolListResult(advancedResult);
+                ToolPage|error legacyResult = legacyToolListResult(advancedResult);
                 return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
             if mcpService is StreamableHttpService {
@@ -474,7 +474,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 
         private isolated function executeOnCallTool(CallToolParams params, HttpSession? session, http:Headers headers,
                 http:Request httpRequest, boolean treatNilableAsOptional, readonly & AuthContext? authContext)
-                returns CallToolResult|Error {
+                returns ToolResult|Error {
             StreamableHttpService|StreamableHttpAdvancedService mcpService =
                     check getMcpServiceFromDispatcher(self);
             if mcpService is StreamableHttpAdvancedService {
@@ -482,7 +482,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 CallToolParams legacyParams = params.clone();
                 _ = legacyParams.removeIfHasKey("requestState");
                 _ = legacyParams.removeIfHasKey("inputResponses");
-                CallToolResult|InputRequiredResult|error result =
+                ToolResult|InputRequiredResult|error result =
                         trap invokeAdvancedOnCallTool(mcpService, legacyParams.cloneReadOnly(), session, headers,
                             httpRequest, extractHeaderValues(headers), treatNilableAsOptional, authContext);
                 if result is InputRequiredResult {
@@ -494,15 +494,15 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 if result is error {
                     return toServerError(result, params.name);
                 }
-                CallToolResult|error completedResult = result.cloneWithType();
+                ToolResult|error completedResult = result.cloneWithType();
                 if completedResult is error {
                     return error ServerError(INPUT_REQUIRED_ON_LEGACY);
                 }
-                CallToolResult|error legacyResult = legacyToolCallResult(completedResult);
+                ToolResult|error legacyResult = legacyToolCallResult(completedResult);
                 return legacyResult is error ? error ServerError(legacyResult.message()) : legacyResult;
             }
             if mcpService is StreamableHttpService {
-                CallToolResult|InputRequiredResult|error result = trap callToolForRemoteFunctions(mcpService,
+                ToolResult|InputRequiredResult|error result = trap callToolForRemoteFunctions(mcpService,
                         params.cloneReadOnly(), session, headers, httpRequest, extractHeaderValues(headers),
                         treatNilableAsOptional, authContext, new);
                 if result is ParameterBindingError || result is InsufficientScopeError {
@@ -514,7 +514,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 if result is InputRequiredResult {
                     return error ServerError(INPUT_REQUIRED_ON_LEGACY);
                 }
-                return <CallToolResult>result;
+                return <ToolResult>result;
             }
             return error DispatcherError("MCP service is not available");
         }

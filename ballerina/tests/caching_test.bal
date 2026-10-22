@@ -44,16 +44,16 @@ service StreamableHttpService /unhinted on cachingListener {
     cacheHints: {listTools: {ttlMs: 60000, cacheScope: "public"}}
 }
 service StreamableHttpAdvancedService /handlerHinted on cachingListener {
-    remote isolated function onListTools() returns ListToolsResult => {tools: [], ttlMs: 1000};
+    remote isolated function onListTools() returns ToolPage => {tools: [], ttlMs: 1000};
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult => {content: []};
 }
 
 @StreamableHttpServiceConfig {info: {name: "scope-only", version: "1"}, cacheHints: {listTools: {cacheScope: "public"}}}
 service StreamableHttpAdvancedService /scopeOnly on cachingListener {
-    remote isolated function onListTools() returns ListToolsResult => {tools: []};
+    remote isolated function onListTools() returns ToolPage => {tools: []};
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult => {content: []};
 }
 
 final http:Client cachingHttpClient = check new ("http://localhost:3222");
@@ -63,11 +63,11 @@ isolated function cachingPost(string servicePath, string methodName) returns map
         jsonrpc: JSONRPC_VERSION,
         id: 300,
         method: methodName,
-        params: {_meta: {[PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
+        params: {_meta: {[PROTOCOL_META_KEY]: LATEST_MODERN_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
     };
     http:Response response = check cachingHttpClient->post(servicePath, requestMessage, headers = {
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_MODERN_PROTOCOL_VERSION,
         [METHOD_HEADER]: methodName
     });
     WireResponse payload = check (check response.getJsonPayload()).cloneWithType();
@@ -117,9 +117,9 @@ function testNegativeConfiguredTtlIsRejectedOnAttach() returns error? {
         info: {name: "negative", version: "1"},
         cacheHints: {discover: {ttlMs: -1}}
     } isolated service object {
-        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+        remote isolated function onListTools() returns ToolPage => {tools: []};
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult => {content: []};
     };
     StreamableHttpListener unstartedListener = check new (3224);
     Error? attachResult = unstartedListener.attach(negativeService, "/negative");
@@ -231,8 +231,8 @@ service /cacheMock on new http:Listener(3223) {
 }
 
 isolated function connectedCacheClient(string scenario, string testId, ResultCacheConfig? resultCache = {})
-        returns StreamableHttpClient|error {
-    StreamableHttpClient cacheClient = check new (string `${CACHE_MOCK_URL}/${scenario}/${testId}`,
+        returns StreamableHttpClient2|error {
+    StreamableHttpClient2 cacheClient = check new (string `${CACHE_MOCK_URL}/${scenario}/${testId}`,
         protocolMode = "modern", resultCache = resultCache);
     _ = check cacheClient->connect();
     return cacheClient;
@@ -240,19 +240,19 @@ isolated function connectedCacheClient(string scenario, string testId, ResultCac
 
 @test:Config {}
 function testClientReusesFreshResults() returns error? {
-    StreamableHttpClient freshClient = check connectedCacheClient("private", "fresh");
-    ListToolsResult firstList = check freshClient->listTools();
-    ListToolsResult secondList = check freshClient->listTools();
+    StreamableHttpClient2 freshClient = check connectedCacheClient("private", "fresh");
+    ToolPage firstList = check freshClient->listTools();
+    ToolPage secondList = check freshClient->listTools();
     test:assertEquals(cacheMockHitCount("private", "fresh"), 1);
     test:assertEquals(secondList, firstList);
     test:assertEquals(secondList.ttlMs, 60000);
 
-    StreamableHttpClient zeroTtlClient = check connectedCacheClient("uncacheable", "fresh");
+    StreamableHttpClient2 zeroTtlClient = check connectedCacheClient("uncacheable", "fresh");
     _ = check zeroTtlClient->listTools();
     _ = check zeroTtlClient->listTools();
     test:assertEquals(cacheMockHitCount("uncacheable", "fresh"), 2);
 
-    StreamableHttpClient disabledClient = check connectedCacheClient("private", "disabled", resultCache = ());
+    StreamableHttpClient2 disabledClient = check connectedCacheClient("private", "disabled", resultCache = ());
     _ = check disabledClient->listTools();
     _ = check disabledClient->listTools();
     test:assertEquals(cacheMockHitCount("private", "disabled"), 2);
@@ -260,7 +260,7 @@ function testClientReusesFreshResults() returns error? {
 
 @test:Config {}
 function testClientCacheModes() returns error? {
-    StreamableHttpClient modeClient = check connectedCacheClient("private", "modes");
+    StreamableHttpClient2 modeClient = check connectedCacheClient("private", "modes");
     _ = check modeClient->listTools(cacheMode = "bypass");
     _ = check modeClient->listTools();
     test:assertEquals(cacheMockHitCount("private", "modes"), 2, "bypass must not store its result");
@@ -272,8 +272,8 @@ function testClientCacheModes() returns error? {
 
 @test:Config {}
 function testClientTreatsNegativeTtlAsZero() returns error? {
-    StreamableHttpClient negativeClient = check connectedCacheClient("negativeTtl", "floor");
-    ListToolsResult listed = check negativeClient->listTools();
+    StreamableHttpClient2 negativeClient = check connectedCacheClient("negativeTtl", "floor");
+    ToolPage listed = check negativeClient->listTools();
     test:assertEquals(listed.ttlMs, 0);
     _ = check negativeClient->listTools();
     test:assertEquals(cacheMockHitCount("negativeTtl", "floor"), 2);
@@ -281,7 +281,7 @@ function testClientTreatsNegativeTtlAsZero() returns error? {
 
 @test:Config {}
 function testClientRefetchesExpiredResults() returns error? {
-    StreamableHttpClient expiringClient = check connectedCacheClient("shortTtl", "expiry");
+    StreamableHttpClient2 expiringClient = check connectedCacheClient("shortTtl", "expiry");
     _ = check expiringClient->listTools();
     _ = check expiringClient->listTools();
     test:assertEquals(cacheMockHitCount("shortTtl", "expiry"), 1);
@@ -289,7 +289,7 @@ function testClientRefetchesExpiredResults() returns error? {
     _ = check expiringClient->listTools();
     test:assertEquals(cacheMockHitCount("shortTtl", "expiry"), 2);
 
-    StreamableHttpClient cappedClient = check connectedCacheClient("private", "capped", resultCache = {maxTtlMs: 100});
+    StreamableHttpClient2 cappedClient = check connectedCacheClient("private", "capped", resultCache = {maxTtlMs: 100});
     _ = check cappedClient->listTools();
     runtime:sleep(0.2);
     _ = check cappedClient->listTools();
@@ -298,27 +298,27 @@ function testClientRefetchesExpiredResults() returns error? {
 
 @test:Config {}
 function testCacheIsPerClientAndIgnoresHeaders() returns error? {
-    StreamableHttpClient firstClient = check connectedCacheClient("private", "perClient");
+    StreamableHttpClient2 firstClient = check connectedCacheClient("private", "perClient");
     _ = check firstClient->listTools({"traceparent": "00-aaaa-01"});
     _ = check firstClient->listTools({"traceparent": "00-bbbb-01"});
     test:assertEquals(cacheMockHitCount("private", "perClient"), 1);
 
-    StreamableHttpClient secondClient = check connectedCacheClient("private", "perClient");
+    StreamableHttpClient2 secondClient = check connectedCacheClient("private", "perClient");
     _ = check secondClient->listTools();
     test:assertEquals(cacheMockHitCount("private", "perClient"), 2, "clients must not share cached results");
 }
 
 @test:Config {}
 function testPagesAreCachedPerCursor() returns error? {
-    StreamableHttpClient pagedClient = check connectedCacheClient("paged", "pages");
-    ListToolsResult firstPage = check pagedClient->listTools();
+    StreamableHttpClient2 pagedClient = check connectedCacheClient("paged", "pages");
+    ToolPage firstPage = check pagedClient->listTools();
     test:assertEquals(firstPage.nextCursor, "page2");
     _ = check pagedClient->listTools(cursor = "page2");
     _ = check pagedClient->listTools();
     _ = check pagedClient->listTools(cursor = "page2");
     test:assertEquals(cacheMockHitCount("paged", "pages"), 2);
 
-    ListToolsResult|ClientError rejectedCursor = pagedClient->listTools(cursor = "expired");
+    ToolPage|ClientError rejectedCursor = pagedClient->listTools(cursor = "expired");
     test:assertTrue(rejectedCursor is ClientError);
     _ = check pagedClient->listTools();
     _ = check pagedClient->listTools(cursor = "page2");
@@ -327,7 +327,7 @@ function testPagesAreCachedPerCursor() returns error? {
 
 @test:Config {}
 function testFirstPageListingKeepsLaterPageSchemas() returns error? {
-    StreamableHttpClient pagedClient = check connectedCacheClient("pagedUncached", "schemas");
+    StreamableHttpClient2 pagedClient = check connectedCacheClient("pagedUncached", "schemas");
     _ = check pagedClient->callToolOnce({name: "second"});
     test:assertEquals(cacheMockHitCount("pagedUncached", "schemas"), 2);
     _ = check pagedClient->listTools();
@@ -338,7 +338,7 @@ function testFirstPageListingKeepsLaterPageSchemas() returns error? {
 
 @test:Config {}
 function testPerCallAuthorizationBypassesCache() returns error? {
-    StreamableHttpClient sharedClient = check connectedCacheClient("private", "perCallAuth");
+    StreamableHttpClient2 sharedClient = check connectedCacheClient("private", "perCallAuth");
     _ = check sharedClient->listTools({"Authorization": "Bearer alice"});
     _ = check sharedClient->listTools({"Authorization": "Bearer alice"});
     test:assertEquals(cacheMockHitCount("private", "perCallAuth"), 2);
@@ -354,17 +354,17 @@ function testPerCallAuthorizationBypassesCache() returns error? {
 
 @test:Config {}
 function testHeaderMismatchRefetchesCachedTools() returns error? {
-    StreamableHttpClient mismatchClient = check connectedCacheClient("private", "mismatch");
+    StreamableHttpClient2 mismatchClient = check connectedCacheClient("private", "mismatch");
     _ = check mismatchClient->listTools();
     var callResult = check mismatchClient->callToolOnce({name: "echo"});
-    test:assertTrue(callResult is CallToolResult);
+    test:assertTrue(callResult is ToolResult);
     test:assertEquals(cacheMockHitCount("private", "mismatch"), 2);
     test:assertEquals(cacheMockHitCount("private", "mismatch:call"), 2);
 }
 
 @test:Config {}
 function testCloseClearsCachedResults() returns error? {
-    StreamableHttpClient closingClient = check connectedCacheClient("private", "close");
+    StreamableHttpClient2 closingClient = check connectedCacheClient("private", "close");
     _ = check closingClient->listTools();
     check closingClient->close();
     _ = check closingClient->connect();
@@ -445,8 +445,8 @@ function restoreCacheOAuthNetwork() {
     restoreIdentityAssertionNetwork();
 }
 
-function connectedOAuthCacheClient(string testId) returns StreamableHttpClient|error {
-    StreamableHttpClient oauthClient = check new (string `${CACHE_MOCK_URL}/oauth/${testId}`,
+function connectedOAuthCacheClient(string testId) returns StreamableHttpClient2|error {
+    StreamableHttpClient2 oauthClient = check new (string `${CACHE_MOCK_URL}/oauth/${testId}`,
         protocolMode = "modern", httpConfig = {auth: {grant: clientCredentialsGrant()}});
     _ = check oauthClient->connect();
     return oauthClient;
@@ -454,7 +454,7 @@ function connectedOAuthCacheClient(string testId) returns StreamableHttpClient|e
 
 @test:Config {before: stubCacheOAuthNetwork, after: restoreCacheOAuthNetwork}
 function testStepUpTokenInvalidatesCachedList() returns error? {
-    StreamableHttpClient stepUpClient = check connectedOAuthCacheClient("stepUp");
+    StreamableHttpClient2 stepUpClient = check connectedOAuthCacheClient("stepUp");
     _ = check stepUpClient->listTools();
     _ = check stepUpClient->listTools();
     test:assertEquals(cacheMockHitCount("oauth", "stepUp"), 1);
@@ -471,7 +471,7 @@ function testExpiryRefreshKeepsCachedList() returns error? {
         // Expires a second after issue, after the clock-skew margin.
         cacheTokenLifetime = 2;
     }
-    StreamableHttpClient expiringClient = check connectedOAuthCacheClient("expiring");
+    StreamableHttpClient2 expiringClient = check connectedOAuthCacheClient("expiring");
     _ = check expiringClient->listTools();
     runtime:sleep(1.1);
     int tokensBefore = issuedCacheTokens();
@@ -538,8 +538,8 @@ function testResultCacheEvictsLeastRecentlyUsed() {
 @test:Config {}
 function testResultCacheToolSchemas() {
     ResultCache resultCache = new ({}, fakeCacheClock);
-    ToolDefinition firstTool = {name: "first", inputSchema: {'type: "object"}};
-    ToolDefinition secondTool = {name: "second", inputSchema: {'type: "object"}};
+    ToolInfo firstTool = {name: "first", inputSchema: {'type: "object"}};
+    ToolInfo secondTool = {name: "second", inputSchema: {'type: "object"}};
 
     resultCache.recordToolSchemas((), [firstTool], resultCache.beginFetch());
     resultCache.recordToolSchemas("page2", [secondTool], resultCache.beginFetch());
@@ -566,8 +566,8 @@ function testResultCacheKeepsTheNewestFetchOfAPage() {
     test:assertEquals(resultCache.get(REQUEST_LIST_TOOLS, ())["listing"], "newer",
             "a fetch that started earlier must not replace a newer completed fetch");
 
-    ToolDefinition olderTool = {name: "echo", description: "older", inputSchema: {'type: "object"}};
-    ToolDefinition newerTool = {name: "echo", description: "newer", inputSchema: {'type: "object"}};
+    ToolInfo olderTool = {name: "echo", description: "older", inputSchema: {'type: "object"}};
+    ToolInfo newerTool = {name: "echo", description: "newer", inputSchema: {'type: "object"}};
     resultCache.recordToolSchemas((), [newerTool], newerFetch);
     resultCache.recordToolSchemas((), [olderTool], olderFetch);
     test:assertEquals(resultCache.toolSchema("echo"), newerTool);

@@ -28,14 +28,14 @@ isolated int toolListingCount = 0;
     }
 }
 service mcp:StreamableHttpAdvancedService /cached on new mcp:StreamableHttpListener(8790) {
-    remote isolated function onListTools() returns mcp:ListToolsResult {
+    remote isolated function onListTools() returns mcp:ToolPage {
         lock {
             toolListingCount += 1;
         }
         return {tools: [{name: "echo", inputSchema: {'type: "object"}}]};
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params) returns mcp:CallToolResult => {content: []};
+    remote isolated function onCallTool(mcp:CallToolParams params) returns mcp:ToolResult => {content: []};
 }
 
 isolated function listingCount() returns int {
@@ -46,14 +46,14 @@ isolated function listingCount() returns int {
 
 @test:Config {}
 function testClientReusesToolListWithinServerTtl() returns error? {
-    mcp:StreamableHttpClient cachingClient = check new ("http://localhost:8790/cached", protocolMode = "modern");
+    mcp:StreamableHttpClient2 cachingClient = check new ("http://localhost:8790/cached", protocolMode = "modern");
     mcp:DiscoverResult discovered = check cachingClient->discover();
     test:assertEquals(discovered.ttlMs, 300000);
     test:assertEquals(discovered.cacheScope, "public");
     _ = check cachingClient->connect();
 
     int initialCount = listingCount();
-    mcp:ListToolsResult firstList = check cachingClient->listTools();
+    mcp:ToolPage firstList = check cachingClient->listTools();
     test:assertEquals(firstList.ttlMs, 60000);
     test:assertEquals(firstList.cacheScope, "private");
     _ = check cachingClient->listTools();

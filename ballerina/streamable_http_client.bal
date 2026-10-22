@@ -67,7 +67,7 @@ isolated function withSubmittedContentOnly(ElicitRequest elicitRequest, ElicitRe
 }
 
 # Represents an MCP client built on top of the Streamable HTTP transport.
-public distinct isolated client class StreamableHttpClient {
+public distinct isolated client class StreamableHttpClient2 {
     # Transport for communication with the MCP server.
     private final StreamableHttpClientTransport transport;
     # Server capabilities.
@@ -224,7 +224,7 @@ public distinct isolated client class StreamableHttpClient {
             }
         };
 
-        ServerResult response = check self.sendRequestMessage(initRequest, headers);
+        LegacyServerResult response = check self.sendRequestMessage(initRequest, headers);
 
         if response !is InitializeResult {
             return error ClientInitializationError(
@@ -268,16 +268,16 @@ public distinct isolated client class StreamableHttpClient {
     # + cacheMode - How this call uses the result cache
     # + return - List of available tools or a ClientError.
     isolated remote function listTools(map<string|string[]> headers = {}, Cursor? cursor = (),
-            CacheMode cacheMode = "use") returns ListToolsResult|ClientError {
+            CacheMode cacheMode = "use") returns ToolPage|ClientError {
         check self.ensureConnected();
         RequestParams listParams = {};
         if cursor is Cursor {
             listParams["cursor"] = cursor;
         }
         if !self.isModern() {
-            ServerResult legacyResult = check self.sendRequestMessage(
+            LegacyServerResult legacyResult = check self.sendRequestMessage(
                 {method: REQUEST_LIST_TOOLS, params: listParams}, headers);
-            if legacyResult is ListToolsResult {
+            if legacyResult is ToolPage {
                 return legacyResult;
             }
             return error ListToolsError(
@@ -289,8 +289,8 @@ public distinct isolated client class StreamableHttpClient {
         CacheMode effectiveMode = hasAuthorizationHeader(headers) ? "bypass" : cacheMode;
         if effectiveMode == "use" {
             Result? cachedResult = resultCache.get(REQUEST_LIST_TOOLS, cursor);
-            ListToolsResult|error cachedList = cachedResult is Result ? cachedResult.cloneWithType() : error("Cache miss");
-            if cachedList is ListToolsResult {
+            ToolPage|error cachedList = cachedResult is Result ? cachedResult.cloneWithType() : error("Cache miss");
+            if cachedList is ToolPage {
                 return cachedList;
             }
         }
@@ -309,7 +309,7 @@ public distinct isolated client class StreamableHttpClient {
                 !wireResult.hasKey("cacheScope") {
             return error ListToolsError("Invalid modern tools/list result");
         }
-        ListToolsResult|error listResult = applicationResult(wireResult, preserveCacheHints = true).cloneWithType();
+        ToolPage|error listResult = applicationResult(wireResult, preserveCacheHints = true).cloneWithType();
         if listResult is error {
             return error ListToolsError("Invalid modern tools/list result: " + listResult.message(), listResult);
         }
@@ -330,14 +330,14 @@ public distinct isolated client class StreamableHttpClient {
     # + headers - Optional headers to include with the request
     # + return - Result of the tool execution or a ClientError.
     isolated remote function callTool(CallToolParams params, map<string|string[]> headers = {})
-            returns CallToolResult|ClientError {
+            returns ToolResult|ClientError {
         check self.ensureConnected();
         if self.isModern() {
             CallToolParams currentParams = params.clone();
             decimal stateOnlyDelay = STATE_ONLY_RETRY_DELAY;
             foreach int roundNumber in 0 ... self.maxInputRounds {
-                CallToolResult|InputRequiredResult callResult = check self->callToolOnce(currentParams, headers);
-                if callResult is CallToolResult {
+                ToolResult|InputRequiredResult callResult = check self->callToolOnce(currentParams, headers);
+                if callResult is ToolResult {
                     return callResult.cloneReadOnly();
                 }
                 if roundNumber == self.maxInputRounds {
@@ -374,8 +374,8 @@ public distinct isolated client class StreamableHttpClient {
             params: params
         };
 
-        ServerResult result = check self.sendRequestMessage(toolCallRequest, headers);
-        if result is CallToolResult {
+        LegacyServerResult result = check self.sendRequestMessage(toolCallRequest, headers);
+        if result is ToolResult {
             return result;
         } else {
             return error ToolCallError(
@@ -452,7 +452,7 @@ public distinct isolated client class StreamableHttpClient {
     # + headers - Additional HTTP request headers
     # + return - A completed result, input-required result, or client error
     isolated remote function callToolOnce(CallToolParams params, map<string|string[]> headers = {})
-            returns CallToolResult|InputRequiredResult|ClientError {
+            returns ToolResult|InputRequiredResult|ClientError {
         check self.ensureConnected();
         if !self.isModern() {
             return self->callTool(params, headers);
@@ -461,13 +461,13 @@ public distinct isolated client class StreamableHttpClient {
     }
 
     private isolated function callModernTool(CallToolParams params, map<string|string[]> headers, boolean refreshAllowed)
-            returns CallToolResult|InputRequiredResult|ClientError {
-        ToolDefinition? toolInfo = hasAuthorizationHeader(headers) ? () : self.transport.cache().toolSchema(params.name);
+            returns ToolResult|InputRequiredResult|ClientError {
+        ToolInfo? toolInfo = hasAuthorizationHeader(headers) ? () : self.transport.cache().toolSchema(params.name);
         Cursor? nextCursor = ();
         map<boolean> visitedCursors = {};
         while toolInfo is () {
-            ListToolsResult pageResult = check self->listTools(headers, nextCursor);
-            foreach ToolDefinition listedTool in pageResult.tools {
+            ToolPage pageResult = check self->listTools(headers, nextCursor);
+            foreach ToolInfo listedTool in pageResult.tools {
                 if listedTool.name == params.name {
                     toolInfo = listedTool;
                     break;
@@ -509,7 +509,7 @@ public distinct isolated client class StreamableHttpClient {
         if wireResult["resultType"] != "complete" {
             return error ToolCallError("Invalid tool result");
         }
-        CallToolResult|error callResult = applicationResult(wireResult).cloneWithType();
+        ToolResult|error callResult = applicationResult(wireResult).cloneWithType();
         if callResult is error {
             return error ToolCallError("Invalid tool result", callResult);
         }
@@ -571,7 +571,7 @@ public distinct isolated client class StreamableHttpClient {
     private isolated function metaProtocolVersion() returns string {
         lock {
             string? negotiatedVersion = self.negotiatedProtocolVersion;
-            return self.modernSelected && negotiatedVersion is string ? negotiatedVersion : LATEST_PROTOCOL_VERSION;
+            return self.modernSelected && negotiatedVersion is string ? negotiatedVersion : LATEST_MODERN_PROTOCOL_VERSION;
         }
     }
 
@@ -596,9 +596,9 @@ public distinct isolated client class StreamableHttpClient {
     #
     # + request - The request object to send
     # + headers - Optional headers to include with the request
-    # + return - ServerResult, a stream of results, or a ClientError.
+    # + return - LegacyServerResult, a stream of results, or a ClientError.
     private isolated function sendRequestMessage(Request request, map<string|string[]> headers = {})
-            returns ServerResult|ClientError {
+            returns LegacyServerResult|ClientError {
         lock {
             self.requestId += 1;
 
@@ -608,7 +608,7 @@ public distinct isolated client class StreamableHttpClient {
                 id: self.requestId
             };
 
-            JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? response =
+            LegacyMessage|stream<LegacyMessage, StreamError?>|StreamableHttpTransportError? response =
                 self.transport.sendMessage(jsonRpcRequest, headers.cloneReadOnly());
             return processServerResponse(response).cloneReadOnly();
         }

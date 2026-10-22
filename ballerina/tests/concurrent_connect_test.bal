@@ -18,7 +18,7 @@ import ballerina/test;
 
 @test:Config {}
 function testConcurrentFirstConnectsShareOneDiscovery() returns error? {
-    StreamableHttpClient racingClient = check new (mockUrl("slowModernConnect"));
+    StreamableHttpClient2 racingClient = check new (mockUrl("slowModernConnect"));
     future<ConnectionInfo|ClientError> first = start racingClient->connect();
     future<ConnectionInfo|ClientError> second = start racingClient->connect();
     ConnectionInfo firstConnection = check wait first;
@@ -26,12 +26,12 @@ function testConcurrentFirstConnectsShareOneDiscovery() returns error? {
 
     test:assertEquals(mockCallCount("slowModernConnect:discover"), 1);
     test:assertEquals(firstConnection, secondConnection);
-    test:assertEquals(firstConnection.protocolVersion, LATEST_PROTOCOL_VERSION);
+    test:assertEquals(firstConnection.protocolVersion, LATEST_MODERN_PROTOCOL_VERSION);
 }
 
 @test:Config {}
 function testConcurrentFirstLegacyConnectsShareOneInitialize() returns error? {
-    StreamableHttpClient racingClient = check new (mockUrl("slowLegacyConnect"), protocolMode = "legacy");
+    StreamableHttpClient2 racingClient = check new (mockUrl("slowLegacyConnect"), protocolMode = "legacy");
     future<ConnectionInfo|ClientError> first = start racingClient->connect();
     future<ConnectionInfo|ClientError> second = start racingClient->connect();
     ConnectionInfo firstConnection = check wait first;
@@ -44,7 +44,7 @@ function testConcurrentFirstLegacyConnectsShareOneInitialize() returns error? {
 
 @test:Config {}
 function testConnectAfterCloseRunsANewHandshake() returns error? {
-    StreamableHttpClient reconnectingClient = check new (mockUrl("reconnectAfterClose"));
+    StreamableHttpClient2 reconnectingClient = check new (mockUrl("reconnectAfterClose"));
     _ = check reconnectingClient->connect();
     _ = check reconnectingClient->connect();
     test:assertEquals(mockCallCount("reconnectAfterClose:discover"), 1);
@@ -52,6 +52,6 @@ function testConnectAfterCloseRunsANewHandshake() returns error? {
     check reconnectingClient->close();
     ConnectionInfo reconnected = check reconnectingClient->connect();
     test:assertEquals(mockCallCount("reconnectAfterClose:discover"), 2);
-    test:assertEquals(reconnected.protocolVersion, LATEST_PROTOCOL_VERSION);
+    test:assertEquals(reconnected.protocolVersion, LATEST_MODERN_PROTOCOL_VERSION);
     _ = check reconnectingClient->listTools();
 }

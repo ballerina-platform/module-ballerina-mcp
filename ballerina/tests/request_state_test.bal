@@ -24,12 +24,12 @@ const REQUEST_STATE_SERVICE_URL = "http://localhost:3260";
 
 listener StreamableHttpListener requestStateListener = check new (3260);
 
-isolated function stateEchoTools() returns ListToolsResult => {
+isolated function stateEchoTools() returns ToolPage => {
     tools: [{name: "remember", inputSchema: {'type: "object"}}, {name: "other", inputSchema: {'type: "object"}}]
 };
 
 // Returns state on the first round, then reports the state it received.
-isolated function echoState(CallToolParams callParams) returns CallToolResult|InputRequiredResult {
+isolated function echoState(CallToolParams callParams) returns ToolResult|InputRequiredResult {
     string? requestState = callParams.requestState;
     if requestState is () {
         return {requestState: "step-1"};
@@ -39,9 +39,9 @@ isolated function echoState(CallToolParams callParams) returns CallToolResult|In
 
 @StreamableHttpServiceConfig {info: {name: "request-state", version: "1"}}
 service StreamableHttpAdvancedService /state on requestStateListener {
-    remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+    remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
         echoState(callParams);
 }
 
@@ -57,9 +57,9 @@ service StreamableHttpAdvancedService /state on requestStateListener {
     }
 }
 service StreamableHttpAdvancedService /protectedState on requestStateListener {
-    remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+    remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
         echoState(callParams);
 }
 
@@ -79,10 +79,10 @@ isolated function callerToken(string audience, string? subject = "alice", string
 
 @StreamableHttpServiceConfig {info: {name: "short-lived-state", version: "1"}, requestState: {ttl: 1}}
 service StreamableHttpAdvancedService /shortLived on requestStateListener {
-    remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+    remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
     // Completes on the third round; each round's state is the number of rounds so far.
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult {
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult {
         int round = nextRound(callParams);
         if round < 3 {
             return {requestState: round.toString()};
@@ -94,9 +94,9 @@ service StreamableHttpAdvancedService /shortLived on requestStateListener {
 // The same tool behind shared keys, with and without an auth context.
 @StreamableHttpServiceConfig {info: {name: "unbound-shared", version: "1"}, requestState: {keys: [SIGNING_KEY]}}
 service StreamableHttpAdvancedService /unboundShared on requestStateListener {
-    remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+    remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
         echoState(callParams);
 }
 
@@ -113,9 +113,9 @@ service StreamableHttpAdvancedService /unboundShared on requestStateListener {
     }
 }
 service StreamableHttpAdvancedService /boundShared on requestStateListener {
-    remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+    remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
         echoState(callParams);
 }
 
@@ -127,14 +127,14 @@ isolated function postToolCall(string servicePath, string toolName, map<json> ar
     map<json> callParams = {
         name: toolName,
         arguments,
-        _meta: {[PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}
+        _meta: {[PROTOCOL_META_KEY]: LATEST_MODERN_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}
     };
     if requestState is string {
         callParams["requestState"] = requestState;
     }
     map<string> requestHeaders = {
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_MODERN_PROTOCOL_VERSION,
         [METHOD_HEADER]: REQUEST_CALL_TOOL,
         [NAME_HEADER]: encodeProtocolHeader(toolName)
     };
@@ -241,9 +241,9 @@ function testRequestStateIsBoundToTheCaller() returns error? {
 isolated function newSharedKeyService() returns StreamableHttpAdvancedService =>
     @StreamableHttpServiceConfig {info: {name: "replica", version: "1"}, requestState: {keys: [SIGNING_KEY]}}
     isolated service object {
-        remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+        remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
             echoState(callParams);
     };
 
@@ -252,17 +252,17 @@ final string ROTATED_KEY = uuid:createType4AsString() + uuid:createType4AsString
 isolated function newRotatedKeyService() returns StreamableHttpAdvancedService =>
     @StreamableHttpServiceConfig {info: {name: "replica", version: "1"}, requestState: {keys: [ROTATED_KEY, SIGNING_KEY]}}
     isolated service object {
-        remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+        remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
             echoState(callParams);
     };
 
 isolated function newDefaultKeyService() returns StreamableHttpAdvancedService =>
     @StreamableHttpServiceConfig {info: {name: "replica", version: "1"}} isolated service object {
-        remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+        remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
             echoState(callParams);
     };
 
@@ -321,27 +321,27 @@ function testInvalidRequestStateConfigurationFailsAtAttach() returns error? {
 isolated function newShortKeyService() returns StreamableHttpAdvancedService =>
     @StreamableHttpServiceConfig {info: {name: "invalid", version: "1"}, requestState: {keys: [SIGNING_KEY, "too-short"]}}
     isolated service object {
-        remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+        remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
             echoState(callParams);
     };
 
 isolated function newZeroTtlService() returns StreamableHttpAdvancedService =>
     @StreamableHttpServiceConfig {info: {name: "invalid", version: "1"}, requestState: {ttl: 0}}
     isolated service object {
-        remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+        remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
             echoState(callParams);
     };
 
 isolated function newNegativeTtlService() returns StreamableHttpAdvancedService =>
     @StreamableHttpServiceConfig {info: {name: "invalid", version: "1"}, requestState: {ttl: -1}}
     isolated service object {
-        remote isolated function onListTools() returns ListToolsResult => stateEchoTools();
+        remote isolated function onListTools() returns ToolPage => stateEchoTools();
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult =>
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult =>
             echoState(callParams);
     };
 
@@ -379,9 +379,9 @@ function testBoundAndUnboundRequestStateAreNotInterchangeable() returns error? {
 
 @test:Config {}
 function testLegacyCallsDoNotPassRequestStateToAdvancedServices() returns error? {
-    StreamableHttpClient legacyClient = check new (REQUEST_STATE_SERVICE_URL + "/state", protocolMode = "legacy");
+    StreamableHttpClient2 legacyClient = check new (REQUEST_STATE_SERVICE_URL + "/state", protocolMode = "legacy");
     _ = check legacyClient->connect();
-    CallToolResult|InputRequiredResult|ClientError callResult = legacyClient->callToolOnce({
+    ToolResult|InputRequiredResult|ClientError callResult = legacyClient->callToolOnce({
         name: "remember",
         inputResponses: {"confirm": {action: "accept", content: {confirmed: true}}},
         requestState: "forged"

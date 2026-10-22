@@ -82,5 +82,5 @@ isolated function hasAuthorizationHeader(map<string|string[]> headers) returns b
 // The header must repeat the version in the request metadata, which the client sets per request.
 isolated function protocolVersionFromMeta(JsonRpcRequest requestMessage) returns string {
     anydata metaVersion = requestMessage.params?._meta[PROTOCOL_META_KEY];
-    return metaVersion is string ? metaVersion : LATEST_PROTOCOL_VERSION;
+    return metaVersion is string ? metaVersion : LATEST_MODERN_PROTOCOL_VERSION;
 }

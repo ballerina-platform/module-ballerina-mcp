@@ -303,7 +303,7 @@ isolated class StreamableHttpClientTransport {
     # + additionalHeaders - Optional additional headers to include with the request
     # + return - A JSON-RPC response message, a stream of messages, or a transport error.
     isolated function sendMessage(JsonRpcMessage message, map<string|string[]> additionalHeaders = {})
-            returns JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? {
+            returns LegacyMessage|stream<LegacyMessage, StreamError?>|StreamableHttpTransportError? {
         map<string|string[]> headers = self.prepareRequestHeaders();
         headers[CONTENT_TYPE_HEADER] = CONTENT_TYPE_JSON;
         headers[ACCEPT_HEADER] = string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`;
@@ -450,11 +450,11 @@ isolated class StreamableHttpClientTransport {
     # + response - The HTTP response containing SSE data.
     # + return - A stream of JsonRpcMessages, or a StreamableHttpTransportError.
     private isolated function processServerSentEvents(http:Response response)
-            returns stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError {
+            returns stream<LegacyMessage, StreamError?>|StreamableHttpTransportError {
         do {
             stream<http:SseEvent, error?> sseEventStream = check response.getSseEventStream();
             JsonRpcMessageStreamTransformer streamTransformer = new (sseEventStream);
-            return new stream<JsonRpcMessage, StreamError?>(streamTransformer);
+            return new stream<LegacyMessage, StreamError?>(streamTransformer);
         } on fail error e {
             return error ResponseParsingError(
                 string `Unable to process SSE response: ${e.message()}`
@@ -467,7 +467,7 @@ isolated class StreamableHttpClientTransport {
     # + response - The HTTP response containing JSON data.
     # + return - A JsonRpcMessage, or a StreamableHttpTransportError.
     private isolated function processJsonResponse(http:Response response)
-            returns JsonRpcMessage|StreamableHttpTransportError {
+            returns LegacyMessage|StreamableHttpTransportError {
         do {
             json payload = check response.getJsonPayload();
             return check toLegacyMessage(payload);

@@ -94,12 +94,12 @@ function testContentBlockUnion() {
 }
 
 // ---------------------------------------------------------------------------
-// ToolDefinition — verifies new fields: title, icons, outputSchema
+// ToolInfo — verifies new fields: title, icons, outputSchema
 // ---------------------------------------------------------------------------
 
 @test:Config {}
 function testToolDefinition() {
-    ToolDefinition tool = {
+    ToolInfo tool = {
         name: "calculate",
         title: "Calculate",
         description: "Performs a calculation",
@@ -135,12 +135,12 @@ function testCallToolParams() {
 }
 
 // ---------------------------------------------------------------------------
-// CallToolResult — verifies structuredContent and ResourceLink in content
+// ToolResult — verifies structuredContent and ResourceLink in content
 // ---------------------------------------------------------------------------
 
 @test:Config {}
 function testCallToolResult() {
-    CallToolResult result = {
+    ToolResult result = {
         content: [
             {'type: "text", text: "Summary"},
             {'type: "resource_link", name: "output", uri: "file:///out.json"}
@@ -159,7 +159,7 @@ function testCallToolResult() {
 
 @test:Config {}
 function testJsonRpcResponseTypes() {
-    CallToolResult toolResult = {content: [{'type: "text", text: "done"}]};
+    ToolResult toolResult = {content: [{'type: "text", text: "done"}]};
     JsonRpcResponse resultResponse = {jsonrpc: "2.0", id: 1, result: toolResult};
     JsonRpcError errorResponse = {
         jsonrpc: "2.0",

@@ -73,12 +73,12 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
 }
 isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8779) {
 
-    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    isolated remote function onListTools() returns mcp:ToolPage|mcp:ServerError {
         return {tools: [{name: "ping", description: "Pings the server", inputSchema: {"type": "object"}}]};
     }
 
     isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:ServerError {
         if params.name == "failing" {
             return error mcp:ServerError("upstream API returned 503");
         }
@@ -106,12 +106,12 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
 }
 isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8781) {
 
-    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    isolated remote function onListTools() returns mcp:ToolPage|mcp:ServerError {
         return error mcp:ServerError("tool registry is unavailable");
     }
 
     isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }
 }
@@ -122,13 +122,13 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
 }
 isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8782) {
 
-    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    isolated remote function onListTools() returns mcp:ToolPage|mcp:ServerError {
         int[] empty = [];
         return {tools: [{name: empty[5].toString(), inputSchema: {"type": "object"}}]};
     }
 
     isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }
 }

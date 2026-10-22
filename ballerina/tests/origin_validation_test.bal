@@ -50,7 +50,7 @@ isolated function modernOriginPost(http:Client httpClient, string servicePath, s
     map<string|string[]> requestHeaders = {
         [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_MODERN_PROTOCOL_VERSION,
         [METHOD_HEADER]: "server/discover"
     };
     if origin is string {
@@ -63,7 +63,7 @@ isolated function modernOriginPost(http:Client httpClient, string servicePath, s
         jsonrpc: JSONRPC_VERSION,
         id: 1,
         method: "server/discover",
-        params: {_meta: {[PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
+        params: {_meta: {[PROTOCOL_META_KEY]: LATEST_MODERN_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
     };
     return httpClient->post(servicePath, discoverRequest, headers = requestHeaders);
 }

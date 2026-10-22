@@ -92,8 +92,8 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 }
 
-final mcp:StreamableHttpClient headerClient = check new ("http://localhost:8772/mcp");
-final mcp:StreamableHttpClient strictHeaderClient = check new ("http://localhost:8773/mcp");
+final mcp:StreamableHttpClient2 headerClient = check new ("http://localhost:8772/mcp");
+final mcp:StreamableHttpClient2 strictHeaderClient = check new ("http://localhost:8773/mcp");
 
 // Raw JSON-RPC client: the mcp client discards the JSON-RPC error payload of
 // non-2xx responses and cannot send string[] header values, so error-path and
@@ -101,7 +101,7 @@ final mcp:StreamableHttpClient strictHeaderClient = check new ("http://localhost
 final http:Client rawHeaderClient = check new ("http://localhost:8772");
 final http:Client rawStrictHeaderClient = check new ("http://localhost:8773");
 
-isolated function getTextResult(mcp:CallToolResult result) returns string|error {
+isolated function getTextResult(mcp:ToolResult result) returns string|error {
     mcp:TextContent textContent = check result.content[0].ensureType();
     return textContent.text;
 }
@@ -149,9 +149,9 @@ function testHeaderBindingClientInit() returns error? {
 
 @test:Config {dependsOn: [testHeaderBindingClientInit]}
 function testHeaderParamsExcludedFromSchema() returns error? {
-    mcp:ListToolsResult result = check headerClient->listTools();
+    mcp:ToolPage result = check headerClient->listTools();
 
-    foreach mcp:ToolDefinition tool in result.tools {
+    foreach mcp:ToolInfo tool in result.tools {
         if tool.name != "readAuth" {
             continue;
         }
@@ -166,7 +166,7 @@ function testHeaderParamsExcludedFromSchema() returns error? {
 
 @test:Config {dependsOn: [testHeaderBindingClientInit]}
 function testSingleHeaderBinding() returns error? {
-    mcp:CallToolResult result = check headerClient->callTool(
+    mcp:ToolResult result = check headerClient->callTool(
         {name: "readAuth", arguments: {"name": "World"}},
         {"authorization": "Bearer test-token"});
     test:assertEquals(check getTextResult(result), "World:Bearer test-token");
@@ -184,17 +184,17 @@ function testMissingRequiredHeader() returns error? {
 
 @test:Config {dependsOn: [testHeaderBindingClientInit]}
 function testNilableHeaderPresentAndMissing() returns error? {
-    mcp:CallToolResult withHeader = check headerClient->callTool(
+    mcp:ToolResult withHeader = check headerClient->callTool(
         {name: "readTenant", arguments: {}}, {"X-Tenant-Id": "tenant-42"});
     test:assertEquals(check getTextResult(withHeader), "tenant-42");
 
-    mcp:CallToolResult withoutHeader = check headerClient->callTool({name: "readTenant", arguments: {}});
+    mcp:ToolResult withoutHeader = check headerClient->callTool({name: "readTenant", arguments: {}});
     test:assertEquals(check getTextResult(withoutHeader), "<none>");
 }
 
 @test:Config {dependsOn: [testHeaderBindingClientInit]}
 function testTypedHeaderBinding() returns error? {
-    mcp:CallToolResult result = check headerClient->callTool(
+    mcp:ToolResult result = check headerClient->callTool(
         {name: "readTyped", arguments: {}},
         {"X-Retry-Count": "3", "X-Debug": "true"});
     test:assertEquals(check getTextResult(result), "3:true");
@@ -213,7 +213,7 @@ function testTypedHeaderCastFailure() returns error? {
 
 @test:Config {dependsOn: [testHeaderBindingClientInit]}
 function testEnumHeaderBinding() returns error? {
-    mcp:CallToolResult valid = check headerClient->callTool(
+    mcp:ToolResult valid = check headerClient->callTool(
         {name: "readVersion", arguments: {}}, {"X-Ver": "v2"});
     test:assertEquals(check getTextResult(valid), "v2");
 
@@ -233,26 +233,26 @@ function testReadonlyArrayHeaderBinding() returns error? {
 
 @test:Config {dependsOn: [testHeaderBindingClientInit]}
 function testHeaderRecordBinding() returns error? {
-    mcp:CallToolResult full = check headerClient->callTool(
+    mcp:ToolResult full = check headerClient->callTool(
         {name: "readRecord", arguments: {}},
         {"authorization": "Bearer rec-token", "X-Tenant-Id": "tenant-7"});
     test:assertEquals(check getTextResult(full), "Bearer rec-token:tenant-7");
 
-    mcp:CallToolResult partial = check headerClient->callTool(
+    mcp:ToolResult partial = check headerClient->callTool(
         {name: "readRecord", arguments: {}}, {"authorization": "Bearer rec-token"});
     test:assertEquals(check getTextResult(partial), "Bearer rec-token:<none>");
 }
 
 @test:Config {dependsOn: [testHeaderBindingClientInit]}
 function testRawHeadersParamBinding() returns error? {
-    mcp:CallToolResult result = check headerClient->callTool(
+    mcp:ToolResult result = check headerClient->callTool(
         {name: "readRaw", arguments: {}}, {"authorization": "Bearer raw-token"});
     test:assertEquals(check getTextResult(result), "Bearer raw-token");
 }
 
 @test:Config {dependsOn: [testHeaderBindingClientInit]}
 function testRequestParamBinding() returns error? {
-    mcp:CallToolResult result = check headerClient->callTool(
+    mcp:ToolResult result = check headerClient->callTool(
         {name: "readViaRequest", arguments: {"name": "World"}}, {"authorization": "Bearer req-token"});
     test:assertEquals(check getTextResult(result), "World:Bearer req-token");
 }

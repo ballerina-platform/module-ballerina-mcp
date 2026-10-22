@@ -6,11 +6,11 @@ listener mcp:StreamableHttpListener mcpListener = check new (9093);
     info: {name: "streamable-advanced", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /advanced on mcpListener {
-    remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    remote function onListTools() returns mcp:ToolPage|mcp:ServerError {
         return {tools: []};
     }
 
-    remote function onCallTool(mcp:CallToolParams params) returns mcp:CallToolResult|mcp:ServerError {
+    remote function onCallTool(mcp:CallToolParams params) returns mcp:ToolResult|mcp:ServerError {
         return {content: []};
     }
 }

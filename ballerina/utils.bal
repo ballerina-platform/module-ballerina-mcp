@@ -16,17 +16,17 @@
 
 # Processes a server response and extracts the result.
 #
-# + serverResponse - The response from the server, which may be a single JsonRpcMessage, a stream, or a transport error.
-# + return - Extracted ServerResult, ServerResponseError, StreamError, or the AuthorizationError that
+# + serverResponse - The response from the server, which may be a single LegacyMessage, a stream, or a transport error.
+# + return - Extracted LegacyServerResult, ServerResponseError, StreamError, or the AuthorizationError that
 # prevented the request from being sent.
-isolated function processServerResponse(JsonRpcMessage|stream<JsonRpcMessage, StreamError?>|StreamableHttpTransportError? serverResponse)
-        returns ServerResult|ServerResponseError|StreamError|AuthorizationError {
+isolated function processServerResponse(LegacyMessage|stream<LegacyMessage, StreamError?>|StreamableHttpTransportError? serverResponse)
+        returns LegacyServerResult|ServerResponseError|StreamError|AuthorizationError {
 
-    if serverResponse is stream<JsonRpcMessage, StreamError?> {
+    if serverResponse is stream<LegacyMessage, StreamError?> {
         return extractResultFromMessageStream(serverResponse);
     }
 
-    if serverResponse is JsonRpcMessage {
+    if serverResponse is LegacyMessage {
         return extractResultFromMessage(serverResponse);
     }
 
@@ -46,19 +46,19 @@ isolated function processServerResponse(JsonRpcMessage|stream<JsonRpcMessage, St
 # Extracts the first valid result from a stream of JsonRpcMessages.
 #
 # + messageStream - The stream of JsonRpcMessages to process.
-# + return - The first valid ServerResult, a specific ServerResponseError, or StreamError.
-isolated function extractResultFromMessageStream(stream<JsonRpcMessage, StreamError?> messageStream)
-        returns ServerResult|ServerResponseError|StreamError {
+# + return - The first valid LegacyServerResult, a specific ServerResponseError, or StreamError.
+isolated function extractResultFromMessageStream(stream<LegacyMessage, StreamError?> messageStream)
+        returns LegacyServerResult|ServerResponseError|StreamError {
 
-    record {|JsonRpcMessage value;|}|StreamError? streamItem = messageStream.next();
+    record {|LegacyMessage value;|}|StreamError? streamItem = messageStream.next();
     // Iterate until a valid result or an error is found.
     while streamItem !is () {
         if streamItem is StreamError {
             return streamItem;
         }
 
-        JsonRpcMessage message = streamItem.value;
-        if message is JsonRpcResponse {
+        LegacyMessage message = streamItem.value;
+        if message is LegacyResponse {
             return message.result;
         }
         streamItem = messageStream.next();
@@ -67,12 +67,12 @@ isolated function extractResultFromMessageStream(stream<JsonRpcMessage, StreamEr
     return error InvalidMessageTypeError("No valid messages found in server message stream.");
 }
 
-# Extracts the result from a JsonRpcMessage and converts it to a ServerResult.
+# Extracts the result from a LegacyMessage and converts it to a LegacyServerResult.
 #
-# + message - The JsonRpcMessage to convert.
-# + return - The extracted ServerResult, or an InvalidMessageTypeError.
-isolated function extractResultFromMessage(JsonRpcMessage message) returns ServerResult|ServerResponseError {
-    if message is JsonRpcResponse {
+# + message - The LegacyMessage to convert.
+# + return - The extracted LegacyServerResult, or an InvalidMessageTypeError.
+isolated function extractResultFromMessage(LegacyMessage message) returns LegacyServerResult|ServerResponseError {
+    if message is LegacyResponse {
         return message.result;
     }
     if message is JsonRpcError {
@@ -83,7 +83,7 @@ isolated function extractResultFromMessage(JsonRpcMessage message) returns Serve
 
 // Legacy revisions predate the 2026-07-28 result fields, so a value outside that schema
 // must not fail the whole response.
-isolated function toLegacyMessage(json payload) returns JsonRpcMessage|error {
+isolated function toLegacyMessage(json payload) returns LegacyMessage|error {
     if payload is map<json> {
         json resultValue = payload["result"];
         if resultValue is map<json> {
@@ -120,12 +120,12 @@ isolated function applicationResult(Result resultValue, boolean preserveCacheHin
 }
 
 // Keep legacy wire responses within the schema shape accepted by pre-2026 clients.
-isolated function legacyToolListResult(ListToolsResult resultValue) returns ListToolsResult|error {
-    ListToolsResult|error legacyResult = applicationResult(resultValue).cloneWithType();
+isolated function legacyToolListResult(ToolPage resultValue) returns ToolPage|error {
+    ToolPage|error legacyResult = applicationResult(resultValue).cloneWithType();
     if legacyResult is error {
         return legacyResult;
     }
-    foreach ToolDefinition toolInfo in legacyResult.tools {
+    foreach ToolInfo toolInfo in legacyResult.tools {
         OutputSchema? outputSchema = toolInfo.outputSchema;
         if outputSchema is OutputSchema {
             InputSchema|error objectSchema = outputSchema.cloneWithType();
@@ -137,9 +137,9 @@ isolated function legacyToolListResult(ListToolsResult resultValue) returns List
     return legacyResult;
 }
 
-// Legacy CallToolResult allowed structured content only when its root was an object.
-isolated function legacyToolCallResult(CallToolResult resultValue) returns CallToolResult|error {
-    CallToolResult|error legacyResult = applicationResult(resultValue).cloneWithType();
+// Legacy ToolResult allowed structured content only when its root was an object.
+isolated function legacyToolCallResult(ToolResult resultValue) returns ToolResult|error {
+    ToolResult|error legacyResult = applicationResult(resultValue).cloneWithType();
     if legacyResult is error {
         return legacyResult;
     }

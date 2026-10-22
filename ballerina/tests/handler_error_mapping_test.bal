@@ -27,30 +27,30 @@ service StreamableHttpService /headerBoundTool on dispatcherErrorListener {
 
 @StreamableHttpServiceConfig {info: {name: "header-bound-advanced", version: "1"}, sessionMode: STATELESS}
 service StreamableHttpAdvancedService /headerBoundAdvanced on dispatcherErrorListener {
-    remote isolated function onListTools() returns ListToolsResult => {
+    remote isolated function onListTools() returns ToolPage => {
         tools: [{name: "tenant", inputSchema: {'type: "object"}}]
     };
 
     remote isolated function onCallTool(CallToolParams callParams, @http:Header {name: "X-Tenant"} string tenant)
-            returns CallToolResult => {content: [{'type: "text", text: tenant}]};
+            returns ToolResult => {content: [{'type: "text", text: tenant}]};
 }
 
 @StreamableHttpServiceConfig {info: {name: "header-bound-listing", version: "1"}, sessionMode: STATELESS}
 service StreamableHttpAdvancedService /headerBoundListing on dispatcherErrorListener {
-    remote isolated function onListTools(@http:Header {name: "X-Tenant"} string tenant) returns ListToolsResult => {
+    remote isolated function onListTools(@http:Header {name: "X-Tenant"} string tenant) returns ToolPage => {
         tools: [{name: tenant, inputSchema: {'type: "object"}}]
     };
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult => {content: []};
 }
 
 @StreamableHttpServiceConfig {info: {name: "opaque-failures", version: "1"}, sessionMode: STATELESS}
 service StreamableHttpAdvancedService /opaqueFailures on dispatcherErrorListener {
-    remote isolated function onListTools() returns ListToolsResult => {
+    remote isolated function onListTools() returns ToolPage => {
         tools: [{name: "fail", inputSchema: {'type: "object"}}, {name: "explode", inputSchema: {'type: "object"}}]
     };
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|error {
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|error {
         if callParams.name == "explode" {
             panic error(INTERNAL_DETAIL);
         }

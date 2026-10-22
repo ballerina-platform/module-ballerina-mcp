@@ -21,7 +21,7 @@ isolated map<int> paginatedListings = {};
 // Serves its tools in two pages and rejects any other cursor with INVALID_PARAMS.
 @StreamableHttpServiceConfig {info: {name: "paginated", version: "1"}, cacheHints: {listTools: {ttlMs: 60000}}}
 service StreamableHttpAdvancedService /paginated on cachingListener {
-    remote isolated function onListTools(Cursor? cursor) returns ListToolsResult|ServerError {
+    remote isolated function onListTools(Cursor? cursor) returns ToolPage|ServerError {
         string page = cursor ?: "first";
         lock {
             paginatedListings[page] = (paginatedListings[page] ?: 0) + 1;
@@ -35,7 +35,7 @@ service StreamableHttpAdvancedService /paginated on cachingListener {
         return error InvalidParamsError("Unknown cursor");
     }
 
-    remote isolated function onCallTool(CallToolParams params) returns CallToolResult =>
+    remote isolated function onCallTool(CallToolParams params) returns ToolResult =>
         {content: [{'type: "text", text: "called " + params.name}]};
 }
 
@@ -45,23 +45,23 @@ isolated function paginatedListingCount(string page) returns int {
     }
 }
 
-isolated function toolNames(ListToolsResult listing) returns string[] =>
-    from ToolDefinition toolInfo in listing.tools select toolInfo.name;
+isolated function toolNames(ToolPage listing) returns string[] =>
+    from ToolInfo toolInfo in listing.tools select toolInfo.name;
 
 @test:Config {}
 function testPaginatingServiceReturnsPagesOnBothProtocols() returns error? {
     ProtocolMode[] protocolModes = ["modern", "legacy"];
     foreach ProtocolMode protocolMode in protocolModes {
-        StreamableHttpClient pagedClient = check new ("http://localhost:3222/paginated", protocolMode = protocolMode);
+        StreamableHttpClient2 pagedClient = check new ("http://localhost:3222/paginated", protocolMode = protocolMode);
         _ = check pagedClient->connect();
-        ListToolsResult firstPage = check pagedClient->listTools();
+        ToolPage firstPage = check pagedClient->listTools();
         test:assertEquals(toolNames(firstPage), ["alpha"], protocolMode);
         test:assertEquals(firstPage.nextCursor, "page-2", protocolMode);
-        ListToolsResult secondPage = check pagedClient->listTools(cursor = "page-2");
+        ToolPage secondPage = check pagedClient->listTools(cursor = "page-2");
         test:assertEquals(toolNames(secondPage), ["beta"], protocolMode);
         test:assertEquals(secondPage.nextCursor, (), protocolMode);
 
-        CallToolResult called = check pagedClient->callTool({name: "beta"});
+        ToolResult called = check pagedClient->callTool({name: "beta"});
         test:assertEquals(called.content, [{'type: "text", text: "called beta"}], protocolMode);
         check pagedClient->close();
     }
@@ -69,21 +69,21 @@ function testPaginatingServiceReturnsPagesOnBothProtocols() returns error? {
 
 @test:Config {}
 function testClientCachesEachPageAndDropsAllOnRejectedCursor() returns error? {
-    StreamableHttpClient pagedClient = check new ("http://localhost:3222/paginated", protocolMode = "modern");
+    StreamableHttpClient2 pagedClient = check new ("http://localhost:3222/paginated", protocolMode = "modern");
     _ = check pagedClient->connect();
     int firstListings = paginatedListingCount("first");
     int secondListings = paginatedListingCount("page-2");
 
     foreach int _ in 0 ..< 2 {
-        ListToolsResult firstPage = check pagedClient->listTools();
+        ToolPage firstPage = check pagedClient->listTools();
         test:assertEquals(toolNames(firstPage), ["alpha"]);
-        ListToolsResult secondPage = check pagedClient->listTools(cursor = "page-2");
+        ToolPage secondPage = check pagedClient->listTools(cursor = "page-2");
         test:assertEquals(toolNames(secondPage), ["beta"]);
     }
     test:assertEquals(paginatedListingCount("first"), firstListings + 1, "the first page must be cached");
     test:assertEquals(paginatedListingCount("page-2"), secondListings + 1, "each page must be cached under its cursor");
 
-    ListToolsResult|ClientError rejected = pagedClient->listTools(cursor = "stale");
+    ToolPage|ClientError rejected = pagedClient->listTools(cursor = "stale");
     if rejected !is ClientError {
         test:assertFail("a rejected cursor must fail the listing");
     }
@@ -113,9 +113,9 @@ isolated function assertInvalidParams(ClientError failure, string expectedMessag
 function testRejectedCursorIsInvalidParamsOnBothProtocols() returns error? {
     ProtocolMode[] protocolModes = ["modern", "legacy"];
     foreach ProtocolMode protocolMode in protocolModes {
-        StreamableHttpClient pagedClient = check new ("http://localhost:3222/paginated", protocolMode = protocolMode);
+        StreamableHttpClient2 pagedClient = check new ("http://localhost:3222/paginated", protocolMode = protocolMode);
         _ = check pagedClient->connect();
-        ListToolsResult|ClientError rejected = pagedClient->listTools(cursor = "stale");
+        ToolPage|ClientError rejected = pagedClient->listTools(cursor = "stale");
         if rejected !is ClientError {
             test:assertFail("a rejected cursor must fail the listing");
         }

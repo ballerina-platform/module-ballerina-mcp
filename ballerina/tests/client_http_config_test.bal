@@ -27,14 +27,14 @@ service /moved on new http:Listener(3263) {
 
 @test:Config {}
 function testRedirectsFollowedByDefault() returns error? {
-    StreamableHttpClient mcpClient = check new (REDIRECTING_SERVER_URL, protocolMode = "modern");
+    StreamableHttpClient2 mcpClient = check new (REDIRECTING_SERVER_URL, protocolMode = "modern");
     ConnectionInfo info = check mcpClient->connect();
-    test:assertEquals(info.protocolVersion, LATEST_PROTOCOL_VERSION);
+    test:assertEquals(info.protocolVersion, LATEST_MODERN_PROTOCOL_VERSION);
 }
 
 @test:Config {}
 function testRedirectsNotFollowedWhenDisabled() returns error? {
-    StreamableHttpClient mcpClient = check new (REDIRECTING_SERVER_URL, protocolMode = "modern",
+    StreamableHttpClient2 mcpClient = check new (REDIRECTING_SERVER_URL, protocolMode = "modern",
         httpConfig = {followRedirects: {enabled: false}});
     ConnectionInfo|ClientError result = mcpClient->connect();
     test:assertTrue(result is ClientError);
@@ -42,7 +42,7 @@ function testRedirectsNotFollowedWhenDisabled() returns error? {
 
 @test:Config {}
 function testRedirectsNotFollowedWithOAuth() returns error? {
-    StreamableHttpClient mcpClient = check new (REDIRECTING_SERVER_URL, protocolMode = "modern",
+    StreamableHttpClient2 mcpClient = check new (REDIRECTING_SERVER_URL, protocolMode = "modern",
         httpConfig = {auth: preRegisteredConfig()});
     ConnectionInfo|ClientError result = mcpClient->connect();
     test:assertTrue(result is ClientError);
@@ -50,7 +50,7 @@ function testRedirectsNotFollowedWithOAuth() returns error? {
 
 @test:Config {}
 function testOAuthRejectsEnabledRedirects() {
-    StreamableHttpClient|ClientError result = new ("https://mcp.example.com/mcp",
+    StreamableHttpClient2|ClientError result = new ("https://mcp.example.com/mcp",
         httpConfig = {auth: preRegisteredConfig(), followRedirects: {enabled: true}});
     if result !is ClientInitializationError {
         test:assertFail("Expected a ClientInitializationError for redirects with OAuth");
@@ -59,6 +59,6 @@ function testOAuthRejectsEnabledRedirects() {
 
 @test:Config {}
 function testOAuthAcceptsDisabledRedirects() returns error? {
-    StreamableHttpClient _ = check new ("https://mcp.example.com/mcp",
+    StreamableHttpClient2 _ = check new ("https://mcp.example.com/mcp",
         httpConfig = {auth: preRegisteredConfig(), followRedirects: {enabled: false}});
 }

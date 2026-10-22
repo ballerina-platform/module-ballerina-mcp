@@ -26,10 +26,8 @@ const CONTENT_TYPE_SSE = "text/event-stream";
 public const MODERN_PROTOCOL_VERSIONS = ["2026-07-28"];
 # Revisions that use the `initialize` handshake, newest first.
 public const LEGACY_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
-# The union of the modern and legacy revisions.
-public const SUPPORTED_PROTOCOL_VERSIONS = [...MODERN_PROTOCOL_VERSIONS, ...LEGACY_PROTOCOL_VERSIONS];
 # The newest modern revision, sent by the client.
-public const LATEST_PROTOCOL_VERSION = "2026-07-28";
+public const LATEST_MODERN_PROTOCOL_VERSION = "2026-07-28";
 # The newest legacy revision, offered in `initialize`.
 public const LATEST_LEGACY_PROTOCOL_VERSION = "2025-11-25";
 

@@ -40,13 +40,13 @@ isolated service mcp:StreamableHttpService /mcp on metaListener {
     }
 }
 
-final mcp:StreamableHttpClient metaClient = check new ("http://localhost:8767/mcp");
+final mcp:StreamableHttpClient2 metaClient = check new ("http://localhost:8767/mcp");
 final mcp:Implementation metaClientInfo = {name: "meta-test-client", version: "1.0.0"};
 
 @test:Config
 function testMetaToolSchemaExcludesMetaParam() returns error? {
     _ = check metaClient->connect(metaClientInfo);
-    mcp:ListToolsResult result = check metaClient->listTools();
+    mcp:ToolPage result = check metaClient->listTools();
 
     test:assertEquals(result.tools.length(), 1);
     test:assertEquals(result.tools[0].name, "greetWithMeta");
@@ -63,7 +63,7 @@ function testMetaToolSchemaExcludesMetaParam() returns error? {
 
 @test:Config {dependsOn: [testMetaToolSchemaExcludesMetaParam]}
 function testMetaReceivedOnServer() returns error? {
-    mcp:CallToolResult result = check metaClient->callTool({
+    mcp:ToolResult result = check metaClient->callTool({
         name: "greetWithMeta",
         arguments: {"name": "World", "greeting": "Hello"},
         _meta: {"traceId": "trace-xyz"}
@@ -84,7 +84,7 @@ function testMetaReceivedOnServer() returns error? {
 
 @test:Config {dependsOn: [testMetaToolSchemaExcludesMetaParam]}
 function testMetaIsNilWhenClientOmitsIt() returns error? {
-    mcp:CallToolResult result = check metaClient->callTool({
+    mcp:ToolResult result = check metaClient->callTool({
         name: "greetWithMeta",
         arguments: {"name": "World", "greeting": "Hello"}
     });

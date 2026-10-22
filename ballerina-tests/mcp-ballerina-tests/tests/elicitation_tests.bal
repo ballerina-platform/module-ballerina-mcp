@@ -47,16 +47,16 @@ isolated function confirmDeletion(mcp:ElicitRequest inputRequest) returns mcp:El
 
 @test:Config
 function testBasicToolElicitsThroughContext() returns error? {
-    mcp:StreamableHttpClient elicitingClient = check new ("http://localhost:8793/elicitation",
+    mcp:StreamableHttpClient2 elicitingClient = check new ("http://localhost:8793/elicitation",
         elicitationHandler = confirmDeletion);
     _ = check elicitingClient->connect();
 
-    mcp:ListToolsResult toolList = check elicitingClient->listTools();
-    mcp:ToolDefinition tool = toolList.tools[0];
+    mcp:ToolPage toolList = check elicitingClient->listTools();
+    mcp:ToolInfo tool = toolList.tools[0];
     test:assertEquals((tool.inputSchema.properties ?: {}).keys(), ["path"]);
     test:assertEquals(tool.outputSchema, {"type": "string"});
 
-    mcp:CallToolResult callResult = check elicitingClient->callTool({name: "deleteFile", arguments: {"path": "a.txt"}});
+    mcp:ToolResult callResult = check elicitingClient->callTool({name: "deleteFile", arguments: {"path": "a.txt"}});
     test:assertEquals(callResult.content[0], <mcp:TextContent>{'type: "text", text: "deleted a.txt"});
     check elicitingClient->close();
 }
@@ -99,11 +99,11 @@ isolated function fillBooking(mcp:ElicitRequest inputRequest) returns mcp:Elicit
 
 @test:Config
 function testRecordTypeFormElicitation() returns error? {
-    mcp:StreamableHttpClient bookingClient = check new ("http://localhost:8794/booking",
+    mcp:StreamableHttpClient2 bookingClient = check new ("http://localhost:8794/booking",
         elicitationHandler = fillBooking);
     _ = check bookingClient->connect();
 
-    mcp:CallToolResult|mcp:InputRequiredResult firstRound = check bookingClient->callToolOnce({name: "bookTable"});
+    mcp:ToolResult|mcp:InputRequiredResult firstRound = check bookingClient->callToolOnce({name: "bookTable"});
     if firstRound !is mcp:InputRequiredResult {
         test:assertFail("expected an input-required result");
     }
@@ -122,7 +122,7 @@ function testRecordTypeFormElicitation() returns error? {
         }
     });
 
-    mcp:CallToolResult callResult = check bookingClient->callTool({name: "bookTable"});
+    mcp:ToolResult callResult = check bookingClient->callTool({name: "bookTable"});
     test:assertEquals(callResult.content[0], <mcp:TextContent>{'type: "text", text: "Ada: 2 on the patio"});
     check bookingClient->close();
 }

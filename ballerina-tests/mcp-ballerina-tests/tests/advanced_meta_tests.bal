@@ -17,7 +17,7 @@
 import ballerina/mcp;
 import ballerina/test;
 
-// An mcp:StreamableHttpAdvancedService builds the whole CallToolResult, so it can attach server-originated
+// An mcp:StreamableHttpAdvancedService builds the whole ToolResult, so it can attach server-originated
 // response _meta regardless of whether the client sent request _meta.
 listener mcp:StreamableHttpListener advancedMetaListener = check new (8768);
 
@@ -27,7 +27,7 @@ listener mcp:StreamableHttpListener advancedMetaListener = check new (8768);
 }
 service mcp:StreamableHttpAdvancedService /mcp on advancedMetaListener {
 
-    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    remote isolated function onListTools() returns mcp:ToolPage|mcp:ServerError {
         return {
             tools: [
                 {
@@ -40,7 +40,7 @@ service mcp:StreamableHttpAdvancedService /mcp on advancedMetaListener {
     }
 
     remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:ServerError {
         // Server-originated metadata, independent of the request.
         mcp:ResultMeta responseMeta = {"serverId": "srv-1"};
 
@@ -60,7 +60,7 @@ service mcp:StreamableHttpAdvancedService /mcp on advancedMetaListener {
     }
 }
 
-final mcp:StreamableHttpClient advancedMetaClient = check new ("http://localhost:8768/mcp");
+final mcp:StreamableHttpClient2 advancedMetaClient = check new ("http://localhost:8768/mcp");
 final mcp:Implementation advancedMetaClientInfo = {name: "advanced-meta-test-client", version: "1.0.0"};
 
 @test:Config
@@ -68,7 +68,7 @@ function testAdvancedServiceOriginatesResponseMetaWithoutRequestMeta() returns e
     _ = check advancedMetaClient->connect(advancedMetaClientInfo);
 
     // The client sends no _meta, yet the server attaches its own response _meta.
-    mcp:CallToolResult result = check advancedMetaClient->callTool({name: "ping"});
+    mcp:ToolResult result = check advancedMetaClient->callTool({name: "ping"});
 
     test:assertTrue(result._meta is record {},
             msg = "AdvancedService must be able to originate response _meta with no request _meta");
@@ -80,7 +80,7 @@ function testAdvancedServiceOriginatesResponseMetaWithoutRequestMeta() returns e
 
 @test:Config {dependsOn: [testAdvancedServiceOriginatesResponseMetaWithoutRequestMeta]}
 function testAdvancedServiceReadsRequestMetaAndReturnsOwn() returns error? {
-    mcp:CallToolResult result = check advancedMetaClient->callTool({
+    mcp:ToolResult result = check advancedMetaClient->callTool({
         name: "ping",
         _meta: {"traceId": "trace-xyz"}
     });

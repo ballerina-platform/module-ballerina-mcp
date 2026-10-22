@@ -35,13 +35,13 @@ service mcp:StreamableHttpService /sessionPosition on structuredListener {
 
 @test:Config {}
 function testSessionParameterAtMiddleAndLastPositions() returns error? {
-    mcp:StreamableHttpClient legacyClient = check new ("http://localhost:8789/sessionPosition",
+    mcp:StreamableHttpClient2 legacyClient = check new ("http://localhost:8789/sessionPosition",
             protocolMode = "legacy");
     _ = check legacyClient->connect();
 
-    mcp:ListToolsResult listedTools = check legacyClient->listTools();
+    mcp:ToolPage listedTools = check legacyClient->listTools();
     map<string[]> expectedProperties = {"sessionInMiddle": ["label", "step"], "sessionLast": ["label"]};
-    foreach mcp:ToolDefinition toolInfo in listedTools.tools {
+    foreach mcp:ToolInfo toolInfo in listedTools.tools {
         map<json> properties = check toolInfo.inputSchema.properties.ensureType();
         test:assertEquals(properties.keys().sort(), expectedProperties[toolInfo.name]);
     }
@@ -52,9 +52,9 @@ function testSessionParameterAtMiddleAndLastPositions() returns error? {
     check legacyClient->close();
 }
 
-function callSessionTool(mcp:StreamableHttpClient sessionClient, string toolName, record {} arguments)
+function callSessionTool(mcp:StreamableHttpClient2 sessionClient, string toolName, record {} arguments)
         returns string|error {
-    mcp:CallToolResult result = check sessionClient->callTool({name: toolName, arguments});
+    mcp:ToolResult result = check sessionClient->callTool({name: toolName, arguments});
     mcp:TextContent textContent = check result.content[0].ensureType();
     return textContent.text;
 }

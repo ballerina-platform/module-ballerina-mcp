@@ -311,7 +311,7 @@ Use `mcp:StreamableHttpAdvancedService` when the application must define tool di
 
 ```ballerina
 service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
-    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    remote isolated function onListTools() returns mcp:ToolPage|mcp:ServerError {
         return {
             tools: [{
                 name: "echo",
@@ -326,7 +326,7 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
     }
 
     remote isolated function onCallTool(mcp:CallToolParams params)
-            returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:InputRequiredResult|mcp:ServerError {
         if params.name != "echo" {
             return error mcp:ServerError("Unknown tool");
         }
@@ -352,7 +352,7 @@ or `()` for the first page, and sets `nextCursor` on every page but the last. A 
 its tools in one page. A modern `tools/call` reads at most 100 pages to find the called tool.
 
 ```ballerina
-remote isolated function onListTools(mcp:Cursor? cursor) returns mcp:ListToolsResult|mcp:ServerError {
+remote isolated function onListTools(mcp:Cursor? cursor) returns mcp:ToolPage|mcp:ServerError {
     if cursor is () {
         return {tools: firstPage, nextCursor: "page-2"};
     }
@@ -372,7 +372,7 @@ to ask is repeated on every round.
 
 ```ballerina
 remote isolated function onCallTool(mcp:CallToolParams params)
-        returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
+        returns mcp:ToolResult|mcp:InputRequiredResult|mcp:ServerError {
     mcp:ElicitResult? answer = (params.inputResponses ?: {})["confirm"];
     if answer is () {
         return {
@@ -557,7 +557,7 @@ import ballerina/io;
 import ballerina/mcp;
 
 public function main() returns error? {
-    final mcp:StreamableHttpClient client = check new (
+    final mcp:StreamableHttpClient2 client = check new (
         "http://localhost:9090/mcp",
         protocolMode = "auto"
     );
@@ -565,8 +565,8 @@ public function main() returns error? {
     mcp:ConnectionInfo connection = check client->connect({name: "example-client", version: "2.0.0"});
     io:println("Using MCP ", connection.protocolVersion);
 
-    mcp:ListToolsResult listed = check client->listTools();
-    mcp:CallToolResult result = check client->callTool({
+    mcp:ToolPage listed = check client->listTools();
+    mcp:ToolResult result = check client->callTool({
         name: "add",
         arguments: {left: 2, right: 3}
     });
@@ -606,7 +606,7 @@ isolated function provideIdJag(mcp:IdentityAssertionContext context)
     });
 }
 
-final mcp:StreamableHttpClient client = check new (
+final mcp:StreamableHttpClient2 client = check new (
     "https://tools.example.com/mcp",
     httpConfig = {
         auth: {
@@ -670,7 +670,7 @@ mcp:StreamableHttpClientConfig config = {
     },
     httpConfig: {timeout: 30}
 };
-final mcp:StreamableHttpClient client = check new ("http://localhost:9090/mcp", config);
+final mcp:StreamableHttpClient2 client = check new ("http://localhost:9090/mcp", config);
 ```
 
 HTTP settings go under `httpConfig`, an `mcp:HttpClientConfig` with the fields and defaults of
@@ -692,7 +692,7 @@ The module never opens, fetches or follows the URL of a URL elicitation; the han
   the out-of-band step is done, so return `cancel` when the user gives up.
 
 Use `callToolOnce()` when the application needs to handle each continuation itself. It returns
-`CallToolResult|InputRequiredResult` after one logical request. On a legacy connection it delegates to
+`ToolResult|InputRequiredResult` after one logical request. On a legacy connection it delegates to
 `callTool()`, because legacy MCP has no input-required continuation result.
 
 The lower-level lifecycle methods are available for applications that manage discovery themselves:
@@ -721,7 +721,7 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 }
 ```
 
-An advanced service may also set `ttlMs` or `cacheScope` on the `ListToolsResult` returned by `onListTools`; each
+An advanced service may also set `ttlMs` or `cacheScope` on the `ToolPage` returned by `onListTools`; each
 field set there takes precedence over the configured hint. A negative configured `ttlMs` fails `attach`, while a
 negative `ttlMs` from `onListTools` is sent as `0` and logged as an error. Hints are only sent to modern clients.
 
@@ -773,7 +773,7 @@ change notification subscriptions is planned for a later release.
 A legacy client keeps receiving the legacy wire shapes from a 2.0 server. The text content of a tool that returns a
 structured value is now its JSON serialization.
 
-The `2025-11-25` task fields are removed: `CallToolParams.task`, `ToolDefinition.execution` and the `tasks` client and
+The `2025-11-25` task fields are removed: `CallToolParams.task`, `ToolInfo.execution` and the `tasks` client and
 server capabilities. A client still connects to a server that advertises tasks.
 
 The public error hierarchy is `mcp:Error`, `mcp:ClientError`, `mcp:TransportError`, `mcp:ProtocolError`,

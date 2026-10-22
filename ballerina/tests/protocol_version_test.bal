@@ -21,8 +21,6 @@ import ballerina/test;
 function testProtocolVersionListsSplitByLifecycle() {
     test:assertEquals(MODERN_PROTOCOL_VERSIONS, ["2026-07-28"]);
     test:assertEquals(LEGACY_PROTOCOL_VERSIONS, ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"]);
-    test:assertEquals(SUPPORTED_PROTOCOL_VERSIONS,
-            ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"]);
 }
 
 // A legacy request cannot name a modern revision in its MCP-Protocol-Version header.
@@ -34,9 +32,9 @@ function testValidateProtocolVersionHeaderRejectsModernVersion() {
 // Version negotiation: the server must echo a requested version it supports.
 @test:Config {}
 function testSelectProtocolVersionEchoesSupportedVersions() {
-    foreach string supportedVersion in SUPPORTED_PROTOCOL_VERSIONS {
+    foreach string supportedVersion in [...MODERN_PROTOCOL_VERSIONS, ...LEGACY_PROTOCOL_VERSIONS] {
         test:assertEquals(selectProtocolVersion(supportedVersion),
-                supportedVersion == LATEST_PROTOCOL_VERSION ? LATEST_LEGACY_PROTOCOL_VERSION : supportedVersion,
+                supportedVersion == LATEST_MODERN_PROTOCOL_VERSION ? LATEST_LEGACY_PROTOCOL_VERSION : supportedVersion,
                 string `Server should echo the supported requested version '${supportedVersion}'`);
     }
 }

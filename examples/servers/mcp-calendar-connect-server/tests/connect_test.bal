@@ -23,8 +23,8 @@ final http:Client browser = check new (origin);
 
 @test:Config {}
 function testToolCompletesOnlyAfterTheConnectPageRecordsTheConnection() returns error? {
-    mcp:StreamableHttpClient alice = check userClient("alice");
-    mcp:CallToolResult|mcp:InputRequiredResult result = check alice->callToolOnce({name: "listEvents"});
+    mcp:StreamableHttpClient2 alice = check userClient("alice");
+    mcp:ToolResult|mcp:InputRequiredResult result = check alice->callToolOnce({name: "listEvents"});
     mcp:InputRequiredResult firstAsk = check askedToConnect(result);
 
     // Accepting only means the user agreed to open the link, so the tool asks again.
@@ -36,7 +36,7 @@ function testToolCompletesOnlyAfterTheConnectPageRecordsTheConnection() returns 
     test:assertEquals(page.statusCode, http:STATUS_OK);
 
     result = check alice->callToolOnce(continuation(secondAsk));
-    if result !is mcp:CallToolResult {
+    if result !is mcp:ToolResult {
         return error("Expected the tool to complete after the connection was recorded");
     }
     test:assertEquals(result.content[0],
@@ -46,8 +46,8 @@ function testToolCompletesOnlyAfterTheConnectPageRecordsTheConnection() returns 
 
 @test:Config {}
 function testConnectPageRejectsAnotherUser() returns error? {
-    mcp:StreamableHttpClient carol = check userClient("carol");
-    mcp:CallToolResult|mcp:InputRequiredResult result = check carol->callToolOnce({name: "listEvents"});
+    mcp:StreamableHttpClient2 carol = check userClient("carol");
+    mcp:ToolResult|mcp:InputRequiredResult result = check carol->callToolOnce({name: "listEvents"});
     mcp:InputRequiredResult ask = check askedToConnect(result);
 
     http:Response page = check openConnectPage(connectUrl(ask), "mallory");
@@ -61,12 +61,12 @@ function testConnectPageRejectsAnotherUser() returns error? {
 
 @test:Config {}
 function testDecliningToConnectEndsTheCall() returns error? {
-    mcp:StreamableHttpClient dave = check userClient("dave");
-    mcp:CallToolResult|mcp:InputRequiredResult result = check dave->callToolOnce({name: "listEvents"});
+    mcp:StreamableHttpClient2 dave = check userClient("dave");
+    mcp:ToolResult|mcp:InputRequiredResult result = check dave->callToolOnce({name: "listEvents"});
     mcp:InputRequiredResult ask = check askedToConnect(result);
 
     result = check dave->callToolOnce(continuation(ask, {action: "decline"}));
-    if result !is mcp:CallToolResult {
+    if result !is mcp:ToolResult {
         return error("Expected the tool to stop asking after a decline");
     }
     test:assertEquals(result.isError, true);
@@ -82,8 +82,8 @@ isolated function userToken(string subject) returns string|error {
     });
 }
 
-function userClient(string subject) returns mcp:StreamableHttpClient|error {
-    mcp:StreamableHttpClient mcpClient = check new (mcpUrl,
+function userClient(string subject) returns mcp:StreamableHttpClient2|error {
+    mcp:StreamableHttpClient2 mcpClient = check new (mcpUrl,
         protocolMode = "modern",
         httpConfig = {auth: {token: check userToken(subject)}},
         // Advertises URL-mode elicitation; callToolOnce never invokes it.
@@ -94,7 +94,7 @@ function userClient(string subject) returns mcp:StreamableHttpClient|error {
     return mcpClient;
 }
 
-isolated function askedToConnect(mcp:CallToolResult|mcp:InputRequiredResult result)
+isolated function askedToConnect(mcp:ToolResult|mcp:InputRequiredResult result)
         returns mcp:InputRequiredResult|error {
     if result is mcp:InputRequiredResult {
         return result;

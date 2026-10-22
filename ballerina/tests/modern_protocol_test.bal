@@ -20,8 +20,8 @@ import ballerina/time;
 
 @StreamableHttpServiceConfig {info: {name: "modern-test", version: "1"}}
 service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
-    remote isolated function onListTools() returns ListToolsResult {
-        ListToolsResult handlerResult = {
+    remote isolated function onListTools() returns ToolPage {
+        ToolPage handlerResult = {
             tools: [
                 {name: "scalar", inputSchema: {'type: "object"}, outputSchema: {"type": "integer"}},
                 {
@@ -58,7 +58,7 @@ service StreamableHttpAdvancedService /mcp on new StreamableHttpListener(3205) {
         return handlerResult.cloneReadOnly();
     }
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult|InputRequiredResult {
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult|InputRequiredResult {
         if callParams.name == "scalar" || callParams.name == "schemaMetadata" {
             return {resultType: "complete", content: [], structuredContent: 42};
         }
@@ -241,13 +241,13 @@ service StreamableHttpService /generic on structuredOutputListener {
 isolated function modernPost(string methodName, RequestParams requestParams = {}, map<string|string[]> extraHeaders = {})
         returns http:Response|error {
     requestParams._meta = {
-        [PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION,
+        [PROTOCOL_META_KEY]: LATEST_MODERN_PROTOCOL_VERSION,
         [CAPABILITIES_META_KEY]: {}
     };
     map<string|string[]> requestHeaders = {
         [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_MODERN_PROTOCOL_VERSION,
         [METHOD_HEADER]: methodName,
         ...extraHeaders
     };
@@ -268,12 +268,12 @@ function testModernDiscoveryWithoutSession() returns error? {
 
 @test:Config {}
 function testClientCanDiscoverAndAdoptModernConnection() returns error? {
-    StreamableHttpClient discoveryClient = check new ("http://localhost:3205/mcp", protocolMode = "modern");
+    StreamableHttpClient2 discoveryClient = check new ("http://localhost:3205/mcp", protocolMode = "modern");
     DiscoverResult discovered = check discoveryClient->discover();
     ConnectionInfo connection = check discoveryClient.adoptDiscovery(discovered);
-    test:assertEquals(connection.protocolVersion, LATEST_PROTOCOL_VERSION);
+    test:assertEquals(connection.protocolVersion, LATEST_MODERN_PROTOCOL_VERSION);
     test:assertEquals(connection.serverInfo?.name, "modern-test");
-    ListToolsResult tools = check discoveryClient->listTools();
+    ToolPage tools = check discoveryClient->listTools();
     test:assertEquals(tools.tools.length(), 13);
     check discoveryClient->close();
 }
@@ -291,35 +291,35 @@ function testModernHeaderValidationAndUnknownMethod() returns error? {
 
 @test:Config {}
 function testModernClientWideResultAndContinuation() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
-    ListToolsResult toolList = check modernClient->listTools();
+    ToolPage toolList = check modernClient->listTools();
     test:assertEquals(toolList.tools.length(), 13);
     test:assertEquals(toolList.ttlMs, 0);
     test:assertEquals(toolList.cacheScope, "private");
-    CallToolResult scalarResult = check modernClient->callTool({name: "scalar"});
+    ToolResult scalarResult = check modernClient->callTool({name: "scalar"});
     test:assertEquals(scalarResult["structuredContent"], 42);
     var echoResult = check modernClient->callToolOnce({name: "echo", arguments: {"region": "世界"}});
-    test:assertTrue(echoResult is CallToolResult);
-    CallToolResult continuedResult = check modernClient->callTool({name: "continue"});
+    test:assertTrue(echoResult is ToolResult);
+    ToolResult continuedResult = check modernClient->callTool({name: "continue"});
     test:assertEquals(continuedResult.content[0], <TextContent>{'type: "text", text: "opaque-state"});
     check modernClient->close();
 
-    StreamableHttpClient legacyClient = check new ("http://localhost:3205/mcp", protocolMode = "legacy");
+    StreamableHttpClient2 legacyClient = check new ("http://localhost:3205/mcp", protocolMode = "legacy");
     _ = check legacyClient->connect();
-    ListToolsResult legacyTools = check legacyClient->listTools();
-    ToolDefinition? legacyScalar = ();
-    foreach ToolDefinition toolInfo in legacyTools.tools {
+    ToolPage legacyTools = check legacyClient->listTools();
+    ToolInfo? legacyScalar = ();
+    foreach ToolInfo toolInfo in legacyTools.tools {
         if toolInfo.name == "scalar" {
             legacyScalar = toolInfo;
             break;
         }
     }
-    test:assertTrue(legacyScalar is ToolDefinition);
-    if legacyScalar is ToolDefinition {
+    test:assertTrue(legacyScalar is ToolInfo);
+    if legacyScalar is ToolInfo {
         test:assertEquals(legacyScalar.outputSchema, ());
     }
-    CallToolResult legacyScalarResult = check legacyClient->callTool({name: "scalar"});
+    ToolResult legacyScalarResult = check legacyClient->callTool({name: "scalar"});
     test:assertFalse(legacyScalarResult.hasKey("structuredContent"));
     check legacyClient->close();
 }
@@ -345,18 +345,18 @@ function testModernOriginAndDelete() returns error? {
     http:Response originResponse = check modernPost("server/discover", {}, {"origin": "https://untrusted.example"});
     test:assertEquals(originResponse.statusCode, 403);
     http:Response deleteResponse = check modernHttpClient->delete("/mcp", headers = {
-        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION
+        [PROTOCOL_VERSION_HEADER]: LATEST_MODERN_PROTOCOL_VERSION
     });
     test:assertEquals(deleteResponse.statusCode, 405);
 }
 
 @test:Config {}
 function testSchemasRemainMetadataUntilLanguageValidationIsAvailable() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
     var resultValue = check modernClient->callToolOnce({name: "schemaMetadata", arguments: {"value": "unvalidated"}});
-    test:assertTrue(resultValue is CallToolResult);
-    if resultValue is CallToolResult {
+    test:assertTrue(resultValue is ToolResult);
+    if resultValue is ToolResult {
         test:assertEquals(resultValue?.structuredContent, 42);
     }
     check modernClient->close();
@@ -364,18 +364,18 @@ function testSchemasRemainMetadataUntilLanguageValidationIsAvailable() returns e
 
 @test:Config {}
 function testRegularServicesProduceRawStructuredOutputOnlyForModernRequests() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3207/regular", protocolMode = "modern");
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3207/regular", protocolMode = "modern");
     _ = check modernClient->connect();
-    ListToolsResult modernTools = check modernClient->listTools();
-    map<ToolDefinition> toolsByName = {};
-    foreach ToolDefinition toolInfo in modernTools.tools {
+    ToolPage modernTools = check modernClient->listTools();
+    map<ToolInfo> toolsByName = {};
+    foreach ToolInfo toolInfo in modernTools.tools {
         toolsByName[toolInfo.name] = toolInfo;
     }
-    ToolDefinition stringTool = check toolsByName["stringValue"].ensureType();
-    ToolDefinition arrayTool = check toolsByName["arrayValue"].ensureType();
-    ToolDefinition recordTool = check toolsByName["recordValue"].ensureType();
-    ToolDefinition nullableTool = check toolsByName["nullableValue"].ensureType();
-    ToolDefinition textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
+    ToolInfo stringTool = check toolsByName["stringValue"].ensureType();
+    ToolInfo arrayTool = check toolsByName["arrayValue"].ensureType();
+    ToolInfo recordTool = check toolsByName["recordValue"].ensureType();
+    ToolInfo nullableTool = check toolsByName["nullableValue"].ensureType();
+    ToolInfo textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
     OutputSchema stringSchema = check stringTool.outputSchema.ensureType();
     OutputSchema arraySchema = check arrayTool.outputSchema.ensureType();
     OutputSchema recordSchema = check recordTool.outputSchema.ensureType();
@@ -386,30 +386,30 @@ function testRegularServicesProduceRawStructuredOutputOnlyForModernRequests() re
     test:assertTrue(nullableSchema.hasKey("anyOf"));
     test:assertEquals(textOnlyTool.outputSchema, ());
 
-    CallToolResult stringResult = check modernClient->callTool({name: "stringValue"});
+    ToolResult stringResult = check modernClient->callTool({name: "stringValue"});
     test:assertEquals(stringResult["structuredContent"], "hello");
-    CallToolResult arrayResult = check modernClient->callTool({name: "arrayValue"});
+    ToolResult arrayResult = check modernClient->callTool({name: "arrayValue"});
     test:assertEquals(arrayResult["structuredContent"], <json>[1, 2, 3]);
-    CallToolResult recordResult = check modernClient->callTool({name: "recordValue"});
+    ToolResult recordResult = check modernClient->callTool({name: "recordValue"});
     test:assertEquals(recordResult["structuredContent"], <json>{name: "Alice", age: 30});
-    CallToolResult nullableResult = check modernClient->callTool({name: "nullableValue"});
+    ToolResult nullableResult = check modernClient->callTool({name: "nullableValue"});
     test:assertTrue(nullableResult.hasKey("structuredContent"));
     test:assertEquals(nullableResult["structuredContent"], ());
-    CallToolResult textOnlyResult = check modernClient->callTool({name: "textOnlyValue"});
+    ToolResult textOnlyResult = check modernClient->callTool({name: "textOnlyValue"});
     test:assertFalse(textOnlyResult.hasKey("structuredContent"));
     check modernClient->close();
 
-    StreamableHttpClient legacyClient = check new ("http://localhost:3207/regular", protocolMode = "legacy");
+    StreamableHttpClient2 legacyClient = check new ("http://localhost:3207/regular", protocolMode = "legacy");
     _ = check legacyClient->connect();
-    ListToolsResult legacyTools = check legacyClient->listTools();
+    ToolPage legacyTools = check legacyClient->listTools();
     test:assertTrue(legacyTools.tools.every(toolInfo => toolInfo.outputSchema is ()));
-    CallToolResult legacyResult = check legacyClient->callTool({name: "arrayValue"});
+    ToolResult legacyResult = check legacyClient->callTool({name: "arrayValue"});
     test:assertFalse(legacyResult.hasKey("structuredContent"));
     check legacyClient->close();
 
-    StreamableHttpClient genericClient = check new ("http://localhost:3207/generic", protocolMode = "modern");
+    StreamableHttpClient2 genericClient = check new ("http://localhost:3207/generic", protocolMode = "modern");
     _ = check genericClient->connect();
-    CallToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
+    ToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
     test:assertEquals(booleanResult["structuredContent"], true);
     check genericClient->close();
 }
@@ -443,7 +443,7 @@ function testModernRejectsLegacyInitializedNotification() returns error? {
     JsonRpcNotification notificationValue = {jsonrpc: JSONRPC_VERSION, method: NOTIFICATION_INITIALIZED};
     http:Response responseValue = check modernHttpClient->post("/mcp", notificationValue, headers = {
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION
+        [PROTOCOL_VERSION_HEADER]: LATEST_MODERN_PROTOCOL_VERSION
     });
     test:assertEquals(responseValue.statusCode, 400);
 }
@@ -479,10 +479,10 @@ isolated function confirmTestElicitation(ElicitRequest inputRequest) returns Eli
 @test:Config {}
 function testHandlerCompletesFormElicitation() returns error? {
     // No capabilities passed to connect(): the configured handler advertises elicitation itself.
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp",
         elicitationHandler = confirmTestElicitation);
     _ = check modernClient->connect();
-    CallToolResult callResult = check modernClient->callTool({name: "ask"});
+    ToolResult callResult = check modernClient->callTool({name: "ask"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "accept:true:echo-only-state"});
     check modernClient->close();
 }
@@ -501,10 +501,10 @@ function testHandlerAnswersInputRequestsInServerOrder() returns error? {
     lock {
         handledMessages.removeAll();
     }
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp",
         elicitationHandler = recordTestElicitation);
     _ = check modernClient->connect();
-    CallToolResult callResult = check modernClient->callTool({name: "survey"});
+    ToolResult callResult = check modernClient->callTool({name: "survey"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "[\"alpha\",\"zeta\"]"});
     lock {
         test:assertEquals(handledMessages, ["First", "Second"]);
@@ -514,11 +514,11 @@ function testHandlerAnswersInputRequestsInServerOrder() returns error? {
 
 @test:Config {}
 function testHandlerCapabilityMergesWithConnectCapabilities() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp",
         elicitationHandler = confirmTestElicitation);
     // Declaring only form must not hide the URL mode the handler also answers.
     _ = check modernClient->connect(capabilities = {elicitation: {form: {}}});
-    CallToolResult callResult = check modernClient->callTool({name: "openLink"});
+    ToolResult callResult = check modernClient->callTool({name: "openLink"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "connected"});
     check modernClient->close();
 }
@@ -534,10 +534,10 @@ isolated function failTestElicitation(ElicitRequest inputRequest) returns Elicit
 
 @test:Config {}
 function testHandlerErrorEndsTheCallWithoutAContinuation() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp",
         elicitationHandler = failTestElicitation);
     _ = check modernClient->connect();
-    CallToolResult|ClientError callResult = modernClient->callTool({name: "count"});
+    ToolResult|ClientError callResult = modernClient->callTool({name: "count"});
     if callResult !is ClientError {
         test:assertFail("Expected the handler's error");
     }
@@ -567,9 +567,9 @@ function testHandlerCompletesUrlElicitation() returns error? {
     lock {
         openedUrls.removeAll();
     }
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp", elicitationHandler = openTestUrl);
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp", elicitationHandler = openTestUrl);
     _ = check modernClient->connect();
-    CallToolResult callResult = check modernClient->callTool({name: "openLink"});
+    ToolResult callResult = check modernClient->callTool({name: "openLink"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "connected"});
     lock {
         test:assertEquals(openedUrls, ["https://example.com/connect"]);
@@ -579,9 +579,9 @@ function testHandlerCompletesUrlElicitation() returns error? {
 
 @test:Config {}
 function testFormOnlyClientCannotReceiveUrlElicitation() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect(capabilities = {elicitation: {form: {}}});
-    CallToolResult|InputRequiredResult|ClientError callResult = modernClient->callToolOnce({name: "openLink"});
+    ToolResult|InputRequiredResult|ClientError callResult = modernClient->callToolOnce({name: "openLink"});
     if callResult !is ServerResponseError {
         test:assertFail("Expected the missing-capability error");
     }
@@ -600,17 +600,17 @@ isolated function overshareTestElicitation(ElicitRequest inputRequest) returns E
 
 @test:Config {}
 function testContinuationStripsContentTheUserDidNotSubmit() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp",
         elicitationHandler = overshareTestElicitation);
     _ = check modernClient->connect();
-    CallToolResult callResult = check modernClient->callTool({name: "mixedAnswers"});
+    ToolResult callResult = check modernClient->callTool({name: "mixedAnswers"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "[\"accepted\"]"});
     check modernClient->close();
 }
 
 @test:Config {}
 function testContinuationLimit() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp",
         elicitationHandler = confirmTestElicitation, maxInputRounds = 2);
     _ = check modernClient->connect();
     var exhaustedResult = modernClient->callTool({name: "loop"});
@@ -623,10 +623,10 @@ function testContinuationLimit() returns error? {
 
 @test:Config {}
 function testContinuationsStopAfterTenRoundsByDefault() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp",
         elicitationHandler = confirmTestElicitation);
     _ = check modernClient->connect();
-    CallToolResult|ClientError exhaustedResult = modernClient->callTool({name: "count"});
+    ToolResult|ClientError exhaustedResult = modernClient->callTool({name: "count"});
     if exhaustedResult !is ToolCallError {
         test:assertFail("Expected a tool call error once the rounds ran out");
     }
@@ -638,9 +638,9 @@ function testContinuationsStopAfterTenRoundsByDefault() returns error? {
 
 @test:Config {}
 function testStateOnlyContinuationOmitsInputResponses() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
-    CallToolResult callResult = check modernClient->callTool({name: "probe"});
+    ToolResult callResult = check modernClient->callTool({name: "probe"});
     TextContent text = check callResult.content[0].ensureType();
     test:assertTrue(text.text.startsWith("none|"), text.text);
     check modernClient->close();
@@ -648,9 +648,9 @@ function testStateOnlyContinuationOmitsInputResponses() returns error? {
 
 @test:Config {}
 function testContinuationEchoesRequestStateExactly() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
-    CallToolResult callResult = check modernClient->callTool({name: "probe"});
+    ToolResult callResult = check modernClient->callTool({name: "probe"});
     TextContent text = check callResult.content[0].ensureType();
     test:assertEquals(text.text.substring(<int>text.text.indexOf("|") + 1), PROBE_STATE);
     check modernClient->close();
@@ -658,10 +658,10 @@ function testContinuationEchoesRequestStateExactly() returns error? {
 
 @test:Config {}
 function testContinuationOmitsRequestStateTheServerDidNotSend() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp",
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp",
         elicitationHandler = confirmTestElicitation);
     _ = check modernClient->connect();
-    CallToolResult callResult = check modernClient->callTool({name: "dropState"});
+    ToolResult callResult = check modernClient->callTool({name: "dropState"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "absent"});
     check modernClient->close();
 }
@@ -671,9 +671,9 @@ function testStateOnlyRoundsBackOffToACap() returns error? {
     lock {
         shedArrivals.removeAll();
     }
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
-    CallToolResult callResult = check modernClient->callTool({name: "shed"});
+    ToolResult callResult = check modernClient->callTool({name: "shed"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "served"});
     decimal[] arrivals;
     lock {
@@ -694,7 +694,7 @@ function testStateOnlyRoundsBackOffToACap() returns error? {
 function testMissingClientCapabilityRemainsAModernError() returns error? {
     ClientCapabilities[] unsupportedCapabilities = [{}, {elicitation: {url: {}}}];
     foreach ClientCapabilities unsupportedCapability in unsupportedCapabilities {
-        StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+        StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp");
         _ = check modernClient->connect(capabilities = unsupportedCapability);
         var callResult = modernClient->callToolOnce({name: "ask"});
         test:assertTrue(callResult is ServerResponseError);
@@ -711,9 +711,9 @@ function testMissingClientCapabilityRemainsAModernError() returns error? {
 
 @test:Config {}
 function testEmptyElicitationCapabilityRetainsFormCompatibility() returns error? {
-    StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
+    StreamableHttpClient2 modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect(capabilities = {elicitation: {}});
-    CallToolResult|InputRequiredResult callResult = check modernClient->callToolOnce({name: "ask"});
+    ToolResult|InputRequiredResult callResult = check modernClient->callToolOnce({name: "ask"});
     test:assertTrue(callResult is InputRequiredResult);
     check modernClient->close();
 }

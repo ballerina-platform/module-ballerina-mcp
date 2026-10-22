@@ -20,11 +20,11 @@ import ballerina/test;
 isolated function newTestMcpService() returns StreamableHttpAdvancedService =>
     @StreamableHttpServiceConfig {info: {name: "lifecycle", version: "1"}}
     service object {
-        remote isolated function onListTools() returns ListToolsResult => {
+        remote isolated function onListTools() returns ToolPage => {
             tools: [{name: "ping", inputSchema: {'type: "object"}}]
         };
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult => {
             content: [{'type: "text", text: "pong"}]
         };
     };
@@ -61,11 +61,11 @@ isolated function assertListenerServesAndDetaches(StreamableHttpListener mcpList
         jsonrpc: JSONRPC_VERSION,
         id: 1,
         method: REQUEST_LIST_TOOLS,
-        params: {_meta: {[PROTOCOL_META_KEY]: LATEST_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
+        params: {_meta: {[PROTOCOL_META_KEY]: LATEST_MODERN_PROTOCOL_VERSION, [CAPABILITIES_META_KEY]: {}}}
     }, headers = {
         [CONTENT_TYPE_HEADER]: CONTENT_TYPE_JSON,
         [ACCEPT_HEADER]: string `${CONTENT_TYPE_JSON}, ${CONTENT_TYPE_SSE}`,
-        [PROTOCOL_VERSION_HEADER]: LATEST_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION_HEADER]: LATEST_MODERN_PROTOCOL_VERSION,
         [METHOD_HEADER]: REQUEST_LIST_TOOLS
     });
     test:assertEquals(listResponse.statusCode, 200);
@@ -88,10 +88,10 @@ function testModernServicesCannotRequireLegacySessions() returns error? {
     StreamableHttpAdvancedService sessionService =
         @StreamableHttpServiceConfig {info: {name: "session-bound", version: "1"}, protocolMode: "modern"}
         service object {
-            remote isolated function onListTools() returns ListToolsResult => {tools: []};
+            remote isolated function onListTools() returns ToolPage => {tools: []};
 
             remote isolated function onCallTool(CallToolParams callParams, HttpSession session)
-                    returns CallToolResult => {content: []};
+                    returns ToolResult => {content: []};
         };
 
     StreamableHttpListener mcpListener = check new (3214);

@@ -19,7 +19,7 @@ import ballerina/log;
 import ballerina/mcp;
 import ballerina/uuid;
 
-final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp");
+final mcp:StreamableHttpClient2 mcpClient = check new ("http://localhost:9090/mcp");
 
 public function main() returns mcp:ClientError? {
     log:printInfo("Starting MCP Weather Client Demo");
@@ -47,9 +47,9 @@ public function main() returns mcp:ClientError? {
 function listTools() returns mcp:ClientError? {
     log:printInfo("=== Listing Available Tools ===");
 
-    mcp:ListToolsResult toolsResult = check mcpClient->listTools();
+    mcp:ToolPage toolsResult = check mcpClient->listTools();
 
-    foreach mcp:ToolDefinition tool in toolsResult.tools {
+    foreach mcp:ToolInfo tool in toolsResult.tools {
         io:println(string `Tool: ${tool.name}`);
         io:println(string `Description: ${tool.description ?: "No description available"}`);
         io:println("---");
@@ -68,7 +68,7 @@ function demonstrateCurrentWeather() returns mcp:ClientError? {
         // Generate a request ID to track this request
         string requestId = uuid:createType1AsString();
 
-        mcp:CallToolResult result = check mcpClient->callTool({
+        mcp:ToolResult result = check mcpClient->callTool({
             name: "getCurrentWeather",
             arguments: {
                 "city": city
@@ -99,7 +99,7 @@ function demonstrateWeatherForecast() returns mcp:ClientError? {
     foreach var testCase in testCases {
         string requestId = uuid:createType1AsString();
 
-        mcp:CallToolResult result = check mcpClient->callTool({
+        mcp:ToolResult result = check mcpClient->callTool({
             name: "getWeatherForecast",
             arguments: {
                 "location": testCase.location,

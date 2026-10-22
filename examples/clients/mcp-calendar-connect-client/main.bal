@@ -35,13 +35,13 @@ final http:Client browser = check new (serverUrl);
 isolated int urlPrompts = 0;
 
 public function main() returns error? {
-    mcp:StreamableHttpClient calendar = check new (serverUrl + "/mcp",
+    mcp:StreamableHttpClient2 calendar = check new (serverUrl + "/mcp",
         httpConfig = {auth: {token: aliceToken}},
         elicitationHandler = handleElicitation
     );
     _ = check calendar->connect({name: "Calendar demo client", version: "1.0.0"});
     // callTool answers each elicitation through the handler and continues until the tool completes.
-    mcp:CallToolResult result = check calendar->callTool({name: "listEvents"});
+    mcp:ToolResult result = check calendar->callTool({name: "listEvents"});
     io:println("Events: ", result.content);
     check calendar->close();
 }

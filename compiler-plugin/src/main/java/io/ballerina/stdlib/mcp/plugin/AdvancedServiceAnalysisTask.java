@@ -59,9 +59,9 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
     private static final String CURSOR_DISPLAY = "mcp:Cursor";
     private static final String CALL_TOOL_PARAMS_DISPLAY = "mcp:CallToolParams";
     private static final String CALL_TOOL_RESULT_DISPLAY =
-            "mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError";
+            "mcp:ToolResult|mcp:InputRequiredResult|mcp:ServerError";
     private static final String LIST_TOOLS_RESULT_DISPLAY =
-            "mcp:ListToolsResult|mcp:ServerError";
+            "mcp:ToolPage|mcp:ServerError";
 
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {

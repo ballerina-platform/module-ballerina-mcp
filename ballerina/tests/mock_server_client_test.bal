@@ -56,7 +56,7 @@ isolated function mockCallCount(string key) returns int {
     }
 }
 
-isolated function mockDiscoverResult(RequestId requestId, string[] supportedVersions = [LATEST_PROTOCOL_VERSION],
+isolated function mockDiscoverResult(RequestId requestId, string[] supportedVersions = [LATEST_MODERN_PROTOCOL_VERSION],
         boolean includeWireDefaults = true, string? instructions = ()) returns http:Response {
     map<json> resultValue = {
         "supportedVersions": supportedVersions,
@@ -206,7 +206,7 @@ service /mock on new http:Listener(3210) {
                         "",
                         string `{"jsonrpc":"2.0","method":"notifications/progress"}`,
                         string `{"jsonrpc":"2.0","id":${requestId.toString()},"result":{"resultType":"complete","ttlMs":0,` +
-                            string `"cacheScope":"private","supportedVersions":["${LATEST_PROTOCOL_VERSION}"],"capabilities":{}}}`
+                            string `"cacheScope":"private","supportedVersions":["${LATEST_MODERN_PROTOCOL_VERSION}"],"capabilities":{}}}`
                     ]);
                 }
                 "sseMalformedEvent" => {
@@ -517,15 +517,15 @@ service /mock on new http:Listener(3210) {
 
 @test:Config {}
 function testClientInitRejectsInvalidConfiguration() {
-    StreamableHttpClient|ClientError negativeRounds = new (mockUrl("ok"), maxInputRounds = -1);
+    StreamableHttpClient2|ClientError negativeRounds = new (mockUrl("ok"), maxInputRounds = -1);
     test:assertTrue(negativeRounds is ClientInitializationError);
 
-    StreamableHttpClient|ClientError modernWithSession = new (mockUrl("ok"), protocolMode = "modern",
+    StreamableHttpClient2|ClientError modernWithSession = new (mockUrl("ok"), protocolMode = "modern",
         sessionId = "legacy-session"
     );
     test:assertTrue(modernWithSession is ClientInitializationError);
 
-    StreamableHttpClient|ClientError badUrl = new ("htp://localhost:9");
+    StreamableHttpClient2|ClientError badUrl = new ("htp://localhost:9");
     test:assertTrue(badUrl is ClientError);
     if badUrl is ClientError {
         test:assertTrue(badUrl.message().includes("Unable to initialize HTTP client"));
@@ -534,7 +534,7 @@ function testClientInitRejectsInvalidConfiguration() {
 
 @test:Config {}
 function testModernClientRejectsInvalidDiscovery() returns error? {
-    StreamableHttpClient legacyOnly = check new (mockUrl("legacyOnly"), protocolMode = "modern");
+    StreamableHttpClient2 legacyOnly = check new (mockUrl("legacyOnly"), protocolMode = "modern");
     var legacyOnlyResult = legacyOnly->connect();
     test:assertTrue(legacyOnlyResult is ProtocolVersionError);
     if legacyOnlyResult is ProtocolVersionError {
@@ -544,12 +544,12 @@ function testModernClientRejectsInvalidDiscovery() returns error? {
 
 @test:Config {}
 function testAutoClientPicksTheModernVersionTheServerLists() returns error? {
-    StreamableHttpClient mockClient = check new (mockUrl("mixedVersions"), protocolMode = "auto");
+    StreamableHttpClient2 mockClient = check new (mockUrl("mixedVersions"), protocolMode = "auto");
     ConnectionInfo connection = check mockClient->connect();
     test:assertEquals(connection.protocolVersion, "2026-07-28");
     check mockClient->close();
 
-    StreamableHttpClient adoptingClient = check new (mockUrl("ok"), protocolMode = "modern");
+    StreamableHttpClient2 adoptingClient = check new (mockUrl("ok"), protocolMode = "modern");
     ConnectionInfo adopted = check adoptingClient.adoptDiscovery({
         supportedVersions: ["2099-01-01", LATEST_LEGACY_PROTOCOL_VERSION, "2026-07-28"],
         capabilities: {}
@@ -559,7 +559,7 @@ function testAutoClientPicksTheModernVersionTheServerLists() returns error? {
 
 @test:Config {}
 function testAutoClientFallsBackWhenDiscoveryListsNoModernVersion() returns error? {
-    StreamableHttpClient mockClient = check new (mockUrl("legacyOnly"), protocolMode = "auto");
+    StreamableHttpClient2 mockClient = check new (mockUrl("legacyOnly"), protocolMode = "auto");
     ConnectionInfo connection = check mockClient->connect();
     test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
     check mockClient->close();
@@ -567,7 +567,7 @@ function testAutoClientFallsBackWhenDiscoveryListsNoModernVersion() returns erro
 
 @test:Config {}
 function testAutoClientRejectsDiscoveryWithoutAKnownVersion() returns error? {
-    StreamableHttpClient mockClient = check new (mockUrl("unknownVersionsOnly"), protocolMode = "auto");
+    StreamableHttpClient2 mockClient = check new (mockUrl("unknownVersionsOnly"), protocolMode = "auto");
     var connectResult = mockClient->connect();
     test:assertTrue(connectResult is ProtocolVersionError);
     test:assertEquals(mockCallCount("unknownVersionsOnly:initialize"), 0);
@@ -577,9 +577,9 @@ function testAutoClientRejectsDiscoveryWithoutAKnownVersion() returns error? {
 // version still identifies a modern server, so auto mode must not fall back to initialize.
 @test:Config {}
 function testAutoClientStaysModernWithoutDiscoveryWireDefaults() returns error? {
-    StreamableHttpClient mockClient = check new (mockUrl("noWireDefaults"), protocolMode = "auto");
+    StreamableHttpClient2 mockClient = check new (mockUrl("noWireDefaults"), protocolMode = "auto");
     ConnectionInfo connection = check mockClient->connect();
-    test:assertEquals(connection.protocolVersion, LATEST_PROTOCOL_VERSION);
+    test:assertEquals(connection.protocolVersion, LATEST_MODERN_PROTOCOL_VERSION);
 
     DiscoverResult discovered = check mockClient->discover();
     test:assertEquals(discovered.ttlMs, 0);
@@ -589,15 +589,15 @@ function testAutoClientStaysModernWithoutDiscoveryWireDefaults() returns error? 
 
 @test:Config {}
 function testAdoptDiscoveryValidation() returns error? {
-    StreamableHttpClient legacyClient = check new (mockUrl("ok"), protocolMode = "modern");
+    StreamableHttpClient2 legacyClient = check new (mockUrl("ok"), protocolMode = "modern");
     DiscoverResult legacyDiscovery = {supportedVersions: [LATEST_LEGACY_PROTOCOL_VERSION], capabilities: {}};
     var adoptResult = legacyClient.adoptDiscovery(legacyDiscovery);
     test:assertTrue(adoptResult is ProtocolVersionError);
 
-    StreamableHttpClient modernClient = check new (mockUrl("ok"), protocolMode = "modern");
+    StreamableHttpClient2 modernClient = check new (mockUrl("ok"), protocolMode = "modern");
     _ = check modernClient->connect();
     var reAdoptResult = modernClient.adoptDiscovery({
-        supportedVersions: [LATEST_PROTOCOL_VERSION],
+        supportedVersions: [LATEST_MODERN_PROTOCOL_VERSION],
         capabilities: {}
     });
     test:assertTrue(reAdoptResult is ClientInitializationError);
@@ -619,7 +619,7 @@ function testModernClientRejectsMalformedHttpResponses() returns error? {
         "sseMalformedEvent": "Malformed JSON-RPC SSE event"
     };
     foreach var [scenario, expectedMessage] in expectedMessages.entries() {
-        StreamableHttpClient mockClient = check new (mockUrl(scenario), protocolMode = "modern");
+        StreamableHttpClient2 mockClient = check new (mockUrl(scenario), protocolMode = "modern");
         var discoverResult = mockClient->discover();
         test:assertTrue(discoverResult is ClientError, string `${scenario} should fail`);
         if discoverResult is ClientError {
@@ -631,14 +631,14 @@ function testModernClientRejectsMalformedHttpResponses() returns error? {
 
 @test:Config {}
 function testModernClientSkipsNotificationsInSseResponses() returns error? {
-    StreamableHttpClient mockClient = check new (mockUrl("sseNotificationThenResult"), protocolMode = "modern");
+    StreamableHttpClient2 mockClient = check new (mockUrl("sseNotificationThenResult"), protocolMode = "modern");
     DiscoverResult discovered = check mockClient->discover();
-    test:assertEquals(discovered.supportedVersions, [LATEST_PROTOCOL_VERSION]);
+    test:assertEquals(discovered.supportedVersions, [LATEST_MODERN_PROTOCOL_VERSION]);
 }
 
 @test:Config {}
 function testModernClientRejectsInvalidToolListResults() returns error? {
-    StreamableHttpClient missingHints = check new (mockUrl("noToolListCacheHints"), protocolMode = "modern");
+    StreamableHttpClient2 missingHints = check new (mockUrl("noToolListCacheHints"), protocolMode = "modern");
     _ = check missingHints->connect();
     var missingHintsResult = missingHints->listTools();
     test:assertTrue(missingHintsResult is ListToolsError);
@@ -646,7 +646,7 @@ function testModernClientRejectsInvalidToolListResults() returns error? {
         test:assertEquals(missingHintsResult.message(), "Invalid modern tools/list result");
     }
 
-    StreamableHttpClient malformed = check new (mockUrl("malformedToolList"), protocolMode = "modern");
+    StreamableHttpClient2 malformed = check new (mockUrl("malformedToolList"), protocolMode = "modern");
     _ = check malformed->connect();
     var malformedResult = malformed->listTools();
     test:assertTrue(malformedResult is ListToolsError);
@@ -657,12 +657,12 @@ function testModernClientRejectsInvalidToolListResults() returns error? {
 
 @test:Config {}
 function testModernClientToolLookupAcrossPages() returns error? {
-    StreamableHttpClient paginated = check new (mockUrl("paginatedTool"), protocolMode = "modern");
+    StreamableHttpClient2 paginated = check new (mockUrl("paginatedTool"), protocolMode = "modern");
     _ = check paginated->connect();
-    CallToolResult pagedResult = check paginated->callTool({name: "paged"});
+    ToolResult pagedResult = check paginated->callTool({name: "paged"});
     test:assertEquals(pagedResult.content, []);
 
-    StreamableHttpClient looping = check new (mockUrl("cursorLoop"), protocolMode = "modern");
+    StreamableHttpClient2 looping = check new (mockUrl("cursorLoop"), protocolMode = "modern");
     _ = check looping->connect();
     var loopResult = looping->callTool({name: "never-listed"});
     test:assertTrue(loopResult is ToolCallError);
@@ -670,7 +670,7 @@ function testModernClientToolLookupAcrossPages() returns error? {
         test:assertTrue(loopResult.message().includes("Tool pagination repeated a cursor"));
     }
 
-    StreamableHttpClient unknown = check new (mockUrl("unknownTool"), protocolMode = "modern");
+    StreamableHttpClient2 unknown = check new (mockUrl("unknownTool"), protocolMode = "modern");
     _ = check unknown->connect();
     var unknownResult = unknown->callTool({name: "absent"});
     test:assertTrue(unknownResult is ToolCallError);
@@ -679,26 +679,26 @@ function testModernClientToolLookupAcrossPages() returns error? {
     }
 
     // Tools with conflicting mirrored headers are dropped from the listing entirely.
-    StreamableHttpClient unmirrorable = check new (mockUrl("unmirrorableTool"), protocolMode = "modern");
+    StreamableHttpClient2 unmirrorable = check new (mockUrl("unmirrorableTool"), protocolMode = "modern");
     _ = check unmirrorable->connect();
-    ListToolsResult filteredTools = check unmirrorable->listTools();
+    ToolPage filteredTools = check unmirrorable->listTools();
     test:assertEquals(filteredTools.tools, []);
 }
 
 @test:Config {}
 function testModernClientLeavesOutToolsWithNumberArgumentHeaders() returns error? {
-    StreamableHttpClient mockClient = check new (mockUrl("numberHeaderTool"), protocolMode = "modern");
+    StreamableHttpClient2 mockClient = check new (mockUrl("numberHeaderTool"), protocolMode = "modern");
     _ = check mockClient->connect();
-    ListToolsResult toolList = check mockClient->listTools();
+    ToolPage toolList = check mockClient->listTools();
     test:assertEquals(toolList.tools.map(toolInfo => toolInfo.name), ["plain"]);
 }
 
 @test:Config {}
 function testModernClientRejectsIntArgumentHeadersOutsideSafeRange() returns error? {
-    StreamableHttpClient rangeClient = check new (mockUrl("intHeaderTool"), protocolMode = "modern");
+    StreamableHttpClient2 rangeClient = check new (mockUrl("intHeaderTool"), protocolMode = "modern");
     _ = check rangeClient->connect();
     foreach int count in [9007199254740992, -9007199254740992] {
-        CallToolResult|ClientError rejected =
+        ToolResult|ClientError rejected =
             rangeClient->callTool({name: "count", arguments: {"count": count}});
         test:assertTrue(rejected is ToolCallError, string `expected ToolCallError for ${count}`);
     }
@@ -707,15 +707,15 @@ function testModernClientRejectsIntArgumentHeadersOutsideSafeRange() returns err
     test:assertEquals(check callCountTool(rangeClient, -9007199254740991), "2:-9007199254740991");
 }
 
-function callCountTool(StreamableHttpClient rangeClient, int count) returns string|error {
-    CallToolResult result = check rangeClient->callTool({name: "count", arguments: {"count": count}});
+function callCountTool(StreamableHttpClient2 rangeClient, int count) returns string|error {
+    ToolResult result = check rangeClient->callTool({name: "count", arguments: {"count": count}});
     TextContent textContent = check result.content[0].ensureType();
     return textContent.text;
 }
 
 @test:Config {}
 function testModernClientRejectsInvalidToolResults() returns error? {
-    StreamableHttpClient badResult = check new (mockUrl("badToolResult"), protocolMode = "modern");
+    StreamableHttpClient2 badResult = check new (mockUrl("badToolResult"), protocolMode = "modern");
     _ = check badResult->connect();
     var inputRequiredResult = badResult->callToolOnce({name: "echo"});
     test:assertTrue(inputRequiredResult is ToolCallError);
@@ -723,7 +723,7 @@ function testModernClientRejectsInvalidToolResults() returns error? {
         test:assertEquals(inputRequiredResult.message(), "Invalid input-required result");
     }
 
-    StreamableHttpClient malformed = check new (mockUrl("malformedToolResult"), protocolMode = "modern");
+    StreamableHttpClient2 malformed = check new (mockUrl("malformedToolResult"), protocolMode = "modern");
     _ = check malformed->connect();
     var malformedResult = malformed->callTool({name: "echo"});
     test:assertTrue(malformedResult is ToolCallError);
@@ -731,7 +731,7 @@ function testModernClientRejectsInvalidToolResults() returns error? {
         test:assertEquals(malformedResult.message(), "Invalid tool result");
     }
 
-    StreamableHttpClient missingStructured = check new (mockUrl("missingStructured"), protocolMode = "modern");
+    StreamableHttpClient2 missingStructured = check new (mockUrl("missingStructured"), protocolMode = "modern");
     _ = check missingStructured->connect();
     var missingStructuredResult = missingStructured->callTool({name: "structured"});
     test:assertTrue(missingStructuredResult is ToolCallError);
@@ -742,21 +742,21 @@ function testModernClientRejectsInvalidToolResults() returns error? {
 
 @test:Config {}
 function testClientWorksWithLegacyServerAdvertisingTasks() returns error? {
-    StreamableHttpClient legacyClient = check new (mockUrl("legacyTasks"));
+    StreamableHttpClient2 legacyClient = check new (mockUrl("legacyTasks"));
     ConnectionInfo connection = check legacyClient->connect();
     test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
 
-    ListToolsResult toolList = check legacyClient->listTools();
+    ToolPage toolList = check legacyClient->listTools();
     test:assertEquals(toolList.tools.map(toolInfo => toolInfo.name), ["report"]);
 
-    CallToolResult callResult = check legacyClient->callTool({name: "report"});
+    ToolResult callResult = check legacyClient->callTool({name: "report"});
     test:assertEquals(callResult.content, [{'type: "text", text: "done"}]);
     check legacyClient->close();
 }
 
 @test:Config {}
 function testOperationsBeforeConnectAreRejected() returns error? {
-    StreamableHttpClient modernClient = check new (mockUrl("ok"), protocolMode = "modern");
+    StreamableHttpClient2 modernClient = check new (mockUrl("ok"), protocolMode = "modern");
     var listResult = modernClient->listTools();
     test:assertTrue(listResult is ClientInitializationError);
     var callResult = modernClient->callTool({name: "echo"});
@@ -765,7 +765,7 @@ function testOperationsBeforeConnectAreRejected() returns error? {
 
 @test:Config {}
 function testLegacySessionReconnectSkipsHandshake() returns error? {
-    StreamableHttpClient reconnectClient = check new (mockUrl("ok"), sessionId = "existing-session");
+    StreamableHttpClient2 reconnectClient = check new (mockUrl("ok"), sessionId = "existing-session");
     ConnectionInfo connection = check reconnectClient->connect();
     test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
 
@@ -775,7 +775,7 @@ function testLegacySessionReconnectSkipsHandshake() returns error? {
 
 @test:Config {}
 function testCloseTreatsSessionTerminationNotSupportedAsSuccess() returns error? {
-    StreamableHttpClient terminationClient = check new (mockUrl("noTermination"), sessionId = "existing-session");
+    StreamableHttpClient2 terminationClient = check new (mockUrl("noTermination"), sessionId = "existing-session");
     _ = check terminationClient->connect();
     ClientError? closeError = terminationClient->close();
     test:assertTrue(closeError is (), closeError is ClientError ? closeError.message() : "");
@@ -783,7 +783,7 @@ function testCloseTreatsSessionTerminationNotSupportedAsSuccess() returns error?
 
 @test:Config {}
 function testCloseTreatsFailedSessionTerminationAsClosed() returns error? {
-    StreamableHttpClient terminationClient = check new (mockUrl("sessionGone"), sessionId = "existing-session");
+    StreamableHttpClient2 terminationClient = check new (mockUrl("sessionGone"), sessionId = "existing-session");
     _ = check terminationClient->connect();
     ClientError? closeError = terminationClient->close();
     test:assertTrue(closeError is (), closeError is ClientError ? closeError.message() : "");
@@ -791,7 +791,7 @@ function testCloseTreatsFailedSessionTerminationAsClosed() returns error? {
 
 @test:Config {}
 function testModernClientRequiresAnElicitationHandlerForContinuations() returns error? {
-    StreamableHttpClient noHandler = check new (mockUrl("inputRequiredNoHandler"), protocolMode = "modern");
+    StreamableHttpClient2 noHandler = check new (mockUrl("inputRequiredNoHandler"), protocolMode = "modern");
     _ = check noHandler->connect(capabilities = {elicitation: {form: {}}});
     var callResult = noHandler->callTool({name: "echo"});
     test:assertTrue(callResult is ToolCallError);
@@ -815,10 +815,10 @@ isolated function pickLegacyColor(ElicitRequest request) returns ElicitResult|Cl
 
 @test:Config {}
 function testModernClientAcceptsLegacyEnumNamesForms() returns error? {
-    StreamableHttpClient legacyForm = check new (mockUrl("legacyEnumNames"), protocolMode = "modern",
+    StreamableHttpClient2 legacyForm = check new (mockUrl("legacyEnumNames"), protocolMode = "modern",
         elicitationHandler = pickLegacyColor);
     _ = check legacyForm->connect();
-    CallToolResult callResult = check legacyForm->callTool({name: "echo"});
+    ToolResult callResult = check legacyForm->callTool({name: "echo"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "painted"});
     lock {
         test:assertEquals(legacyColorField,
@@ -828,7 +828,7 @@ function testModernClientAcceptsLegacyEnumNamesForms() returns error? {
 
 @test:Config {}
 function testModernClientRejectsUnknownResultTypes() returns error? {
-    StreamableHttpClient unknownType = check new (mockUrl("unknownResultType"), protocolMode = "modern");
+    StreamableHttpClient2 unknownType = check new (mockUrl("unknownResultType"), protocolMode = "modern");
     _ = check unknownType->connect();
     // An unrecognised discriminator is rejected while decoding, before the tool result is interpreted.
     var callResult = unknownType->callTool({name: "echo"});
@@ -840,35 +840,35 @@ function testModernClientRejectsUnknownResultTypes() returns error? {
 
 @test:Config {}
 function testModernClientRefreshesToolSchemasOnHeaderMismatch() returns error? {
-    StreamableHttpClient retryClient = check new (mockUrl("headerMismatchRetry"), protocolMode = "modern");
+    StreamableHttpClient2 retryClient = check new (mockUrl("headerMismatchRetry"), protocolMode = "modern");
     _ = check retryClient->connect();
     // The first attempt is rejected as a header mismatch; the client re-lists tools and retries once.
-    CallToolResult callResult = check retryClient->callTool({name: "echo"});
+    ToolResult callResult = check retryClient->callTool({name: "echo"});
     test:assertEquals(callResult.content, []);
 }
 
 @test:Config {}
 function testDiscoveredInstructionsReachTheConnectionInfo() returns error? {
-    StreamableHttpClient guidedClient = check new (mockUrl("withInstructions"), protocolMode = "modern");
+    StreamableHttpClient2 guidedClient = check new (mockUrl("withInstructions"), protocolMode = "modern");
     ConnectionInfo connection = check guidedClient->connect();
     test:assertEquals(connection.instructions, "Call echo first.");
 }
 
 @test:Config {}
 function testLegacyCallToolOnceDelegatesToCallTool() returns error? {
-    StreamableHttpClient legacyClient = check new (mockUrl("ok"), sessionId = "legacy-session");
+    StreamableHttpClient2 legacyClient = check new (mockUrl("ok"), sessionId = "legacy-session");
     _ = check legacyClient->connect();
-    CallToolResult|InputRequiredResult callResult = check legacyClient->callToolOnce({name: "echo"});
-    test:assertTrue(callResult is CallToolResult);
+    ToolResult|InputRequiredResult callResult = check legacyClient->callToolOnce({name: "echo"});
+    test:assertTrue(callResult is ToolResult);
 }
 
 @test:Config {}
 function testAdditionalRequestHeadersAreReconciledWithProtocolHeaders() returns error? {
-    StreamableHttpClient modernClient = check new (mockUrl("ok"), protocolMode = "modern");
+    StreamableHttpClient2 modernClient = check new (mockUrl("ok"), protocolMode = "modern");
     _ = check modernClient->connect();
 
     // Transport-owned headers supplied by the caller are dropped rather than forwarded.
-    ListToolsResult toolList = check modernClient->listTools({
+    ToolPage toolList = check modernClient->listTools({
         [SESSION_ID_HEADER]: "ignored",
         "last-event-id": "ignored",
         "x-trace-id": "trace-1"

@@ -18,47 +18,47 @@ import ballerina/test;
 
 // Replays a fixed sequence of messages, then optionally fails or completes.
 class ReplayMessageIterator {
-    private JsonRpcMessage[] messages;
+    private LegacyMessage[] messages;
     private StreamError? terminalError;
     private int index = 0;
 
-    isolated function init(JsonRpcMessage[] messages, StreamError? terminalError = ()) {
+    isolated function init(LegacyMessage[] messages, StreamError? terminalError = ()) {
         self.messages = messages;
         self.terminalError = terminalError;
     }
 
-    public isolated function next() returns record {|JsonRpcMessage value;|}|StreamError? {
+    public isolated function next() returns record {|LegacyMessage value;|}|StreamError? {
         if self.index >= self.messages.length() {
             return self.terminalError;
         }
-        JsonRpcMessage message = self.messages[self.index];
+        LegacyMessage message = self.messages[self.index];
         self.index += 1;
         return {value: message};
     }
 }
 
-isolated function replayStream(JsonRpcMessage[] messages, StreamError? terminalError = ())
-        returns stream<JsonRpcMessage, StreamError?> {
+isolated function replayStream(LegacyMessage[] messages, StreamError? terminalError = ())
+        returns stream<LegacyMessage, StreamError?> {
     ReplayMessageIterator iterator = new (messages, terminalError);
     return new (iterator);
 }
 
 @test:Config {}
 function testExtractResultFromMessage() {
-    JsonRpcResponse successResponse = {
+    LegacyResponse successResponse = {
         jsonrpc: JSONRPC_VERSION,
         id: 1,
-        result: <ListToolsResult>{tools: []}
+        result: <ToolPage>{tools: []}
     };
-    ServerResult|ServerResponseError successResult = extractResultFromMessage(successResponse);
-    test:assertTrue(successResult is ListToolsResult);
+    LegacyServerResult|ServerResponseError successResult = extractResultFromMessage(successResponse);
+    test:assertTrue(successResult is ToolPage);
 
     JsonRpcError errorResponse = {
         jsonrpc: JSONRPC_VERSION,
         id: 1,
         'error: {code: INVALID_REQUEST, message: "bad request"}
     };
-    ServerResult|ServerResponseError errorResult = extractResultFromMessage(errorResponse);
+    LegacyServerResult|ServerResponseError errorResult = extractResultFromMessage(errorResponse);
     test:assertTrue(errorResult is ServerResponseError);
     if errorResult is ServerResponseError {
         test:assertTrue(errorResult.message().includes("Received JSON-RPC error from server"));
@@ -70,16 +70,16 @@ function testExtractResultFromMessage() {
 
 @test:Config {}
 function testProcessServerResponseVariants() {
-    JsonRpcResponse successResponse = {
+    LegacyResponse successResponse = {
         jsonrpc: JSONRPC_VERSION,
         id: 1,
-        result: <ListToolsResult>{tools: []}
+        result: <ToolPage>{tools: []}
     };
-    test:assertTrue(processServerResponse(successResponse) is ListToolsResult);
+    test:assertTrue(processServerResponse(successResponse) is ToolPage);
 
     // A stream skips notifications until the first response arrives.
     JsonRpcNotification notification = {jsonrpc: JSONRPC_VERSION, method: NOTIFICATION_INITIALIZED};
-    test:assertTrue(processServerResponse(replayStream([notification, successResponse])) is ListToolsResult);
+    test:assertTrue(processServerResponse(replayStream([notification, successResponse])) is ToolPage);
 
     // A stream that ends without a response is reported as an invalid message type.
     test:assertTrue(processServerResponse(replayStream([notification])) is InvalidMessageTypeError);
@@ -143,7 +143,7 @@ function testApplicationResultLiftsWireServerInfo() {
 
 @test:Config {}
 function testLegacyToolListResultDropsNonObjectOutputSchemas() returns error? {
-    ListToolsResult modernResult = {
+    ToolPage modernResult = {
         "resultType": "complete",
         ttlMs: 0,
         cacheScope: "private",
@@ -153,23 +153,23 @@ function testLegacyToolListResultDropsNonObjectOutputSchemas() returns error? {
             {name: "noOut", inputSchema: {'type: "object"}}
         ]
     };
-    ListToolsResult legacyResult = check legacyToolListResult(modernResult);
+    ToolPage legacyResult = check legacyToolListResult(modernResult);
     test:assertFalse(legacyResult.hasKey("resultType"));
     test:assertFalse(legacyResult.hasKey("ttlMs"));
     test:assertFalse(legacyResult.hasKey("cacheScope"));
 
-    map<ToolDefinition> toolsByName = {};
-    foreach ToolDefinition toolInfo in legacyResult.tools {
+    map<ToolInfo> toolsByName = {};
+    foreach ToolInfo toolInfo in legacyResult.tools {
         toolsByName[toolInfo.name] = toolInfo;
     }
-    test:assertEquals((check toolsByName["objectOut"].ensureType(ToolDefinition)).outputSchema, {"type": "object"});
-    test:assertEquals((check toolsByName["scalarOut"].ensureType(ToolDefinition)).outputSchema, ());
-    test:assertEquals((check toolsByName["noOut"].ensureType(ToolDefinition)).outputSchema, ());
+    test:assertEquals((check toolsByName["objectOut"].ensureType(ToolInfo)).outputSchema, {"type": "object"});
+    test:assertEquals((check toolsByName["scalarOut"].ensureType(ToolInfo)).outputSchema, ());
+    test:assertEquals((check toolsByName["noOut"].ensureType(ToolInfo)).outputSchema, ());
 }
 
 @test:Config {}
 function testLegacyToolCallResultDropsNonObjectStructuredContent() returns error? {
-    CallToolResult objectResult = check legacyToolCallResult({
+    ToolResult objectResult = check legacyToolCallResult({
         resultType: "complete",
         content: [],
         structuredContent: {"value": 1}
@@ -177,13 +177,13 @@ function testLegacyToolCallResultDropsNonObjectStructuredContent() returns error
     test:assertEquals(objectResult["structuredContent"], <json>{"value": 1});
     test:assertFalse(objectResult.hasKey("resultType"));
 
-    CallToolResult scalarResult = check legacyToolCallResult({
+    ToolResult scalarResult = check legacyToolCallResult({
         resultType: "complete",
         content: [],
         structuredContent: 42
     });
     test:assertFalse(scalarResult.hasKey("structuredContent"));
 
-    CallToolResult noneResult = check legacyToolCallResult({content: []});
+    ToolResult noneResult = check legacyToolCallResult({content: []});
     test:assertFalse(noneResult.hasKey("structuredContent"));
 }

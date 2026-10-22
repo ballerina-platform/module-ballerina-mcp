@@ -82,8 +82,8 @@ public class Utils {
     public static final String CALL_TOOL_PARAMS_TYPE_NAME = "CallToolParams";
     public static final String AUTH_CONTEXT_TYPE_NAME = "AuthContext";
     public static final String CONTEXT_TYPE_NAME = "Context";
-    public static final String CALL_TOOL_RESULT_TYPE_NAME = "CallToolResult";
-    public static final String LIST_TOOLS_RESULT_TYPE_NAME = "ListToolsResult";
+    public static final String CALL_TOOL_RESULT_TYPE_NAME = "ToolResult";
+    public static final String LIST_TOOLS_RESULT_TYPE_NAME = "ToolPage";
     public static final String INPUT_REQUIRED_RESULT_TYPE_NAME = "InputRequiredResult";
     public static final String CURSOR_TYPE_NAME = "Cursor";
     public static final String HTTP_PACKAGE_NAME = "http";

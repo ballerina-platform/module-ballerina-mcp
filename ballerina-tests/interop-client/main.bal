@@ -22,14 +22,14 @@ configurable string interopUrl = ?;
 public function main() returns error? {
     mcp:ProtocolMode[] protocolModes = ["legacy", "auto", "modern"];
     foreach mcp:ProtocolMode protocolMode in protocolModes {
-        mcp:StreamableHttpClient peerClient = check new (interopUrl, protocolMode = protocolMode);
+        mcp:StreamableHttpClient2 peerClient = check new (interopUrl, protocolMode = protocolMode);
         _ = check peerClient->connect();
-        mcp:CallToolResult addResult = check peerClient->callTool({name: "add", arguments: {"firstValue": 2, "secondValue": 3}});
+        mcp:ToolResult addResult = check peerClient->callTool({name: "add", arguments: {"firstValue": 2, "secondValue": 3}});
         mcp:TextContent addText = check addResult.content[0].ensureType();
         if addText.text != "5" {
             return error("Unexpected addition result");
         }
-        mcp:CallToolResult echoResult = check peerClient->callTool({name: "echo", arguments: {"region": "世界"}});
+        mcp:ToolResult echoResult = check peerClient->callTool({name: "echo", arguments: {"region": "世界"}});
         mcp:TextContent echoText = check echoResult.content[0].ensureType();
         if echoText.text != "世界" {
             return error("Unexpected mirrored-header result");
@@ -45,10 +45,10 @@ public function main() returns error? {
 
 // The peer's bookTable tool asks for the seat count and checks its request state came back intact.
 function verifyFormElicitation() returns error? {
-    mcp:StreamableHttpClient peerClient = check new (interopUrl, protocolMode = "modern",
+    mcp:StreamableHttpClient2 peerClient = check new (interopUrl, protocolMode = "modern",
         elicitationHandler = answerSeats);
     _ = check peerClient->connect();
-    mcp:CallToolResult bookResult = check peerClient->callTool({name: "bookTable", arguments: {"name": "Ada"}});
+    mcp:ToolResult bookResult = check peerClient->callTool({name: "bookTable", arguments: {"name": "Ada"}});
     mcp:TextContent bookText = check bookResult.content[0].ensureType();
     if bookText.text != "booked 4 for Ada" {
         return error(string `Unexpected booking result: ${bookText.text}`);
@@ -66,8 +66,8 @@ isolated function answerSeats(mcp:ElicitRequest inputRequest) returns mcp:Elicit
 }
 
 // A listing within the peer's hinted TTL must not reach the peer; a peer that sends no TTL is listed every time.
-function verifyToolListCaching(mcp:StreamableHttpClient peerClient) returns error? {
-    mcp:ListToolsResult firstList = check peerClient->listTools();
+function verifyToolListCaching(mcp:StreamableHttpClient2 peerClient) returns error? {
+    mcp:ToolPage firstList = check peerClient->listTools();
     int listingsBefore = check peerListingCount(peerClient);
     _ = check peerClient->listTools();
     int repeatListings = check peerListingCount(peerClient) - listingsBefore;
@@ -82,8 +82,8 @@ function verifyToolListCaching(mcp:StreamableHttpClient peerClient) returns erro
     io:println("modern tools/list caching with ttlMs ", firstList.ttlMs, " PASS");
 }
 
-function peerListingCount(mcp:StreamableHttpClient peerClient) returns int|error {
-    mcp:CallToolResult countResult = check peerClient->callTool({name: "listCount"});
+function peerListingCount(mcp:StreamableHttpClient2 peerClient) returns int|error {
+    mcp:ToolResult countResult = check peerClient->callTool({name: "listCount"});
     mcp:TextContent countText = check countResult.content[0].ensureType();
     return int:fromString(countText.text);
 }

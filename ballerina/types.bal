@@ -393,10 +393,10 @@ public type ListToolsRequest record {|
 |};
 
 # The server's response to a tools/list request from the client.
-public type ListToolsResult record {
+public type ToolPage record {
     *PaginatedResult;
     # A list of tools available on the server.
-    ToolDefinition[] tools;
+    ToolInfo[] tools;
     # Freshness hint in milliseconds. Modern servers default this to zero.
     int ttlMs?;
     # Whether a modern response may be shared between callers.
@@ -407,7 +407,7 @@ public type ListToolsResult record {
 public type ContentBlock TextContent|ImageContent|AudioContent|ResourceLink|EmbeddedResource;
 
 # The server's response to a tool call.
-public type CallToolResult record {
+public type ToolResult record {
     *ResultFields;
     # Identifies a completed modern result when disambiguating it from InputRequiredResult.
     "complete" resultType?;
@@ -481,7 +481,7 @@ public type InputSchema record {|
 |};
 
 # Definition for a tool the client can call.
-public type ToolDefinition record {
+public type ToolInfo record {
     *BaseMetadata;
     *Icons;
     # A human-readable description of the tool.
@@ -542,7 +542,7 @@ public type AudioContent record {
 };
 
 # Represents a result sent from the server to the client.
-public type ServerResult InitializeResult|CallToolResult|ListToolsResult;
+public type ServerResult InitializeResult|ToolResult|ToolPage;
 
 # Represents a tool configuration that can be used to define tools available in the MCP service.
 public type McpToolConfig record {|
@@ -600,7 +600,7 @@ public type CacheHint record {|
 public type CacheHints record {|
     # Hint for `server/discover` results.
     CacheHint discover?;
-    # Hint for `tools/list` results. Fields set on the `ListToolsResult` returned by `onListTools` take precedence.
+    # Hint for `tools/list` results. Fields set on the `ToolPage` returned by `onListTools` take precedence.
     CacheHint listTools?;
 |};
 
@@ -688,15 +688,12 @@ public type StreamableHttpService distinct service object {
 };
 
 # Defines an MCP service interface exposed over the Streamable HTTP transport with manual control
-# over tool listing and invocation. Handlers return `ListToolsResult` and
-# `CallToolResult|InputRequiredResult`. In addition to protocol parameters, handlers may bind
+# over tool listing and invocation. Handlers return `ToolPage` and
+# `ToolResult|InputRequiredResult`. In addition to protocol parameters, handlers may bind
 # transport-specific request information via `@http:Header`, `http:Headers`, or `http:Request`. The
 # compiler plugin validates the method shapes.
 public type StreamableHttpAdvancedService distinct service object {
 };
-
-# A general JSON Schema value represented until native language support is available.
-public type JsonSchema map<json>;
 
 # JSON Schema output definition. Output schemas may describe any JSON value.
 public type OutputSchema record {|

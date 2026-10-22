@@ -35,7 +35,7 @@ isolated class ResultCache {
     private final isolated function () returns decimal clock;
     // Iterated in insertion order, so a hit is re-inserted to keep the least recently used entry first.
     private map<CachedResult> entries = {};
-    private map<ToolDefinition> toolSchemas = {};
+    private map<ToolInfo> toolSchemas = {};
     // Fetches are numbered as they start. A fetch is stale if it started before the last invalidation, or
     // before the most recent fetch of the same page that completed.
     private int lastFetch = 0;
@@ -136,7 +136,7 @@ isolated class ResultCache {
         }
     }
 
-    isolated function toolSchema(string toolName) returns ToolDefinition? {
+    isolated function toolSchema(string toolName) returns ToolInfo? {
         lock {
             return self.toolSchemas[toolName].clone();
         }
@@ -144,13 +144,13 @@ isolated class ResultCache {
 
     // Records the schemas of a fetched page unless the fetch is stale. Schemas are only removed by
     // invalidate() and clear(), so other pages' schemas survive.
-    isolated function recordToolSchemas(Cursor? cursor, ToolDefinition[] tools, int fetchNumber) {
+    isolated function recordToolSchemas(Cursor? cursor, ToolInfo[] tools, int fetchNumber) {
         string entryKey = [REQUEST_LIST_TOOLS, cursor].toJsonString();
         lock {
             if self.isStaleFetch(entryKey, fetchNumber) {
                 return;
             }
-            foreach ToolDefinition toolInfo in tools.clone() {
+            foreach ToolInfo toolInfo in tools.clone() {
                 self.toolSchemas[toolInfo.name] = toolInfo;
             }
         }

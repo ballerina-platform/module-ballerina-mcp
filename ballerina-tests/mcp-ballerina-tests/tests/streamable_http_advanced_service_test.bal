@@ -27,7 +27,7 @@ import ballerina/test;
 isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8771) {
 
     isolated remote function onListTools(@http:Header {name: "X-Tools-Filter"} string? filter)
-            returns mcp:ListToolsResult|mcp:ServerError {
+            returns mcp:ToolPage|mcp:ServerError {
         string toolName = filter ?: "whoAmI";
         return {
             tools: [
@@ -38,7 +38,7 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
 
     isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session,
             @http:Header {name: "Authorization"} string? auth, http:Headers headers)
-            returns mcp:CallToolResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:ServerError {
         string viaAnnotation = auth ?: "<none>";
         string|http:HeaderNotFoundError traceHeader = headers.getHeader("X-Trace");
         string trace = traceHeader is string ? traceHeader : "<none>";

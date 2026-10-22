@@ -146,8 +146,8 @@ isolated function validateOrigin(http:Headers headers, StreamableHttpServiceConf
 #
 # + cause - The error or trapped panic from the invocation
 # + toolName - The name of the tool that was invoked
-# + return - A `CallToolResult` marked as an error
-isolated function toToolExecutionError(error cause, string toolName) returns CallToolResult {
+# + return - A `ToolResult` marked as an error
+isolated function toToolExecutionError(error cause, string toolName) returns ToolResult {
     log:printError("Tool invocation failed", cause, toolName = toolName);
     return {
         content: [{'type: "text", text: string `Tool '${toolName}' failed unexpectedly.`}],
@@ -190,8 +190,8 @@ isolated function toServerError(error cause, string toolName) returns ServerErro
 #
 # + result - The listing result, or the error or trapped panic from the invocation
 # + return - The listing result, or a `ServerError`
-isolated function trapListToolsFailure(ListToolsResult|error result) returns ListToolsResult|ServerError {
-    if result is ListToolsResult {
+isolated function trapListToolsFailure(ToolPage|error result) returns ToolPage|ServerError {
+    if result is ToolPage {
         return result;
     }
     if result is ServerError {

@@ -18,23 +18,23 @@ import ballerina/test;
 
 @test:Config {}
 function testModernSseToolCallSkipsKeepAliveComments() returns error? {
-    StreamableHttpClient modernClient = check new (mockUrl("sseKeepAlive"), protocolMode = "modern");
+    StreamableHttpClient2 modernClient = check new (mockUrl("sseKeepAlive"), protocolMode = "modern");
     _ = check modernClient->connect();
-    CallToolResult result = check modernClient->callTool({name: "echo"});
+    ToolResult result = check modernClient->callTool({name: "echo"});
     test:assertEquals(result.content, [{'type: "text", text: "after keep-alive"}]);
     check modernClient->close();
 }
 
 @test:Config {}
 function testLegacySseToolCallSkipsKeepAliveComments() returns error? {
-    StreamableHttpClient legacyClient = check legacyMockClient("sseKeepAlive");
-    CallToolResult result = check legacyClient->callTool({name: "echo"});
+    StreamableHttpClient2 legacyClient = check legacyMockClient("sseKeepAlive");
+    ToolResult result = check legacyClient->callTool({name: "echo"});
     test:assertEquals(result.content, [{'type: "text", text: "after keep-alive"}]);
 }
 
 @test:Config {}
 function testLegacySseToolCallSkipsPrimingEvents() returns error? {
-    StreamableHttpClient legacyClient = check legacyMockClient("ssePriming");
-    CallToolResult result = check legacyClient->callTool({name: "echo"});
+    StreamableHttpClient2 legacyClient = check legacyMockClient("ssePriming");
+    ToolResult result = check legacyClient->callTool({name: "echo"});
     test:assertEquals(result.content, [{'type: "text", text: "after priming"}]);
 }

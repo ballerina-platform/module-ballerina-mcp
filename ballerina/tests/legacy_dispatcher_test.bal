@@ -21,22 +21,22 @@ listener StreamableHttpListener legacyDispatcherListener = check new (3216);
 
 @StreamableHttpServiceConfig {info: {name: "stateful-legacy", version: "1"}, sessionMode: STATEFUL}
 service StreamableHttpAdvancedService /stateful on legacyDispatcherListener {
-    remote isolated function onListTools() returns ListToolsResult => {
+    remote isolated function onListTools() returns ToolPage => {
         tools: [{name: "echo", inputSchema: {'type: "object"}}]
     };
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult => {content: []};
 }
 
 // Binds every transport-specific parameter shape an advanced handler may declare.
 @StreamableHttpServiceConfig {info: {name: "session-aware", version: "1"}, sessionMode: STATEFUL}
 service StreamableHttpAdvancedService /sessionAware on legacyDispatcherListener {
-    remote isolated function onListTools(http:Request request, http:Headers headers) returns ListToolsResult => {
+    remote isolated function onListTools(http:Request request, http:Headers headers) returns ToolPage => {
         tools: [{name: "whoami", inputSchema: {'type: "object"}}]
     };
 
     remote isolated function onCallTool(CallToolParams callParams, HttpSession session, http:Request request)
-            returns CallToolResult {
+            returns ToolResult {
         session.set("lastTool", callParams.name);
         return {
             content: [{'type: "text", text: string `${session.getSessionId()}:${request.rawPath}`}]
@@ -46,14 +46,14 @@ service StreamableHttpAdvancedService /sessionAware on legacyDispatcherListener 
 
 @StreamableHttpServiceConfig {info: {name: "modern-only", version: "1"}, protocolMode: "modern"}
 service StreamableHttpAdvancedService /modernOnly on legacyDispatcherListener {
-    remote isolated function onListTools() returns ListToolsResult => {tools: []};
+    remote isolated function onListTools() returns ToolPage => {tools: []};
 
-    remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    remote isolated function onCallTool(CallToolParams callParams) returns ToolResult => {content: []};
 }
 
 @StreamableHttpServiceConfig {info: {name: "stateless-legacy", version: "1"}, sessionMode: STATELESS}
 service StreamableHttpAdvancedService /stateless on legacyDispatcherListener {
-    remote isolated function onListTools() returns ListToolsResult => {
+    remote isolated function onListTools() returns ToolPage => {
         tools: [{name: "ask", inputSchema: {'type: "object"}}]
     };
 
@@ -66,11 +66,11 @@ service StreamableHttpAdvancedService /stateless on legacyDispatcherListener {
 // Attached without a @StreamableHttpServiceConfig annotation so the dispatcher falls back to defaults.
 isolated function newUnconfiguredService() returns StreamableHttpAdvancedService =>
     service object {
-        remote isolated function onListTools() returns ListToolsResult => {
+        remote isolated function onListTools() returns ToolPage => {
             tools: [{name: "plain", inputSchema: {'type: "object"}}]
         };
 
-        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+        remote isolated function onCallTool(CallToolParams callParams) returns ToolResult => {content: []};
     };
 
 final http:Client legacyDispatcherClient = check new ("http://localhost:3216");
@@ -265,7 +265,7 @@ function testAdvancedHandlersBindTransportParameters() returns error? {
     http:Response callResponse = check legacyPost("/sessionAware",
             legacyRequest(REQUEST_CALL_TOOL, {"name": "whoami"}), {[SESSION_ID_HEADER]: sessionId});
     JsonRpcResponse callBody = check (check callResponse.getJsonPayload()).cloneWithType();
-    CallToolResult callResult = check callBody.result.ensureType();
+    ToolResult callResult = check callBody.result.ensureType();
     TextContent textContent = check callResult.content[0].ensureType();
     test:assertEquals(textContent.text, string `${sessionId}:/sessionAware`);
 }

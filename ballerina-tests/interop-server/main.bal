@@ -34,11 +34,11 @@ service mcp:StreamableHttpService /stateful on interopListener {
 
 @mcp:StreamableHttpServiceConfig {info: {name: "ballerina-modern-interop", version: "2.0.0"}, protocolMode: "modern"}
 service mcp:StreamableHttpAdvancedService /modern on interopListener {
-    remote isolated function onListTools() returns mcp:ListToolsResult => {
+    remote isolated function onListTools() returns mcp:ToolPage => {
         tools: [{name: "scalar", inputSchema: {'type: "object"}, outputSchema: {"type": "integer"}}]
     };
 
-    remote isolated function onCallTool(mcp:CallToolParams callParams) returns mcp:CallToolResult => {
+    remote isolated function onCallTool(mcp:CallToolParams callParams) returns mcp:ToolResult => {
         content: [{'type: "text", text: "42"}],
         structuredContent: 42
     };
@@ -82,7 +82,7 @@ isolated int cachedListingCount = 0;
 }
 service mcp:StreamableHttpAdvancedService /cached on interopListener {
     // The description changes on every listing, so a client can tell a cached list from a fresh one.
-    remote isolated function onListTools() returns mcp:ListToolsResult {
+    remote isolated function onListTools() returns mcp:ToolPage {
         int listingNumber;
         lock {
             cachedListingCount += 1;
@@ -91,5 +91,5 @@ service mcp:StreamableHttpAdvancedService /cached on interopListener {
         return {tools: [{name: "listing", description: listingNumber.toString(), inputSchema: {'type: "object"}}]};
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams callParams) returns mcp:CallToolResult => {content: []};
+    remote isolated function onCallTool(mcp:CallToolParams callParams) returns mcp:ToolResult => {content: []};
 }

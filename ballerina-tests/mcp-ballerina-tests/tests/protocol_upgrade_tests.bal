@@ -31,21 +31,21 @@ service mcp:StreamableHttpService /upgrade on upgradeListener {
 
 @test:Config {}
 function testBuiltPackageSupportsBothProtocolEras() returns error? {
-    test:assertEquals(mcp:LATEST_PROTOCOL_VERSION, "2026-07-28",
+    test:assertEquals(mcp:LATEST_MODERN_PROTOCOL_VERSION, "2026-07-28",
             msg = "Integration tests must resolve the package being built, not a cached earlier release");
-    mcp:StreamableHttpClient modernClient = check new ("http://localhost:8788/upgrade", protocolMode = "auto");
+    mcp:StreamableHttpClient2 modernClient = check new ("http://localhost:8788/upgrade", protocolMode = "auto");
     _ = check modernClient->connect();
     mcp:DiscoverResult discoveryResult = check modernClient->discover();
     test:assertTrue(discoveryResult.supportedVersions.some(versionValue => versionValue == "2026-07-28"));
-    mcp:CallToolResult modernResult = check modernClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
+    mcp:ToolResult modernResult = check modernClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
     mcp:TextContent modernText = check modernResult.content[0].ensureType();
     test:assertEquals(modernText.text, "hello:no-meta");
     test:assertEquals(modernResult._meta?.serverInfo?.name, "protocol-upgrade");
     check modernClient->close();
 
-    mcp:StreamableHttpClient legacyClient = check new ("http://localhost:8788/upgrade", protocolMode = "legacy");
+    mcp:StreamableHttpClient2 legacyClient = check new ("http://localhost:8788/upgrade", protocolMode = "legacy");
     _ = check legacyClient->connect();
-    mcp:CallToolResult legacyResult = check legacyClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
+    mcp:ToolResult legacyResult = check legacyClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
     mcp:TextContent legacyText = check legacyResult.content[0].ensureType();
     test:assertEquals(legacyText.text, "hello:no-meta");
     check legacyClient->close();

@@ -79,7 +79,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 }
 
-final mcp:StreamableHttpClient edgeHeaderClient = check new ("http://localhost:8783/mcp");
+final mcp:StreamableHttpClient2 edgeHeaderClient = check new ("http://localhost:8783/mcp");
 final http:Client rawEdgeHeaderClient = check new ("http://localhost:8783");
 
 @test:Config
@@ -89,7 +89,7 @@ function testEdgeHeaderBindingClientInit() returns error? {
 
 @test:Config {dependsOn: [testEdgeHeaderBindingClientInit]}
 function testFractionalHeaderTypesAreConverted() returns error? {
-    mcp:CallToolResult result = check edgeHeaderClient->callTool({name: "readFractions"},
+    mcp:ToolResult result = check edgeHeaderClient->callTool({name: "readFractions"},
         {"X-Ratio": "0.25", "X-Amount": "10.50"});
     test:assertEquals(check getTextResult(result), "0.25:10.50");
 }
@@ -105,21 +105,21 @@ function testFractionalHeaderConversionFailure() returns error? {
 
 @test:Config {dependsOn: [testEdgeHeaderBindingClientInit]}
 function testNilableRecordFieldBindsToNilWhenAbsent() returns error? {
-    mcp:CallToolResult present = check edgeHeaderClient->callTool({name: "readNilableField"},
+    mcp:ToolResult present = check edgeHeaderClient->callTool({name: "readNilableField"},
         {"authorization": "Bearer token", "X-Tenant-Id": "acme"});
     test:assertEquals(check getTextResult(present), "Bearer token:acme");
 
-    mcp:CallToolResult absent = check edgeHeaderClient->callTool({name: "readNilableField"},
+    mcp:ToolResult absent = check edgeHeaderClient->callTool({name: "readNilableField"},
         {"authorization": "Bearer token"});
     test:assertEquals(check getTextResult(absent), "Bearer token:<nil>");
 }
 
 @test:Config {dependsOn: [testEdgeHeaderBindingClientInit]}
 function testNilableRecordBindsToNilWhenRequiredHeaderIsMissing() returns error? {
-    mcp:CallToolResult absent = check edgeHeaderClient->callTool({name: "readNilableRecord"});
+    mcp:ToolResult absent = check edgeHeaderClient->callTool({name: "readNilableRecord"});
     test:assertEquals(check getTextResult(absent), "<no-record>");
 
-    mcp:CallToolResult present = check edgeHeaderClient->callTool({name: "readNilableRecord"},
+    mcp:ToolResult present = check edgeHeaderClient->callTool({name: "readNilableRecord"},
         {"X-Required": "value"});
     test:assertEquals(check getTextResult(present), "value");
 }
@@ -134,14 +134,14 @@ function testRequiredRecordHeaderIsReported() returns error? {
 
 @test:Config {dependsOn: [testEdgeHeaderBindingClientInit]}
 function testReadonlyRecordOfHeaders() returns error? {
-    mcp:CallToolResult result = check edgeHeaderClient->callTool({name: "readReadonlyRecord"},
+    mcp:ToolResult result = check edgeHeaderClient->callTool({name: "readReadonlyRecord"},
         {"authorization": "Bearer token", "retries": "3"});
     test:assertEquals(check getTextResult(result), "Bearer token:3");
 }
 
 @test:Config {dependsOn: [testEdgeHeaderBindingClientInit]}
 function testNilableReadonlyHeaderArray() returns error? {
-    mcp:CallToolResult absent = check edgeHeaderClient->callTool({name: "readNilableTags"});
+    mcp:ToolResult absent = check edgeHeaderClient->callTool({name: "readNilableTags"});
     test:assertEquals(check getTextResult(absent), "<none>");
 
     json payload = check rawCallTool(rawEdgeHeaderClient, "readNilableTags", {"X-Tag": ["a", "b"]});
@@ -150,12 +150,12 @@ function testNilableReadonlyHeaderArray() returns error? {
 
 @test:Config {dependsOn: [testEdgeHeaderBindingClientInit]}
 function testRequestMetadataParameterBinding() returns error? {
-    mcp:CallToolResult withToken = check edgeHeaderClient->callTool({
+    mcp:ToolResult withToken = check edgeHeaderClient->callTool({
         name: "readMeta",
         _meta: {progressToken: "token-1"}
     });
     test:assertEquals(check getTextResult(withToken), "token-1");
 
-    mcp:CallToolResult withoutMeta = check edgeHeaderClient->callTool({name: "readMeta"});
+    mcp:ToolResult withoutMeta = check edgeHeaderClient->callTool({name: "readMeta"});
     test:assertEquals(check getTextResult(withoutMeta), "<no-meta>");
 }

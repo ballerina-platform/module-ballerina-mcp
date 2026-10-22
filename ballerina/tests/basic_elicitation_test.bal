@@ -60,16 +60,16 @@ const BASIC_ELICITATION_URL = "http://localhost:3250/basic";
 
 @test:Config {}
 function testBasicToolCompletesWithAcceptedContent() returns error? {
-    StreamableHttpClient basicClient = check new (BASIC_ELICITATION_URL, elicitationHandler = confirmTestElicitation);
+    StreamableHttpClient2 basicClient = check new (BASIC_ELICITATION_URL, elicitationHandler = confirmTestElicitation);
     _ = check basicClient->connect();
-    CallToolResult callResult = check basicClient->callTool({name: "deleteFile"});
+    ToolResult callResult = check basicClient->callTool({name: "deleteFile"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "deleted"});
     check basicClient->close();
 }
 
 @test:Config {}
 function testAcceptedContentOnlyReturnsAcceptedAnswersOfTheRightShape() returns error? {
-    StreamableHttpClient basicClient = check new (BASIC_ELICITATION_URL);
+    StreamableHttpClient2 basicClient = check new (BASIC_ELICITATION_URL);
     _ = check basicClient->connect();
     [map<InputResponse>, string][] cases = [
         [{}, "nil|none"],
@@ -82,9 +82,9 @@ function testAcceptedContentOnlyReturnsAcceptedAnswersOfTheRightShape() returns 
         [{"confirm": {action: "accept", content: {confirmed: false}}}, "false|accept"]
     ];
     foreach [map<InputResponse>, string] [inputResponses, expected] in cases {
-        CallToolResult|InputRequiredResult callResult =
+        ToolResult|InputRequiredResult callResult =
             check basicClient->callToolOnce({name: "inspectAnswer", inputResponses});
-        if callResult !is CallToolResult {
+        if callResult !is ToolResult {
             test:assertFail("Expected a completed result");
         }
         test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: expected},
@@ -98,9 +98,9 @@ function testBasicToolCompletesUrlElicitationWithRequestState() returns error? {
     lock {
         openedUrls.removeAll();
     }
-    StreamableHttpClient basicClient = check new (BASIC_ELICITATION_URL, elicitationHandler = openTestUrl);
+    StreamableHttpClient2 basicClient = check new (BASIC_ELICITATION_URL, elicitationHandler = openTestUrl);
     _ = check basicClient->connect();
-    CallToolResult callResult = check basicClient->callTool({name: "connectAccount"});
+    ToolResult callResult = check basicClient->callTool({name: "connectAccount"});
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "connected:account-42"});
     lock {
         test:assertEquals(openedUrls, ["https://example.com/connect"]);
@@ -110,19 +110,19 @@ function testBasicToolCompletesUrlElicitationWithRequestState() returns error? {
 
 @test:Config {}
 function testLegacyCallsSeeAnEmptyContext() returns error? {
-    StreamableHttpClient legacyClient = check new (BASIC_ELICITATION_URL, protocolMode = "legacy");
+    StreamableHttpClient2 legacyClient = check new (BASIC_ELICITATION_URL, protocolMode = "legacy");
     _ = check legacyClient->connect();
-    CallToolResult|InputRequiredResult callResult = check legacyClient->callToolOnce({
+    ToolResult|InputRequiredResult callResult = check legacyClient->callToolOnce({
         name: "inspectAnswer",
         inputResponses: {"confirm": {action: "accept", content: {confirmed: true}}},
         requestState: "ignored"
     });
-    if callResult !is CallToolResult {
+    if callResult !is ToolResult {
         test:assertFail("Expected a completed result");
     }
     test:assertEquals(callResult.content[0], <TextContent>{'type: "text", text: "nil|none"});
 
-    CallToolResult|InputRequiredResult|ClientError inputRequired = legacyClient->callToolOnce({name: "deleteFile"});
+    ToolResult|InputRequiredResult|ClientError inputRequired = legacyClient->callToolOnce({name: "deleteFile"});
     if inputRequired !is ClientError {
         test:assertFail("Expected the legacy input-required error");
     }

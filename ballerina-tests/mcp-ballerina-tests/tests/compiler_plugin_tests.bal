@@ -32,13 +32,13 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 }
 
-final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:8765/mcp");
+final mcp:StreamableHttpClient2 mcpClient = check new ("http://localhost:8765/mcp");
 final mcp:Implementation clientInfo = {name: "test-client", version: "1.0.0"};
 
 @test:Config
 function testInlineListenerToolDiscovery() returns error? {
     _ = check mcpClient->connect(clientInfo);
-    mcp:ListToolsResult result = check mcpClient->listTools();
+    mcp:ToolPage result = check mcpClient->listTools();
 
     test:assertEquals(result.tools.length(), 1,
         msg = "Expected 1 tool — compiler plugin must have processed the inline-listener service");
@@ -47,7 +47,7 @@ function testInlineListenerToolDiscovery() returns error? {
 
 @test:Config {dependsOn: [testInlineListenerToolDiscovery]}
 function testInlineListenerToolSchema() returns error? {
-    mcp:ListToolsResult result = check mcpClient->listTools();
+    mcp:ToolPage result = check mcpClient->listTools();
 
     var inputSchema = result.tools[0].inputSchema;
     test:assertEquals(inputSchema.'type, "object");
@@ -58,7 +58,7 @@ function testInlineListenerToolSchema() returns error? {
 
 @test:Config {dependsOn: [testInlineListenerToolDiscovery]}
 function testInlineListenerCallTool() returns error? {
-    mcp:CallToolResult result = check mcpClient->callTool({name: "getGreeting", arguments: {"name": "World"}});
+    mcp:ToolResult result = check mcpClient->callTool({name: "getGreeting", arguments: {"name": "World"}});
 
     test:assertFalse(result.isError ?: false);
     mcp:TextContent textContent = check result.content[0].ensureType();
@@ -82,13 +82,13 @@ isolated service mcp:StreamableHttpService /mcp on ln {
     }
 }
 
-final mcp:StreamableHttpClient mcpClient2 = check new ("http://localhost:8766/mcp");
+final mcp:StreamableHttpClient2 mcpClient2 = check new ("http://localhost:8766/mcp");
 final mcp:Implementation clientInfo2 = {name: "test-client-2", version: "1.0.0"};
 
 @test:Config
 function testListenerDeclToolDiscovery() returns error? {
     _ = check mcpClient2->connect(clientInfo2);
-    mcp:ListToolsResult result = check mcpClient2->listTools();
+    mcp:ToolPage result = check mcpClient2->listTools();
 
     test:assertEquals(result.tools.length(), 1,
         msg = "Expected 1 tool — compiler plugin must have processed the declared-listener service");

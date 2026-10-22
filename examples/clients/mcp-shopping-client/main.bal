@@ -83,7 +83,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
             }
         }
     };
-    mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9092/mcp", config);
+    mcp:StreamableHttpClient2 mcpClient = check new ("http://localhost:9092/mcp", config);
 
     // Initialize client
     _ = check mcpClient->connect({
@@ -95,7 +95,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
 
     // Add items to cart
     foreach var item in items {
-        mcp:CallToolResult result = check mcpClient->callTool({
+        mcp:ToolResult result = check mcpClient->callTool({
             name: "addToCart",
             arguments: {
                 "productName": item.name,
@@ -107,7 +107,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
     }
 
     // View cart
-    mcp:CallToolResult cartResult = check mcpClient->callTool({
+    mcp:ToolResult cartResult = check mcpClient->callTool({
         name: "viewCart",
         arguments: {}
     });
@@ -124,7 +124,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
     return;
 }
 
-function getTextContent(mcp:CallToolResult result) returns string {
+function getTextContent(mcp:ToolResult result) returns string {
     if result.content.length() > 0 && result.content[0] is mcp:TextContent {
         mcp:TextContent textContent = <mcp:TextContent>result.content[0];
         return textContent.text;

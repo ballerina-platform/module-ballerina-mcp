@@ -42,14 +42,14 @@ isolated service mcp:StreamableHttpService /sharedBasic on new mcp:StreamableHtt
     sessionMode: mcp:STATELESS
 }
 isolated service mcp:StreamableHttpAdvancedService /sharedAdvanced on new mcp:StreamableHttpListener(8775) {
-    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    isolated remote function onListTools() returns mcp:ToolPage|mcp:ServerError {
         return {
             tools: [{name: "sharedDocTool", description: "declared by onListTools", inputSchema: {'type: "object"}}]
         };
     }
 
     isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:ServerError {
         return {content: [{'type: "text", text: "shared-doc-ok"}]};
     }
 }

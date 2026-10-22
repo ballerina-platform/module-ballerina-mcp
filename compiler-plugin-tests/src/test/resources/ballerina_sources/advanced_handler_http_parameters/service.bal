@@ -24,12 +24,12 @@ import ballerina/mcp;
 service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(9341) {
     remote isolated function onListTools(mcp:Cursor? cursor, mcp:AuthContext? auth,
             @http:Header {name: "X-Tenant"} string? tenant, http:Headers headers, http:Request request)
-            returns mcp:ListToolsResult|mcp:ServerError {
+            returns mcp:ToolPage|mcp:ServerError {
         return {tools: []};
     }
 
     remote isolated function onCallTool(mcp:CallToolParams params)
-            returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:InputRequiredResult|mcp:ServerError {
         return {resultType: "complete", content: []};
     }
 }
@@ -38,12 +38,12 @@ service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener
     info: {name: "advanced-handler-cursor-only", version: "1.0.0"}
 }
 service mcp:StreamableHttpAdvancedService /cursor on new mcp:StreamableHttpListener(9342) {
-    remote isolated function onListTools(mcp:Cursor? cursor) returns mcp:ListToolsResult|mcp:ServerError {
+    remote isolated function onListTools(mcp:Cursor? cursor) returns mcp:ToolPage|mcp:ServerError {
         return {tools: []};
     }
 
     remote isolated function onCallTool(mcp:CallToolParams params)
-            returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
+            returns mcp:ToolResult|mcp:InputRequiredResult|mcp:ServerError {
         return {resultType: "complete", content: []};
     }
 }
