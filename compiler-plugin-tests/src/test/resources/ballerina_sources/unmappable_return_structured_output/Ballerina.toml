@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "unmappable_return_structured_output"
+version = "0.1.0"

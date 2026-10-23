@@ -107,6 +107,10 @@ serialization. For a modern request it also:
 - preserves the raw return value in `structuredContent`;
 - accepts object, scalar, array, and nil JSON roots.
 
+A tool whose return type has no JSON Schema, such as an object, `any`, or `http:Response`, stays unstructured: it
+advertises no `outputSchema` and returns only the text content, as in 1.x. Setting `structuredOutput: true` explicitly
+on such a tool is a compilation error.
+
 For a legacy request, basic tools keep the 1.x wire shape: `tools/list` advertises no `outputSchema`, and results
 carry only the text content block, without `structuredContent`. Results from an advanced service are kept within the
 legacy schema: an `outputSchema` or `structuredContent` whose root is not an object is removed.

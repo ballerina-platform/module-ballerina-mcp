@@ -51,6 +51,7 @@ import static io.ballerina.stdlib.mcp.plugin.ToolAnnotationConfig.STRUCTURED_OUT
 import static io.ballerina.stdlib.mcp.plugin.Utils.getToolAnnotationNode;
 import static io.ballerina.stdlib.mcp.plugin.Utils.isMcpServiceFunction;
 import static io.ballerina.stdlib.mcp.plugin.Utils.validateParameterTypes;
+import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.UNABLE_TO_GENERATE_OUTPUT_SCHEMA;
 import static io.ballerina.stdlib.mcp.plugin.diagnostics.CompilationDiagnostic.UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION;
 
 /**
@@ -118,7 +119,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                         Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
         if (annotationNode == null) {
             String schema = getParameterSchema(functionSymbol, functionNodeLocation);
-            String outputSchema = getReturnSchema(functionSymbol, functionNodeLocation);
+            String outputSchema = getReturnSchema(functionSymbol, functionNodeLocation, false);
             return new ToolAnnotationConfig(description, schema, outputSchema, "true", null);
         }
         SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty() ?
@@ -144,10 +145,12 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
             reportDiagnostic(CompilationDiagnostic.getDiagnostic(
                     CompilationDiagnostic.UNSTRUCTURED_OUTPUT_WITH_OUTPUT_SCHEMA, functionNodeLocation, functionName));
         }
+        boolean structuredOutputRequired = fieldValues.containsKey(STRUCTURED_OUTPUT_FIELD_NAME)
+                && "true".equals(structuredOutput.trim());
         String outputSchema = "false".equals(structuredOutput) ? NIL_EXPRESSION :
                 fieldValues.containsKey(OUTPUT_SCHEMA_FIELD_NAME)
                         ? fieldValues.get(OUTPUT_SCHEMA_FIELD_NAME).toSourceCode()
-                        : getReturnSchema(functionSymbol, functionNodeLocation);
+                        : getReturnSchema(functionSymbol, functionNodeLocation, structuredOutputRequired);
         String scopes = fieldValues.containsKey(SCOPES_FIELD_NAME)
                 ? fieldValues.get(SCOPES_FIELD_NAME).toSourceCode() : null;
         return new ToolAnnotationConfig(description, parameters, outputSchema, structuredOutput, scopes);
@@ -182,15 +185,19 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         }
     }
 
-    private String getReturnSchema(FunctionSymbol functionSymbol, Location alternativeFunctionLocation) {
+    // A return type with no JSON Schema, such as an object, leaves the tool unstructured, as in 1.4.0.
+    // Only a tool that explicitly sets `structuredOutput: true` is reported.
+    private String getReturnSchema(FunctionSymbol functionSymbol, Location alternativeFunctionLocation,
+                                   boolean structuredOutputRequired) {
         try {
             return Objects.requireNonNullElse(SchemaUtils.getReturnSchema(functionSymbol, this.context),
                     NIL_EXPRESSION);
         } catch (SchemaGenerationException e) {
-            Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION,
-                    functionSymbol.getLocation().orElse(alternativeFunctionLocation),
-                    functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function"));
-            reportDiagnostic(diagnostic);
+            if (structuredOutputRequired) {
+                reportDiagnostic(CompilationDiagnostic.getDiagnostic(UNABLE_TO_GENERATE_OUTPUT_SCHEMA,
+                        functionSymbol.getLocation().orElse(alternativeFunctionLocation),
+                        functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function")));
+            }
             return NIL_EXPRESSION;
         }
     }
