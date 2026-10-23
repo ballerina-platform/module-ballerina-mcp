@@ -68,7 +68,8 @@ isolated function withSubmittedContentOnly(ElicitRequest elicitRequest, ElicitRe
 
 // No server supports task-augmented tool calls, so the client never sends `task`.
 isolated function withoutTask(CallToolParams params) returns CallToolParams {
-    CallToolParams sentParams = params.clone();
+    // A spread copies even read-only params, which `clone()` would return as they are.
+    CallToolParams sentParams = {...params};
     _ = sentParams.removeIfHasKey("task");
     return sentParams;
 }

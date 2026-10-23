@@ -116,6 +116,12 @@ function testLegacyCallIgnoresTask() returns error? {
 }
 
 @test:Config {}
+function testClientStripsTaskFromReadOnlyParams() {
+    CallToolParams & readonly params = {name: "greet", arguments: {"name": "x"}, task: {ttl: 1000}};
+    test:assertEquals(withoutTask(params), {name: "greet", arguments: {"name": "x"}});
+}
+
+@test:Config {}
 function testLegacyResultsAreJsonText() returns error? {
     json nothing = check wireCall("nothing");
     test:assertEquals(nothing.result, {content: []});
