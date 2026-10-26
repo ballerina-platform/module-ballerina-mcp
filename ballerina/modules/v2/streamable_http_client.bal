@@ -32,14 +32,15 @@ isolated function selectModernProtocolVersion(string[] offeredVersions) returns 
 // Adds the configured MCP authorization extension to the advertised capabilities.
 isolated function withOAuthExtensionCapability(ClientCapabilities capabilities, string? extension)
         returns ClientCapabilities {
-    ClientCapabilities advertised = capabilities.clone();
+    // A spread copies read-only input too, which `clone()` would return as it is.
+    ClientCapabilities advertised = {...capabilities};
     if extension is () {
         return advertised;
     }
     map<record {}> extensions = {};
     map<record {}>? configuredExtensions = advertised.extensions;
     if configuredExtensions is map<record {}> {
-        extensions = configuredExtensions.clone();
+        extensions = {...configuredExtensions};
     }
     extensions[extension] = {};
     advertised.extensions = extensions;
@@ -48,7 +49,7 @@ isolated function withOAuthExtensionCapability(ClientCapabilities capabilities, 
 
 // Legacy initialize never carries this: the client cannot answer server-initiated elicitation.
 isolated function withElicitationCapability(ClientCapabilities capabilities) returns ClientCapabilities {
-    ClientCapabilities advertised = capabilities.clone();
+    ClientCapabilities advertised = {...capabilities};
     record {map<anydata> form?; map<anydata> url?;} elicitation = {...(advertised.elicitation ?: {})};
     elicitation.form = elicitation.form ?: {};
     elicitation.url = elicitation.url ?: {};
@@ -61,7 +62,7 @@ isolated function withSubmittedContentOnly(ElicitRequest elicitRequest, ElicitRe
     if answer.action == "accept" && elicitRequest.params is FormElicitationParams {
         return answer;
     }
-    ElicitResult stripped = answer.clone();
+    ElicitResult stripped = {...answer};
     _ = stripped.removeIfHasKey("content");
     return stripped;
 }
@@ -333,7 +334,8 @@ public distinct isolated client class StreamableHttpClient {
             returns CallToolResult|ClientError {
         check self.ensureConnected();
         if self.isModern() {
-            CallToolParams currentParams = params.clone();
+            // Continuations update the params; a spread copies read-only params, unlike `clone()`.
+            CallToolParams currentParams = {...params};
             decimal stateOnlyDelay = STATE_ONLY_RETRY_DELAY;
             foreach int roundNumber in 0 ... self.maxInputRounds {
                 CallToolResult|InputRequiredResult callResult = check self->callToolOnce(currentParams, headers);
