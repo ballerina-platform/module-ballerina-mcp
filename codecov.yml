@@ -1,6 +1,8 @@
 fixes:
   - "io/ballerina/stdlib/mcp/plugin/::./compiler-plugin/src/main/java/io/ballerina/stdlib/mcp/plugin/"
   - "ballerina/mcp/**/::../ballerina/"
+  # The v2 module's sources appear under its encoded module name in the ballerina-tests reports.
+  - "ballerina/mcp&0046v2/**/::../ballerina/modules/v2/"
   # Since Ballerina 2201.14, the module coverage report places object methods, lambdas and module-level
   # variable initializers under synthetic packages (e.g. `ballerina/values`). Map them back to the sources.
   - "ballerina/values/::ballerina/"
