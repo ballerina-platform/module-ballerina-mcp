@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "recursive_parameter"
+version = "0.1.0"

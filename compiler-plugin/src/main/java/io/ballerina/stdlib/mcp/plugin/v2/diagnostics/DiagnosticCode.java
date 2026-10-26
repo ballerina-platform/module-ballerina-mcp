@@ -25,7 +25,6 @@ public enum DiagnosticCode {
     MCP_201,
     MCP_202,
     MCP_204,
-    MCP_205,
     MCP_206,
     MCP_207,
     MCP_208,
@@ -44,6 +43,5 @@ public enum DiagnosticCode {
     MCP_222,
     MCP_WARNING_202,
     MCP_WARNING_203,
-    MCP_WARNING_204,
-    MCP_WARNING_201
+    MCP_WARNING_204
 }

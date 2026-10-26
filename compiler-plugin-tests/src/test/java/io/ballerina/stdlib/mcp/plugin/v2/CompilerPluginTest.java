@@ -178,7 +178,7 @@ public class CompilerPluginTest {
     public void testAdvancedOnCallToolMissingCallToolParams() {
         DiagnosticResult diagnosticResult = compile("sample_package_13");
         Assert.assertEquals(errorCount(diagnosticResult), 1);
-        assertError(diagnosticResult, 0, "must declare exactly one parameter of type mcp:CallToolParams", MCP_211);
+        assertError(diagnosticResult, 0, "must declare exactly one parameter of type 'mcp:CallToolParams'", MCP_211);
     }
 
     @Test
@@ -323,6 +323,14 @@ public class CompilerPluginTest {
     public void testUnstructuredOutputSkipsReturnSchemaGeneration() {
         DiagnosticResult result = compile("unstructured_unmappable_return");
         Assert.assertEquals(result.diagnostics().size(), 0, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testUnmappableParameterNeedsExplicitSchema() {
+        DiagnosticResult result = compile("recursive_parameter");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "Failed to generate the input schema for the function 'count'. "
+                + "Supply it with the 'schema' field of '@mcp:Tool'.", "MCP_201");
     }
 
     @Test

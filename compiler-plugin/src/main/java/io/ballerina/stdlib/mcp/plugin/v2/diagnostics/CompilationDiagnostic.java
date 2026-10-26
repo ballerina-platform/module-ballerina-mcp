@@ -34,8 +34,6 @@ public enum CompilationDiagnostic {
     UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION(DiagnosticMessage.ERROR_101, DiagnosticCode.MCP_201, ERROR),
     INVALID_PARAMETER_TYPE(DiagnosticMessage.ERROR_102, DiagnosticCode.MCP_202, ERROR),
     SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE(DiagnosticMessage.ERROR_104, DiagnosticCode.MCP_204, ERROR),
-    // Retained for compatibility; Meta parameters are no longer required to be last.
-    META_PARAM_MUST_BE_LAST(DiagnosticMessage.ERROR_105, DiagnosticCode.MCP_205, ERROR),
     META_PARAM_MUST_BE_OPTIONAL(DiagnosticMessage.ERROR_106, DiagnosticCode.MCP_206, ERROR),
     DUPLICATE_PARAMETER(DiagnosticMessage.ERROR_107, DiagnosticCode.MCP_207, ERROR),
     INVALID_HEADER_PARAMETER_TYPE(DiagnosticMessage.ERROR_108, DiagnosticCode.MCP_208, ERROR),
@@ -54,8 +52,7 @@ public enum CompilationDiagnostic {
     UNABLE_TO_GENERATE_OUTPUT_SCHEMA(DiagnosticMessage.ERROR_122, DiagnosticCode.MCP_222, ERROR),
     REQUIRED_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_102, DiagnosticCode.MCP_WARNING_202, WARNING),
     OPTIONAL_SESSION_IN_MODERN_MODE(DiagnosticMessage.WARNING_103, DiagnosticCode.MCP_WARNING_203, WARNING),
-    OPTIONAL_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_104, DiagnosticCode.MCP_WARNING_204, WARNING),
-    UNSUPPORTED_ENDPOINT_METADATA(DiagnosticMessage.WARNING_101, DiagnosticCode.MCP_WARNING_201, WARNING);
+    OPTIONAL_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_104, DiagnosticCode.MCP_WARNING_204, WARNING);
 
     private final String diagnostic;
     private final String diagnosticCode;

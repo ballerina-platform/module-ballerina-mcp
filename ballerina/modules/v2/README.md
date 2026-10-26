@@ -837,10 +837,9 @@ are unchanged.
 
 | 1.x code | v2 module code | Diagnostic |
 | --- | --- | --- |
-| `MCP_101` | `MCP_201` | The tool's parameter schema cannot be generated |
+| `MCP_101` | `MCP_201` | The tool's input schema cannot be generated |
 | `MCP_102` | `MCP_202` | A tool parameter has an unsupported type |
-| `MCP_104` | `MCP_204` | An `mcp:HttpSession` parameter in a stateless service |
-| `MCP_105` | `MCP_205` | Retained; request metadata no longer has to be the last parameter |
+| `MCP_104` | `MCP_204` | A required `mcp:HttpSession` parameter in a stateless service |
 | `MCP_106` | `MCP_206` | Request metadata is not optional |
 | `MCP_107` | `MCP_207` | Duplicate parameter |
 | `MCP_108` | `MCP_208` | Invalid type of an `@http:Header` parameter |
@@ -857,10 +856,10 @@ are unchanged.
 | - | `MCP_220` | An `mcp:elicitForm` schema that is not a form schema value or a named record type |
 | - | `MCP_221` | `structuredOutput: false` with an explicit `outputSchema` |
 | - | `MCP_222` | `structuredOutput: true` on a tool whose return type has no JSON Schema |
-| `MCP_WARNING_101` | `MCP_WARNING_201` | Endpoint metadata is not supported by the Ballerina version |
 | - | `MCP_WARNING_202` | A required `mcp:HttpSession` parameter in auto protocol mode |
 | - | `MCP_WARNING_203` | An `mcp:HttpSession` parameter in modern protocol mode |
 | - | `MCP_WARNING_204` | An optional `mcp:HttpSession` parameter in auto protocol mode |
 
-The 1.x codes `MCP_103` and `MCP_109` have no v2 counterpart: an `mcp:HttpSession` parameter may be declared at any
-position, and every v2 basic service is a Streamable HTTP service.
+The 1.x codes `MCP_103`, `MCP_105` and `MCP_109` have no v2 counterpart: an `mcp:HttpSession` or `mcp:RequestMeta?`
+parameter may be declared at any position, and every v2 basic service is a Streamable HTTP service. The
+`MCP_WARNING_101` endpoint metadata warning of `bal build --export-endpoints` is shared by both modules.
