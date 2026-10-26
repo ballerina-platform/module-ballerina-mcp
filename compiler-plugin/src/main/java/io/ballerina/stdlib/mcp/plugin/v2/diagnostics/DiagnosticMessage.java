@@ -52,6 +52,9 @@ public enum DiagnosticMessage {
             "float, decimal or boolean, a union of string constants, or an array of a union of string constants."),
     ERROR_120("The schema passed to `mcp:elicitForm` must be a form schema value or a named record type."),
     ERROR_121("Function ''{0}'' cannot combine ''structuredOutput: false'' with an explicit ''outputSchema''."),
+    ERROR_122("Failed to generate the output schema for the function ''{0}'', which sets " +
+            "''structuredOutput: true''. Return an anydata type, supply an ''outputSchema'', " +
+            "or set ''structuredOutput'' to false."),
     WARNING_102("Required HttpSession parameter ''{0}'' restricts this service to legacy MCP in auto protocol mode."),
     WARNING_103("HttpSession parameter ''{0}'' is always nil for modern MCP requests. " +
             "Remove it or migrate session-dependent behavior to explicit application state."),

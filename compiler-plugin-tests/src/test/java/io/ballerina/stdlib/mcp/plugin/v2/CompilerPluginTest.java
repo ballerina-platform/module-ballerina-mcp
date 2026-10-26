@@ -326,6 +326,28 @@ public class CompilerPluginTest {
     }
 
     @Test
+    public void testUnmappableReturnTypesStayUnstructured() {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(),
+                RESOURCE_DIRECTORY.resolve("unmappable_return_types"), OFFLINE);
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(result.diagnostics().size(), 0, result.diagnostics().toString());
+
+        Module module = project.currentPackage().getDefaultModule();
+        String source = module.documentIds().stream()
+                .map(documentId -> module.document(documentId).syntaxTree().toSourceCode())
+                .collect(Collectors.joining());
+        Assert.assertTrue(source.contains("outputSchema:{\"type\":\"string\"}"), source);
+        Assert.assertEquals(source.split("outputSchema:\\{", -1).length - 1, 1, source);
+    }
+
+    @Test
+    public void testExplicitStructuredOutputRequiresReturnSchema() {
+        DiagnosticResult result = compile("unmappable_return_structured_output");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "Failed to generate the output schema for the function 'retAny'", "MCP_222");
+    }
+
+    @Test
     public void testContextAndInputRequiredResultStayOutOfToolSchemas() {
         BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve("sample_package_32"),
                 OFFLINE);

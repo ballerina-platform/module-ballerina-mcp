@@ -102,6 +102,10 @@ serialization. For a modern request it also:
 - preserves the raw return value in `structuredContent`;
 - accepts object, scalar, array, and nil JSON roots.
 
+A tool whose return type has no JSON Schema, such as an object, `any`, or `http:Response`, stays unstructured: it
+advertises no `outputSchema` and returns only the text content, as in the 1.x API. Setting `structuredOutput: true`
+explicitly on such a tool is a compilation error.
+
 For a legacy request, basic tools keep the 1.x wire shape: `tools/list` advertises no `outputSchema`, and results
 carry only the text content block, without `structuredContent`. Results from an advanced service are kept within the
 legacy schema: an `outputSchema` or `structuredContent` whose root is not an object is removed.
@@ -852,6 +856,7 @@ are unchanged.
 | - | `MCP_219` | A record field that cannot be a form field |
 | - | `MCP_220` | An `mcp:elicitForm` schema that is not a form schema value or a named record type |
 | - | `MCP_221` | `structuredOutput: false` with an explicit `outputSchema` |
+| - | `MCP_222` | `structuredOutput: true` on a tool whose return type has no JSON Schema |
 | `MCP_WARNING_101` | `MCP_WARNING_201` | Endpoint metadata is not supported by the Ballerina version |
 | - | `MCP_WARNING_202` | A required `mcp:HttpSession` parameter in auto protocol mode |
 | - | `MCP_WARNING_203` | An `mcp:HttpSession` parameter in modern protocol mode |
