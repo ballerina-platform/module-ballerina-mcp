@@ -228,7 +228,7 @@ service StreamableHttpService /regular on structuredOutputListener {
     @Tool {description: "nullable", schema: {'type: "object"}, outputSchema: {"anyOf": [{"type": "string"}, {"type": "null"}]}}
     remote isolated function nullableValue() returns string? => ();
 
-    @Tool {description: "text", schema: {'type: "object"}, outputSchema: {"type": "string"}, structuredOutput: false}
+    @Tool {description: "text", schema: {'type: "object"}, structuredOutput: false}
     remote isolated function textOnlyValue() returns string => "text only";
 }
 

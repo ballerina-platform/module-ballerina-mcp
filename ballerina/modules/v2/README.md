@@ -102,9 +102,27 @@ serialization. For a modern request it also:
 - preserves the raw return value in `structuredContent`;
 - accepts object, scalar, array, and nil JSON roots.
 
-A tool whose return type has no JSON Schema, such as an object, `any`, or `http:Response`, stays unstructured: it
-advertises no `outputSchema` and returns only the text content, as in the 1.x API. Setting `structuredOutput: true`
-explicitly on such a tool is a compilation error.
+The `structuredOutput` field of `McpToolConfig` is a `boolean?` with a default of `()`. It selects the tool's
+structured output policy:
+
+| Value | Policy |
+| --- | --- |
+| Omitted or `()` | Automatic: use a generated or supplied output schema when available; otherwise return text only. |
+| `true` | Required: an output schema must be generated or supplied. |
+| `false` | Disabled: return text only; a supplied `outputSchema` is invalid. |
+
+A tool whose return type has no JSON Schema, such as an object, `any`, or `http:Response`, stays unstructured in
+automatic mode. No-return and nil/error-only tools also stay unstructured in automatic mode. Required mode rejects
+these tools unless an `outputSchema` is supplied.
+
+The compiler checks known constant configurations in `auto` and `modern` protocol modes. Runtime values are checked
+when the service is attached, before registration; invalid configurations return a `ServerError` identifying the tool.
+If the protocol mode is determined at runtime, its dependent checks are deferred to attachment. Legacy-only basic
+services use text-only results and skip these structured-output checks.
+
+Inline configuration, shorthand fields, spreads, and separately defined `McpToolConfig` records have the same meaning.
+A separately defined record whose policy was omitted remains automatic. Dynamically created basic service objects
+follow the same validation rules and retain their existing manually supplied schema behavior.
 
 For a legacy request, basic tools keep the 1.x wire shape: `tools/list` advertises no `outputSchema`, and results
 carry only the text content block, without `structuredContent`. Results from an advanced service are kept within the
@@ -132,10 +150,8 @@ remote isolated function balances(string accountId) returns decimal[] {
 }
 ```
 
-Set `structuredOutput: false` in `@mcp:Tool` to make a tool's output unstructured on both protocols: the compiler
-generates no `outputSchema`, and results carry only the text content. It cannot be combined with an explicit
-`outputSchema`. A tool with no return type, or one that can only return `()` apart from `error`, such as `error?`, is
-unstructured in the same way.
+Set `structuredOutput: false` in `@mcp:Tool` to disable structured output. An automatically generated schema can be
+disabled by a runtime policy value; a supplied `outputSchema` conflicts with `false` in `auto` and `modern` modes.
 
 `InputSchema` enforces an object root. `OutputSchema` allows any JSON Schema root. Both are open records and accept
 JSON Schema keywords that the module does not declare. Until Ballerina provides native JSON Schema evaluation, these

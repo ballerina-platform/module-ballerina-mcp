@@ -120,6 +120,30 @@ public final class McpServiceMethodHelper {
 
     private McpServiceMethodHelper() {}
 
+    /** Rejects required structured output without a schema before a basic service is attached. */
+    public static BError validateStructuredOutput(BObject mcpService) {
+        for (RemoteMethodType method : getRemoteMethods(mcpService)) {
+            for (Map.Entry<BString, Object> entry : method.getAnnotations().entrySet()) {
+                if (!ModuleUtils.isModuleAnnotation(entry.getKey().getValue(), ANNOTATION_MCP_TOOL)) {
+                    continue;
+                }
+                BMap<?, ?> config = (BMap<?, ?>) entry.getValue();
+                Object policy = config.get(fromString(STRUCTURED_OUTPUT_FIELD_NAME));
+                Object outputSchema = config.get(fromString(OUTPUT_SCHEMA_FIELD_NAME));
+                if (Boolean.TRUE.equals(policy) && outputSchema == null) {
+                    return ModuleUtils.createServerError("Tool '" + method.getName()
+                            + "' requires structured output, but no output schema is available. "
+                            + "Supply an outputSchema or set structuredOutput to false.");
+                }
+                if (Boolean.FALSE.equals(policy) && outputSchema != null) {
+                    return ModuleUtils.createServerError("Tool '" + method.getName()
+                            + "' cannot combine structuredOutput: false with an explicit outputSchema.");
+                }
+            }
+        }
+        return null;
+    }
+
     /** Returns whether a service has a session parameter that cannot receive nil. */
     public static boolean requiresLegacySession(BObject mcpService) {
         for (RemoteMethodType method : getRemoteMethods(mcpService)) {

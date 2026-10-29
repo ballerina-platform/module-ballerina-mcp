@@ -19,18 +19,25 @@
 package io.ballerina.stdlib.mcp.plugin.v2;
 
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
+import io.ballerina.compiler.api.symbols.ObjectTypeSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
 import io.ballerina.compiler.api.symbols.SymbolKind;
+import io.ballerina.compiler.api.symbols.TypeReferenceTypeSymbol;
+import io.ballerina.compiler.api.symbols.TypeSymbol;
+import io.ballerina.compiler.api.symbols.VariableSymbol;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
+import io.ballerina.compiler.syntax.tree.ClassDefinitionNode;
 import io.ballerina.compiler.syntax.tree.ExpressionNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
 import io.ballerina.compiler.syntax.tree.MappingFieldNode;
 import io.ballerina.compiler.syntax.tree.NodeFactory;
 import io.ballerina.compiler.syntax.tree.NodeLocation;
 import io.ballerina.compiler.syntax.tree.NodeParser;
+import io.ballerina.compiler.syntax.tree.ObjectConstructorExpressionNode;
 import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
+import io.ballerina.projects.Document;
 import io.ballerina.projects.DocumentId;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
@@ -88,6 +95,11 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         FunctionDefinitionNode functionDefinitionNode = (FunctionDefinitionNode) context.node();
 
         if (!isMcpServiceFunction(context.semanticModel(), functionDefinitionNode)) {
+            if (isDynamicBasicService(functionDefinitionNode)) {
+                getToolAnnotationNode(context.semanticModel(), functionDefinitionNode).ifPresent(annotation ->
+                        getFunctionSymbol(functionDefinitionNode).ifPresent(function -> validateOutputPolicy(
+                                annotation, function, functionDefinitionNode.location(), NIL_EXPRESSION)));
+            }
             return;
         }
 
@@ -114,24 +126,45 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                                                         NodeLocation functionNodeLocation,
                                                         AnnotationNode annotationNode) {
         String functionName = functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function");
-        String description = Utils.addDoubleQuotes(
-                Utils.escapeDoubleQuotes(
-                        Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
+        String description = Utils.addDoubleQuotes(Utils.escapeDoubleQuotes(
+                Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
         if (annotationNode == null) {
-            String schema = getParameterSchema(functionSymbol, functionNodeLocation);
-            String outputSchema = getReturnSchema(functionSymbol, functionNodeLocation, false);
-            return new ToolAnnotationConfig(description, schema, outputSchema, "true", null);
+            return new ToolAnnotationConfig(description, getParameterSchema(functionSymbol, functionNodeLocation),
+                    getReturnSchema(functionSymbol), NIL_EXPRESSION, null, null);
         }
-        SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty() ?
-                NodeFactory.createSeparatedNodeList() : annotationNode.annotValue().get().fields();
+        SeparatedNodeList<MappingFieldNode> fields = annotationNode.annotValue().isEmpty()
+                ? NodeFactory.createSeparatedNodeList() : annotationNode.annotValue().get().fields();
         Map<String, ExpressionNode> fieldValues = extractFieldValues(fields);
-        if (fieldValues.containsKey(SCHEMA_FIELD_NAME)
+        AnnotationValues.Value policy = AnnotationValues.field(annotationNode, STRUCTURED_OUTPUT_FIELD_NAME,
+                null, context);
+        AnnotationValues.Value suppliedSchema = AnnotationValues.field(annotationNode, OUTPUT_SCHEMA_FIELD_NAME,
+                null, context);
+        boolean disabledOutput = policy.known() && Boolean.FALSE.equals(policy.value());
+        String generatedOutput = disabledOutput ? NIL_EXPRESSION : getReturnSchema(functionSymbol);
+        validateOutputPolicy(annotationNode, functionSymbol, functionNodeLocation, generatedOutput);
+        AnnotationValues.Value inputSchema = AnnotationValues.field(annotationNode, SCHEMA_FIELD_NAME, null, context);
+        if ((fieldValues.containsKey(SCHEMA_FIELD_NAME) || inputSchema.known() && inputSchema.value() != null)
                 && functionSymbol.typeDescriptor().params()
                         .map(params -> params.stream().anyMatch(Utils::hasMcpArgumentAnnotation)).orElse(false)) {
-            Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                    CompilationDiagnostic.MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA,
-                    functionNodeLocation, functionName);
-            reportDiagnostic(diagnostic);
+            reportDiagnostic(CompilationDiagnostic.getDiagnostic(
+                    CompilationDiagnostic.MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA, functionNodeLocation, functionName));
+        }
+        boolean hasSpread = fields.stream().anyMatch(field -> field.kind() == SyntaxKind.SPREAD_FIELD);
+        boolean hasShorthand = fields.stream().anyMatch(field -> field instanceof SpecificFieldNode specific
+                && specific.valueExpr().isEmpty());
+        if (hasSpread || hasShorthand || !policy.known() || !suppliedSchema.known()) {
+            String generatedInput;
+            if (hasSpread || fieldValues.containsKey(SCHEMA_FIELD_NAME)) {
+                try {
+                    generatedInput = SchemaUtils.getParameterSchema(functionSymbol, context);
+                } catch (SchemaGenerationException e) {
+                    generatedInput = NIL_EXPRESSION;
+                }
+            } else {
+                generatedInput = getParameterSchema(functionSymbol, functionNodeLocation);
+            }
+            return new ToolAnnotationConfig(description, generatedInput, generatedOutput, NIL_EXPRESSION, null,
+                    annotationNode.annotValue().orElseThrow().toSourceCode());
         }
         if (fieldValues.containsKey(DESCRIPTION_FIELD_NAME)) {
             description = fieldValues.get(DESCRIPTION_FIELD_NAME).toSourceCode();
@@ -140,20 +173,62 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                 ? fieldValues.get(SCHEMA_FIELD_NAME).toSourceCode()
                 : getParameterSchema(functionSymbol, functionNodeLocation);
         String structuredOutput = fieldValues.containsKey(STRUCTURED_OUTPUT_FIELD_NAME)
-                ? fieldValues.get(STRUCTURED_OUTPUT_FIELD_NAME).toSourceCode() : "true";
-        if ("false".equals(structuredOutput) && fieldValues.containsKey(OUTPUT_SCHEMA_FIELD_NAME)) {
-            reportDiagnostic(CompilationDiagnostic.getDiagnostic(
-                    CompilationDiagnostic.UNSTRUCTURED_OUTPUT_WITH_OUTPUT_SCHEMA, functionNodeLocation, functionName));
-        }
-        boolean structuredOutputRequired = fieldValues.containsKey(STRUCTURED_OUTPUT_FIELD_NAME)
-                && "true".equals(structuredOutput.trim());
-        String outputSchema = "false".equals(structuredOutput) ? NIL_EXPRESSION :
-                fieldValues.containsKey(OUTPUT_SCHEMA_FIELD_NAME)
-                        ? fieldValues.get(OUTPUT_SCHEMA_FIELD_NAME).toSourceCode()
-                        : getReturnSchema(functionSymbol, functionNodeLocation, structuredOutputRequired);
+                ? fieldValues.get(STRUCTURED_OUTPUT_FIELD_NAME).toSourceCode() : NIL_EXPRESSION;
+        String outputSchema = fieldValues.containsKey(OUTPUT_SCHEMA_FIELD_NAME)
+                && !(suppliedSchema.known() && suppliedSchema.value() == null)
+                ? fieldValues.get(OUTPUT_SCHEMA_FIELD_NAME).toSourceCode() : generatedOutput;
         String scopes = fieldValues.containsKey(SCOPES_FIELD_NAME)
                 ? fieldValues.get(SCOPES_FIELD_NAME).toSourceCode() : null;
-        return new ToolAnnotationConfig(description, parameters, outputSchema, structuredOutput, scopes);
+        return new ToolAnnotationConfig(description, parameters, outputSchema, structuredOutput, scopes, null);
+    }
+
+    private void validateOutputPolicy(AnnotationNode annotation, FunctionSymbol function,
+                                      NodeLocation location, String generatedOutput) {
+        String mode = ProtocolSessionAnalysisTask.protocolMode(context.node().parent(), context);
+        if (!"auto".equals(mode) && !"modern".equals(mode)) {
+            return;
+        }
+        AnnotationValues.Value policy = AnnotationValues.field(annotation, STRUCTURED_OUTPUT_FIELD_NAME, null, context);
+        AnnotationValues.Value schema = AnnotationValues.field(annotation, OUTPUT_SCHEMA_FIELD_NAME, null, context);
+        String functionName = function.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function");
+        if (policy.known() && Boolean.FALSE.equals(policy.value()) && schema.known() && schema.value() != null) {
+            reportDiagnostic(CompilationDiagnostic.getDiagnostic(
+                    CompilationDiagnostic.UNSTRUCTURED_OUTPUT_WITH_OUTPUT_SCHEMA, location, functionName));
+        }
+        if (policy.known() && Boolean.TRUE.equals(policy.value()) && schema.known() && schema.value() == null
+                && NIL_EXPRESSION.equals(generatedOutput)) {
+            reportDiagnostic(CompilationDiagnostic.getDiagnostic(
+                    UNABLE_TO_GENERATE_OUTPUT_SCHEMA, location, functionName));
+        }
+    }
+
+    private boolean isDynamicBasicService(FunctionDefinitionNode function) {
+        if (function.parent() instanceof ObjectConstructorExpressionNode object) {
+            Optional<Symbol> enclosing = context.semanticModel().symbol(object.parent());
+            if (enclosing.isPresent() && enclosing.get() instanceof VariableSymbol variable) {
+                return isBasicServiceType(variable.typeDescriptor());
+            }
+            Document document = context.currentPackage().module(context.moduleId()).document(context.documentId());
+            return context.semanticModel().expectedType(document, object.lineRange().startLine())
+                    .map(this::isBasicServiceType).orElse(false);
+        }
+        if (function.parent() instanceof ClassDefinitionNode definition) {
+            return context.semanticModel().symbol(definition)
+                    .filter(ObjectTypeSymbol.class::isInstance).map(ObjectTypeSymbol.class::cast)
+                    .map(this::isBasicServiceType).orElse(false);
+        }
+        return false;
+    }
+
+    private boolean isBasicServiceType(TypeSymbol type) {
+        if (Utils.isMcpModuleSymbol(type) && "StreamableHttpService".equals(type.getName().orElse(""))) {
+            return true;
+        }
+        if (type instanceof TypeReferenceTypeSymbol reference) {
+            return isBasicServiceType(reference.typeDescriptor());
+        }
+        return type instanceof ObjectTypeSymbol object && object.typeInclusions().stream()
+                .anyMatch(this::isBasicServiceType);
     }
 
     private Optional<FunctionSymbol> getFunctionSymbol(FunctionDefinitionNode functionDefinitionNode) {
@@ -185,19 +260,10 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         }
     }
 
-    // A return type with no JSON Schema, such as an object, leaves the tool unstructured, as in the 1.x API.
-    // Only a tool that explicitly sets `structuredOutput: true` is reported.
-    private String getReturnSchema(FunctionSymbol functionSymbol, Location alternativeFunctionLocation,
-                                   boolean structuredOutputRequired) {
+    private String getReturnSchema(FunctionSymbol functionSymbol) {
         try {
-            return Objects.requireNonNullElse(SchemaUtils.getReturnSchema(functionSymbol, this.context),
-                    NIL_EXPRESSION);
+            return Objects.requireNonNullElse(SchemaUtils.getReturnSchema(functionSymbol, context), NIL_EXPRESSION);
         } catch (SchemaGenerationException e) {
-            if (structuredOutputRequired) {
-                reportDiagnostic(CompilationDiagnostic.getDiagnostic(UNABLE_TO_GENERATE_OUTPUT_SCHEMA,
-                        functionSymbol.getLocation().orElse(alternativeFunctionLocation),
-                        functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function")));
-            }
             return NIL_EXPRESSION;
         }
     }

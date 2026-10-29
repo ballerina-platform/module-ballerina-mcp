@@ -349,6 +349,61 @@ public class CompilerPluginTest {
     }
 
     @Test
+    public void testLegacyModeIgnoresUnusedStructuredOutputRequirement() {
+        DiagnosticResult result = compile("legacy_structured_output");
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+    }
+
+    @Test
+    public void testNamedConstantStructuredOutputRequiresSchema() {
+        DiagnosticResult result = compile("constant_structured_output");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "Failed to generate the output schema", "MCP_222");
+    }
+
+    @Test
+    public void testRequiredStructuredOutputRejectsNilOnlyResult() {
+        DiagnosticResult result = compile("nil_required_structured_output");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "Failed to generate the output schema", "MCP_222");
+    }
+
+    @Test
+    public void testConstantDisabledOutputRejectsSuppliedSchema() {
+        DiagnosticResult result = compile("constant_disabled_output");
+        Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
+        assertError(result, 0, "cannot combine 'structuredOutput: false'", "MCP_221");
+    }
+
+    @Test
+    public void testStaticStructuredOutputFormsRequireSchema() {
+        DiagnosticResult result = compile("static_policy_forms");
+        Assert.assertEquals(errorCount(result), 3L, result.diagnostics().toString());
+        for (int index = 0; index < 3; index++) {
+            assertError(result, index, "Failed to generate the output schema", "MCP_222");
+        }
+    }
+
+    @Test
+    public void testRuntimeConfigurationRecordsDeferPolicyValidation() {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(),
+                RESOURCE_DIRECTORY.resolve("runtime_policy_records"), OFFLINE);
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+        DiagnosticResult compilation = project.currentPackage().getCompilation().diagnosticResult();
+        Assert.assertEquals(compilation.errorCount(), 0, compilation.diagnostics().toString());
+    }
+
+    @Test
+    public void testDynamicBasicServiceChecksKnownRequiredPolicy() {
+        DiagnosticResult result = compile("dynamic_required_output");
+        Assert.assertEquals(errorCount(result), 3L, result.diagnostics().toString());
+        for (int index = 0; index < 3; index++) {
+            assertError(result, index, "Failed to generate the output schema", "MCP_222");
+        }
+    }
+
+    @Test
     public void testExplicitStructuredOutputRequiresReturnSchema() {
         DiagnosticResult result = compile("unmappable_return_structured_output");
         Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());

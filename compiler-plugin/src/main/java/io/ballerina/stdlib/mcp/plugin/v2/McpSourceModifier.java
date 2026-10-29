@@ -120,8 +120,42 @@ public class McpSourceModifier {
         }
 
         private String generateConfigMappingConstructor(ToolAnnotationConfig config) {
+            if (config.suppliedConfig() != null) {
+                return generatePreservedConfig(config);
+            }
             return generateConfigMappingConstructor(config, OPEN_BRACE_TOKEN.stringValue(),
                     CLOSE_BRACE_TOKEN.stringValue());
+        }
+
+        private String generatePreservedConfig(ToolAnnotationConfig config) {
+            // The mapping's initializer is inside the let scope, so avoid capturing user identifiers.
+            String prefix = "__mcpTool";
+            while (config.suppliedConfig().contains(prefix)) {
+                prefix += "_";
+            }
+            String supplied = prefix + "Config";
+            String input = prefix + "Input";
+            String output = prefix + "Output";
+            String scopes = prefix + "Scopes";
+            String inputFields = prefix + "InputFields";
+            String outputFields = prefix + "OutputFields";
+            String scopeFields = prefix + "ScopeFields";
+            // Evaluate the supplied mapping once, including shorthand, spreads and record defaults.
+            return "{...(let " + modulePrefix + ":McpToolConfig " + supplied + " = "
+                    + config.suppliedConfig() + ", " + modulePrefix + ":InputSchema? " + input + " = "
+                    + supplied + ".schema ?: " + config.schema() + ", "
+                    + modulePrefix + ":OutputSchema? " + output + " = " + supplied + ".outputSchema ?: "
+                    + "(" + supplied + ".structuredOutput == false ? () : " + config.outputSchema() + "), "
+                    + "string[]? " + scopes + " = " + supplied + ".scopes, "
+                    + "record {| " + modulePrefix + ":InputSchema schema?; |} " + inputFields + " = "
+                    + input + " is " + modulePrefix + ":InputSchema ? {schema:" + input + "} : {}, "
+                    + "record {| " + modulePrefix + ":OutputSchema outputSchema?; |} " + outputFields + " = "
+                    + output + " is " + modulePrefix + ":OutputSchema ? {outputSchema:" + output + "} : {}, "
+                    + "record {| string[] scopes?; |} " + scopeFields + " = "
+                    + scopes + " is string[] ? {scopes:" + scopes + "} : {} in {"
+                    + "description:" + supplied + ".description ?: " + config.description() + ","
+                    + "..." + inputFields + ",..." + outputFields + ",structuredOutput:" + supplied
+                    + ".structuredOutput,..." + scopeFields + "})}";
         }
 
         private String generateConfigMappingConstructor(ToolAnnotationConfig config, String openBraceSource,

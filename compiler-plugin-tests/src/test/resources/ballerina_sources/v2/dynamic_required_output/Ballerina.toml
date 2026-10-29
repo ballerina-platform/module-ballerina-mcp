@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "dynamic_required_output"
+version = "0.1.0"

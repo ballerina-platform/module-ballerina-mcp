@@ -18,20 +18,20 @@
 
 package io.ballerina.stdlib.mcp.plugin.v2;
 
-import io.ballerina.compiler.api.symbols.ConstantSymbol;
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
-import io.ballerina.compiler.api.values.ConstantValue;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
+import io.ballerina.compiler.syntax.tree.ClassDefinitionNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
 import io.ballerina.compiler.syntax.tree.Node;
+import io.ballerina.compiler.syntax.tree.ObjectConstructorExpressionNode;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
-import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic;
 
+import java.util.List;
 import java.util.Optional;
 
 /** Diagnoses session dependencies without rejecting existing auto-mode services. */
@@ -76,12 +76,21 @@ public class ProtocolSessionAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         }
     }
 
-    private String protocolMode(ServiceDeclarationNode serviceNode, SyntaxNodeAnalysisContext context) {
-        if (serviceNode.metadata().isEmpty()) {
-            return "auto";
+    static String protocolMode(Node serviceNode, SyntaxNodeAnalysisContext context) {
+        List<AnnotationNode> annotations;
+        if (serviceNode instanceof ServiceDeclarationNode declaration) {
+            annotations = declaration.metadata().map(metadata -> metadata.annotations().stream().toList())
+                    .orElse(List.of());
+        } else if (serviceNode instanceof ObjectConstructorExpressionNode object) {
+            annotations = object.annotations().stream().toList();
+        } else if (serviceNode instanceof ClassDefinitionNode definition) {
+            annotations = definition.metadata().map(metadata -> metadata.annotations().stream().toList())
+                    .orElse(List.of());
+        } else {
+            return null;
         }
         AnnotationNode selected = null;
-        for (AnnotationNode annotation : serviceNode.metadata().get().annotations()) {
+        for (AnnotationNode annotation : annotations) {
             Optional<Symbol> symbol = context.semanticModel().symbol(annotation.annotReference());
             if (symbol.isEmpty() || !Utils.isMcpModuleSymbol(symbol.get())) {
                 continue;
@@ -95,25 +104,13 @@ public class ProtocolSessionAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         if (selected == null || selected.annotValue().isEmpty()) {
             return "auto";
         }
-        for (Node field : selected.annotValue().get().fields()) {
-            if (field instanceof SpecificFieldNode specific
-                    && "protocolMode".equals(specific.fieldName().toString().trim())
-                    && specific.valueExpr().isPresent()) {
-                Node expression = specific.valueExpr().get();
-                String value = expression.toString().trim();
-                Optional<Symbol> symbol = context.semanticModel().symbol(expression);
-                if (symbol.isPresent() && symbol.get() instanceof ConstantSymbol constant) {
-                    Object constantValue = constant.constValue();
-                    value = String.valueOf(constantValue instanceof ConstantValue resolved
-                            ? resolved.value() : constantValue);
-                }
-                value = value.replace("\"", "");
-                return switch (value) {
-                    case "auto", "modern", "legacy" -> value;
-                    default -> null;
-                };
-            }
+        AnnotationValues.Value mode = AnnotationValues.field(selected, "protocolMode", "auto", context);
+        if (mode.known() && mode.value() instanceof String value) {
+            return switch (value) {
+                case "auto", "modern", "legacy" -> value;
+                default -> null;
+            };
         }
-        return "auto";
+        return null;
     }
 }

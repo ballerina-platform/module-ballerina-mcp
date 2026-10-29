@@ -553,8 +553,9 @@ public type McpToolConfig record {|
     # The JSON schema generated from, or explicitly assigned for, the successful return value.
     # It is advertised only to clients using the modern protocol.
     OutputSchema outputSchema?;
-    # Whether modern requests should receive structured output for this tool.
-    boolean structuredOutput = true;
+    # The structured output policy for modern requests: nil selects automatic schema generation,
+    # true requires an output schema, and false disables structured output.
+    boolean? structuredOutput = ();
     # Scopes the caller's access token must grant to call this tool, in addition to the
     # `requiredScopes` of the service's `mcp:OAuthProtectedResourceConfig`. They are enforced by the server
     # and never sent to clients; a caller without them receives a `403` challenge.

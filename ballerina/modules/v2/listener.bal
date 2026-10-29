@@ -65,6 +65,9 @@ public isolated class StreamableHttpListener {
         if serviceConfig.protocolMode == "modern" && requiresLegacySession(mcpService) {
             return error DispatcherError("Modern MCP services cannot require mcp:HttpSession; use explicit application state");
         }
+        if serviceConfig.protocolMode != "legacy" && mcpService is StreamableHttpService {
+            check validateStructuredOutput(mcpService = mcpService);
+        }
         CacheHints cacheHints = serviceConfig.cacheHints;
         if (cacheHints.discover?.ttlMs ?: 0) < 0 || (cacheHints.listTools?.ttlMs ?: 0) < 0 {
             return error DispatcherError("Cache hint ttlMs must be non-negative");

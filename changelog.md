@@ -24,6 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - The client skips SSE events without data, such as keep-alive comments and priming events, instead of ending the stream with an error.
   - On the legacy protocol, the client ignores the `resultType`, `ttlMs`, and `cacheScope` result fields of MCP `2026-07-28`, so a server that sends them with values outside that schema no longer fails the request.
 
+### Changed
+- In the v2 module, `McpToolConfig.structuredOutput` is now `boolean?` with default `()`: automatic, required (`true`), or disabled (`false`). Configuration records, shorthand and spreads preserve the same policy as inline fields. Known invalid configurations report `MCP_221` or `MCP_222`; runtime configurations are validated before service attachment. These checks apply in auto/modern protocol modes; legacy-only basic services keep text-only output.
+
 ### Deprecated
 - The `mcp:StreamableHttpClient` client, in favour of `mcp.v2:StreamableHttpClient`.
 - The transport-agnostic `mcp:Service` and `mcp:AdvancedService` service types and the `@mcp:ServiceConfig` annotation, in favour of `mcp.v2:StreamableHttpService`, `mcp.v2:StreamableHttpAdvancedService` and `@mcp.v2:StreamableHttpServiceConfig`.

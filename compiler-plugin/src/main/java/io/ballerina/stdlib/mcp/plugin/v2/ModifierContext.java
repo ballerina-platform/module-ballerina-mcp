@@ -51,7 +51,8 @@ record ToolAnnotationConfig(
         String schema,
         String outputSchema,
         String structuredOutput,
-        String scopes) {
+        String scopes,
+        String suppliedConfig) {
 
     public static final String DESCRIPTION_FIELD_NAME = "description";
     public static final String SCHEMA_FIELD_NAME = "schema";

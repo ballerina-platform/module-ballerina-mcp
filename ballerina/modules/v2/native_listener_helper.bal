@@ -84,3 +84,8 @@ isolated function getToolScopes(StreamableHttpService|StreamableHttpAdvancedServ
         returns readonly & map<string[]> = @java:Method {
     'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
 } external;
+
+// Checks the resolved tool policies before a modern-capable basic service is attached.
+isolated function validateStructuredOutput(StreamableHttpService mcpService) returns ServerError? = @java:Method {
+    'class: "io.ballerina.stdlib.mcp.v2.McpServiceMethodHelper"
+} external;

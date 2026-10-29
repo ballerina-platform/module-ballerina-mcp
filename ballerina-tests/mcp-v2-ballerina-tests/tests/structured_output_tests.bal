@@ -26,8 +26,37 @@ type Person record {|
     int age;
 |};
 
+const boolean DISABLED_POLICY = false;
+const boolean structuredOutput = false;
+final boolean? runtimeOutputPolicy = selectRuntimeOutputPolicy();
+final mcp:ProtocolMode runtimeLegacyMode = selectLegacyProtocolMode();
+
+isolated function selectRuntimeOutputPolicy() returns boolean? => false;
+isolated function selectLegacyProtocolMode() returns mcp:ProtocolMode => "legacy";
+
+final mcp:McpToolConfig automaticPolicyConfig = {description: "Automatic policy"};
+final mcp:McpToolConfig disabledPolicyConfig = {description: "Disabled policy", structuredOutput: false};
+
 @mcp:StreamableHttpServiceConfig {info: {name: "structured-http", version: "1.0.0"}}
 service mcp:StreamableHttpService /structuredHttp on structuredListener {
+    @mcp:Tool {structuredOutput: DISABLED_POLICY}
+    remote isolated function constantDisabledValue() returns int => 10;
+
+    @mcp:Tool {structuredOutput}
+    remote isolated function shorthandDisabledValue() returns int => 11;
+
+    @mcp:Tool {structuredOutput: runtimeOutputPolicy}
+    remote isolated function runtimeDisabledValue() returns int => 12;
+
+    @mcp:Tool {structuredOutput: ()}
+    remote isolated function nilPolicyValue() returns int => 13;
+
+    @mcp:Tool {...automaticPolicyConfig}
+    remote isolated function spreadAutomaticValue() returns int => 42;
+
+    @mcp:Tool {...disabledPolicyConfig}
+    remote isolated function spreadDisabledValue() returns int => 7;
+
     remote isolated function stringValue() returns string => "hello";
 
     remote isolated function arrayValue() returns int[] => [1, 2, 3];
@@ -204,4 +233,106 @@ function assertSchemaType(mcp:ToolDefinition toolInfo, string expectedType) retu
 
 function assertStructuredValue(mcp:CallToolResult resultValue, json expectedValue) {
     test:assertEquals(resultValue["structuredContent"], expectedValue);
+}
+
+@test:Config {}
+function testStructuredOutputPolicySurvivesConfigurationSpreads() returns error? {
+    mcp:StreamableHttpClient policyClient = check new ("http://localhost:8789/structuredHttp",
+        protocolMode = "modern");
+    _ = check policyClient->connect();
+    error? verificationError = trap assertSpreadPolicyResults(policyClient);
+    check policyClient->close();
+    return verificationError;
+}
+
+function assertSpreadPolicyResults(mcp:StreamableHttpClient policyClient) returns error? {
+    mcp:ListToolsResult toolList = check policyClient->listTools();
+    int matchedTools = 0;
+    foreach mcp:ToolDefinition toolInfo in toolList.tools {
+        if toolInfo.name == "spreadAutomaticValue" {
+            test:assertEquals(toolInfo.description, "Automatic policy");
+            test:assertTrue(toolInfo.outputSchema is mcp:OutputSchema);
+            matchedTools += 1;
+        } else if toolInfo.name == "spreadDisabledValue" {
+            test:assertEquals(toolInfo.description, "Disabled policy");
+            test:assertEquals(toolInfo.outputSchema, ());
+            matchedTools += 1;
+        }
+    }
+    test:assertEquals(matchedTools, 2);
+    mcp:CallToolResult automaticResult = check policyClient->callTool({name: "spreadAutomaticValue"});
+    test:assertEquals(automaticResult["structuredContent"], 42);
+    mcp:CallToolResult disabledResult = check policyClient->callTool({name: "spreadDisabledValue"});
+    test:assertFalse(disabledResult.hasKey("structuredContent"));
+}
+
+@mcp:StreamableHttpServiceConfig {
+    info: {name: "runtime-legacy", version: "1"}, protocolMode: runtimeLegacyMode
+}
+service mcp:StreamableHttpService /policyLegacy on structuredListener {
+    @mcp:Tool {structuredOutput: true}
+    remote isolated function anyValue() returns any => 42;
+}
+
+@test:Config {}
+function testStructuredOutputPolicyAcrossFieldForms() returns error? {
+    mcp:StreamableHttpClient policyClient = check new (serverUrl = "http://localhost:8789/structuredHttp",
+        protocolMode = "modern");
+    _ = check policyClient->connect();
+    error? verificationError = trap assertFieldPolicyResults(policyClient);
+    check policyClient->close();
+    return verificationError;
+}
+
+function assertFieldPolicyResults(mcp:StreamableHttpClient policyClient) returns error? {
+    mcp:ListToolsResult toolList = check policyClient->listTools();
+    int disabledTools = 0;
+    foreach mcp:ToolDefinition toolInfo in toolList.tools {
+        if toolInfo.name == "constantDisabledValue" || toolInfo.name == "shorthandDisabledValue" ||
+                toolInfo.name == "runtimeDisabledValue" {
+            disabledTools += 1;
+            test:assertEquals(actual = toolInfo.outputSchema, expected = ());
+            mcp:CallToolResult disabledResult = check policyClient->callTool(params = {name: toolInfo.name});
+            test:assertFalse(condition = disabledResult.hasKey("structuredContent"));
+        }
+    }
+    test:assertEquals(actual = disabledTools, expected = 3);
+    mcp:CallToolResult automaticResult = check policyClient->callTool(params = {name: "nilPolicyValue"});
+    test:assertEquals(actual = automaticResult["structuredContent"], expected = 13);
+}
+
+@test:Config {}
+function testRuntimeLegacyModeIgnoresUnusedRequiredOutput() returns error? {
+    mcp:StreamableHttpClient policyClient = check new (serverUrl = "http://localhost:8789/policyLegacy",
+        protocolMode = "legacy");
+    _ = check policyClient->connect();
+    mcp:CallToolResult legacyResult = check policyClient->callTool(params = {name: "anyValue"});
+    test:assertFalse(condition = legacyResult.hasKey("structuredContent"));
+    check policyClient->close();
+}
+
+
+final mcp:OutputSchema? optionalPolicySchema = selectOptionalPolicySchema();
+final mcp:McpToolConfig optionalSchemaConfig = {structuredOutput: true, outputSchema: optionalPolicySchema};
+
+function selectOptionalPolicySchema() returns mcp:OutputSchema? => ();
+
+service mcp:StreamableHttpService /optionalPolicy on structuredListener {
+    @mcp:Tool {structuredOutput: true, outputSchema: optionalPolicySchema}
+    remote isolated function inlineValue() returns int => 21;
+
+    @mcp:Tool {...optionalSchemaConfig}
+    remote isolated function spreadValue() returns int => 21;
+}
+
+@test:Config {}
+function testOptionalOutputSchemaFallsBackToGeneratedSchema() returns error? {
+    mcp:StreamableHttpClient policyClient = check new (serverUrl = "http://localhost:8789/optionalPolicy",
+        protocolMode = "modern");
+    _ = check policyClient->connect();
+    foreach string toolName in ["inlineValue", "spreadValue"] {
+        mcp:CallToolResult toolResult = check policyClient->callTool(params = {name: toolName});
+        test:assertEquals(actual = toolResult["structuredContent"], expected = 21);
+    }
+    check policyClient->close();
 }
