@@ -1,0 +1,9 @@
+# ballerina:13 and ballerina:14 flag any name containing auth/token/secret, not actual secrets. Here they match OAuth
+# and HTTP protocol constants (GRANT_AUTHORIZATION_CODE, TOKEN_TYPE_ID_JAG, AUTHORIZATION_HEADER), runtime values such
+# as tokenEndpoint, authenticator and authConfig, `auth = ()` defaults, and OAuth test fixtures. No literal secret is
+# embedded, and Scan.toml can only exclude rules, not test paths.
+# TODO: replace this rule exclusion with a targeted scan suppression (with a reason) once `bal scan` supports it
+# (planned for v0.13.0), and fix the false positives on the scan tool side: a secret-named identifier should only be
+# reported when it is assigned a fixed value.
+[rule]
+exclude = ["ballerina:13", "ballerina:14"]
