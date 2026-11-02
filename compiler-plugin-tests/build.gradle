@@ -56,10 +56,19 @@ test {
     }
     dependsOn ':mcp-ballerina:build'
     finalizedBy jacocoTestReport
+    doFirst {
+        // Endpoint export tests run the plugin in `bal build` subprocesses; BalBuildCoverage hands them this agent.
+        def agentJar = (jacoco.asJvmArg =~ /-javaagent:([^=]+)=/)[0][1]
+        def execFile = layout.buildDirectory.file("jacoco/bal-build.exec").get().asFile
+        delete execFile
+        systemProperty "balBuildJacocoAgent",
+                "-javaagent:${agentJar}=destfile=${execFile},append=true,includes=io.ballerina.stdlib.mcp.plugin.*"
+    }
 }
 
 jacocoTestReport {
     dependsOn test
+    executionData fileTree(layout.buildDirectory.dir("jacoco")).include("*.exec")
     reports {
         xml.required = true
     }

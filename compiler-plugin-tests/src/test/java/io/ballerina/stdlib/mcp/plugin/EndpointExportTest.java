@@ -329,6 +329,7 @@ public class EndpointExportTest {
 
         ProcessBuilder pb = new ProcessBuilder(buildArgs).redirectErrorStream(true);
         pb.directory(projectDirPath.toFile());
+        BalBuildCoverage.attach(pb);
         Process process = pb.start();
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         if (!process.waitFor(2, TimeUnit.MINUTES)) {
@@ -354,6 +355,7 @@ public class EndpointExportTest {
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.INHERIT);
         pb.directory(projectDirPath.toFile());
+        BalBuildCoverage.attach(pb);
         Process process = pb.start();
         if (!process.waitFor(2, TimeUnit.MINUTES)) {
             process.destroyForcibly().waitFor();
