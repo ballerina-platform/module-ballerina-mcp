@@ -14,12 +14,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
 isolated int toolListingCount = 0;
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "cached-tools", version: "1.0.0"},
     protocolMode: "modern",
     cacheHints: {
@@ -27,15 +27,15 @@ isolated int toolListingCount = 0;
         listTools: {ttlMs: 60000}
     }
 }
-service mcp:StreamableHttpAdvancedService /cached on new mcp:StreamableHttpListener(8790) {
-    remote isolated function onListTools() returns mcp:ListToolsResult {
+service mcpv2:StreamableHttpAdvancedService /cached on new mcpv2:StreamableHttpListener(8790) {
+    remote isolated function onListTools() returns mcpv2:ListToolsResult {
         lock {
             toolListingCount += 1;
         }
         return {tools: [{name: "echo", inputSchema: {'type: "object"}}]};
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params) returns mcp:CallToolResult => {content: []};
+    remote isolated function onCallTool(mcpv2:CallToolParams params) returns mcpv2:CallToolResult => {content: []};
 }
 
 isolated function listingCount() returns int {
@@ -46,14 +46,14 @@ isolated function listingCount() returns int {
 
 @test:Config {}
 function testClientReusesToolListWithinServerTtl() returns error? {
-    mcp:StreamableHttpClient cachingClient = check new ("http://localhost:8790/cached", protocolMode = "modern");
-    mcp:DiscoverResult discovered = check cachingClient->discover();
+    mcpv2:StreamableHttpClient cachingClient = check new ("http://localhost:8790/cached", protocolMode = "modern");
+    mcpv2:DiscoverResult discovered = check cachingClient->discover();
     test:assertEquals(discovered.ttlMs, 300000);
     test:assertEquals(discovered.cacheScope, "public");
     _ = check cachingClient->connect();
 
     int initialCount = listingCount();
-    mcp:ListToolsResult firstList = check cachingClient->listTools();
+    mcpv2:ListToolsResult firstList = check cachingClient->listTools();
     test:assertEquals(firstList.ttlMs, 60000);
     test:assertEquals(firstList.cacheScope, "private");
     _ = check cachingClient->listTools();

@@ -14,39 +14,39 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
-listener mcp:StreamableHttpListener upgradeListener = check new (8788);
+listener mcpv2:StreamableHttpListener upgradeListener = check new (8788);
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "protocol-upgrade", version: "2.0.0"},
     protocolMode: "auto"
 }
-service mcp:StreamableHttpService /upgrade on upgradeListener {
-    remote isolated function versionedEcho(string inputValue, mcp:RequestMeta? requestMeta) returns string {
+service mcpv2:StreamableHttpService /upgrade on upgradeListener {
+    remote isolated function versionedEcho(string inputValue, mcpv2:RequestMeta? requestMeta) returns string {
         return inputValue + (requestMeta is () ? ":no-meta" : ":meta");
     }
 }
 
 @test:Config {}
 function testBuiltPackageSupportsBothProtocolEras() returns error? {
-    test:assertEquals(mcp:LATEST_PROTOCOL_VERSION, "2026-07-28",
+    test:assertEquals(mcpv2:LATEST_PROTOCOL_VERSION, "2026-07-28",
             msg = "Integration tests must resolve the package being built, not a cached earlier release");
-    mcp:StreamableHttpClient modernClient = check new ("http://localhost:8788/upgrade", protocolMode = "auto");
+    mcpv2:StreamableHttpClient modernClient = check new ("http://localhost:8788/upgrade", protocolMode = "auto");
     _ = check modernClient->connect();
-    mcp:DiscoverResult discoveryResult = check modernClient->discover();
+    mcpv2:DiscoverResult discoveryResult = check modernClient->discover();
     test:assertTrue(discoveryResult.supportedVersions.some(versionValue => versionValue == "2026-07-28"));
-    mcp:CallToolResult modernResult = check modernClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
-    mcp:TextContent modernText = check modernResult.content[0].ensureType();
+    mcpv2:CallToolResult modernResult = check modernClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
+    mcpv2:TextContent modernText = check modernResult.content[0].ensureType();
     test:assertEquals(modernText.text, "hello:no-meta");
     test:assertEquals(modernResult._meta?.serverInfo?.name, "protocol-upgrade");
     check modernClient->close();
 
-    mcp:StreamableHttpClient legacyClient = check new ("http://localhost:8788/upgrade", protocolMode = "legacy");
+    mcpv2:StreamableHttpClient legacyClient = check new ("http://localhost:8788/upgrade", protocolMode = "legacy");
     _ = check legacyClient->connect();
-    mcp:CallToolResult legacyResult = check legacyClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
-    mcp:TextContent legacyText = check legacyResult.content[0].ensureType();
+    mcpv2:CallToolResult legacyResult = check legacyClient->callTool({name: "versionedEcho", arguments: {"inputValue": "hello"}});
+    mcpv2:TextContent legacyText = check legacyResult.content[0].ensureType();
     test:assertEquals(legacyText.text, "hello:no-meta");
     check legacyClient->close();
 }

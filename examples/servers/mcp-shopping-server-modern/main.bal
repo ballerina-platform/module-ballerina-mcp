@@ -14,12 +14,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/time;
 import ballerina/uuid;
 
 configurable int cartPort = ?;
-listener mcp:StreamableHttpListener cartListener = check new (cartPort, host = "127.0.0.1");
+listener mcpv2:StreamableHttpListener cartListener = check new (cartPort, host = "127.0.0.1");
 
 const int CART_TTL_SECONDS = 1800;
 const int MAX_CARTS = 1000;
@@ -37,9 +37,9 @@ type CartEntry record {|
 
 isolated map<CartEntry> cartStore = {};
 
-@mcp:StreamableHttpServiceConfig {info: {name: "Shopping with explicit cart handles", version: "1.0.0"}}
-service mcp:StreamableHttpService /mcp on cartListener {
-    @mcp:Tool {description: "Create a cart and return its handle. Pass this handle to every cart operation."}
+@mcpv2:StreamableHttpServiceConfig {info: {name: "Shopping with explicit cart handles", version: "1.0.0"}}
+service mcpv2:StreamableHttpService /mcp on cartListener {
+    @mcpv2:Tool {description: "Create a cart and return its handle. Pass this handle to every cart operation."}
     remote isolated function createCart() returns string|error {
         time:Utc currentTime = time:utcNow();
         int currentSeconds = currentTime[0];
@@ -59,7 +59,7 @@ service mcp:StreamableHttpService /mcp on cartListener {
         return cartId;
     }
 
-    @mcp:Tool {description: "Add an item to an existing cart using the handle returned by createCart."}
+    @mcpv2:Tool {description: "Add an item to an existing cart using the handle returned by createCart."}
     remote isolated function addItem(string cartId, string productName, decimal unitPrice, int itemCount) returns string|error {
         if unitPrice < 0.0d || itemCount <= 0 {
             return error("Price must be non-negative and quantity must be positive");
@@ -76,7 +76,7 @@ service mcp:StreamableHttpService /mcp on cartListener {
         return "Item added";
     }
 
-    @mcp:Tool {description: "Read the items in a cart using its explicit handle."}
+    @mcpv2:Tool {description: "Read the items in a cart using its explicit handle."}
     remote isolated function viewCart(string cartId) returns CartItem[]|error {
         time:Utc currentTime = time:utcNow();
         int currentSeconds = currentTime[0];
@@ -89,7 +89,7 @@ service mcp:StreamableHttpService /mcp on cartListener {
         }
     }
 
-    @mcp:Tool {description: "Delete a cart and release its application state."}
+    @mcpv2:Tool {description: "Delete a cart and release its application state."}
     remote isolated function closeCart(string cartId) returns boolean {
         lock {
             return cartStore.removeIfHasKey(cartId) is CartEntry;

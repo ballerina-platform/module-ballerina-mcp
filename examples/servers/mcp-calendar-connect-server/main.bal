@@ -16,7 +16,7 @@
 
 import ballerina/http;
 import ballerina/jwt;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/time;
 import ballerina/uuid;
 
@@ -33,7 +33,7 @@ final string mcpUrl = origin + "/mcp";
 
 // One HTTP listener serves both the MCP endpoint and the connect page.
 listener http:Listener httpListener = new (port);
-listener mcp:StreamableHttpListener mcpListener = check new (httpListener);
+listener mcpv2:StreamableHttpListener mcpListener = check new (httpListener);
 
 type PendingConnection record {|
     # The user the connect link was issued to
@@ -47,7 +47,7 @@ isolated map<PendingConnection> pendingConnections = {};
 // Users whose calendar is connected. A real service would store the third-party tokens here.
 isolated map<true> connectedUsers = {};
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "Calendar", version: "1.0.0"},
     httpConfig: {
         auth: {
@@ -58,10 +58,10 @@ isolated map<true> connectedUsers = {};
         }
     }
 }
-service mcp:StreamableHttpService /mcp on mcpListener {
-    @mcp:Tool {description: "List today's events in the user's calendar"}
-    remote isolated function listEvents(mcp:AuthContext auth, mcp:Context context)
-            returns string[]|mcp:InputRequiredResult|error {
+service mcpv2:StreamableHttpService /mcp on mcpListener {
+    @mcpv2:Tool {description: "List today's events in the user's calendar"}
+    remote isolated function listEvents(mcpv2:AuthContext auth, mcpv2:Context context)
+            returns string[]|mcpv2:InputRequiredResult|error {
         string? subject = auth.subject;
         if subject is () {
             return error("The access token names no user");
@@ -69,8 +69,8 @@ service mcp:StreamableHttpService /mcp on mcpListener {
         if isConnected(subject) {
             return ["09:30 Standup", "14:00 Design review"];
         }
-        mcp:ElicitResult? answer = context.elicitResult("connect");
-        if answer is mcp:ElicitResult && answer.action != "accept" {
+        mcpv2:ElicitResult? answer = context.elicitResult("connect");
+        if answer is mcpv2:ElicitResult && answer.action != "accept" {
             return error("The calendar is not connected");
         }
         // Accepting only means the user agreed to open the link. Until the connect page records the
@@ -78,7 +78,7 @@ service mcp:StreamableHttpService /mcp on mcpListener {
         string connectionId = check issueConnectLink(context.requestState(), subject);
         return {
             inputRequests: {
-                "connect": mcp:elicitUrl("Connect your calendar to list its events",
+                "connect": mcpv2:elicitUrl("Connect your calendar to list its events",
                         string `${origin}/connect?id=${connectionId}`)
             },
             requestState: connectionId

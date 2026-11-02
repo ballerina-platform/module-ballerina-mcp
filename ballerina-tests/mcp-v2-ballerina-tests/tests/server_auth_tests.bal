@@ -16,7 +16,7 @@
 
 import ballerina/http;
 import ballerina/jwt;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
 const AUTH_PLUGIN_SECRET = "auth-plugin-test-secret-0123456789abcdef";
@@ -24,10 +24,10 @@ const AUTH_PLUGIN_ISSUER = "https://idp.example.com";
 const AUTH_PLUGIN_RESOURCE = "http://localhost:8792/mcp";
 
 // The tools rely on the compiler plugin for their schemas, which must leave out the injected
-// `mcp:AuthContext` parameter and keep the `scopes` declared on `@mcp:Tool`.
-@mcp:StreamableHttpServiceConfig {
+// `mcpv2:AuthContext` parameter and keep the `scopes` declared on `@mcpv2:Tool`.
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "auth-plugin-test-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS,
+    sessionMode: mcpv2:STATELESS,
     httpConfig: {
         auth: {
             'resource: AUTH_PLUGIN_RESOURCE,
@@ -37,10 +37,10 @@ const AUTH_PLUGIN_RESOURCE = "http://localhost:8792/mcp";
         }
     }
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8792) {
+isolated service mcpv2:StreamableHttpService /mcp on new mcpv2:StreamableHttpListener(8792) {
 
-    @mcp:Tool {description: "Greets the caller"}
-    isolated remote function greet(mcp:AuthContext auth, string greeting) returns string {
+    @mcpv2:Tool {description: "Greets the caller"}
+    isolated remote function greet(mcpv2:AuthContext auth, string greeting) returns string {
         return greeting + ", " + (auth.subject ?: "anonymous");
     }
 
@@ -48,7 +48,7 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     #
     # + path - Path of the file
     # + return - A confirmation
-    @mcp:Tool {scopes: ["files:write"]}
+    @mcpv2:Tool {scopes: ["files:write"]}
     isolated remote function deleteFile(string path) returns string {
         return "deleted " + path;
     }

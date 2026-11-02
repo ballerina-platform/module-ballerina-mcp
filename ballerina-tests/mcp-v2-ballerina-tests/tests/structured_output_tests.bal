@@ -14,12 +14,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
-listener mcp:StreamableHttpListener structuredListener = check new (8789);
+listener mcpv2:StreamableHttpListener structuredListener = check new (8789);
 
-final mcp:ProtocolMode[] & readonly PROTOCOL_MODES = ["modern", "legacy"];
+final mcpv2:ProtocolMode[] & readonly PROTOCOL_MODES = ["modern", "legacy"];
 
 type Person record {|
     string name;
@@ -29,32 +29,32 @@ type Person record {|
 const boolean DISABLED_POLICY = false;
 const boolean structuredOutput = false;
 final boolean? runtimeOutputPolicy = selectRuntimeOutputPolicy();
-final mcp:ProtocolMode runtimeLegacyMode = selectLegacyProtocolMode();
+final mcpv2:ProtocolMode runtimeLegacyMode = selectLegacyProtocolMode();
 
 isolated function selectRuntimeOutputPolicy() returns boolean? => false;
-isolated function selectLegacyProtocolMode() returns mcp:ProtocolMode => "legacy";
+isolated function selectLegacyProtocolMode() returns mcpv2:ProtocolMode => "legacy";
 
-final mcp:McpToolConfig automaticPolicyConfig = {description: "Automatic policy"};
-final mcp:McpToolConfig disabledPolicyConfig = {description: "Disabled policy", structuredOutput: false};
+final mcpv2:McpToolConfig automaticPolicyConfig = {description: "Automatic policy"};
+final mcpv2:McpToolConfig disabledPolicyConfig = {description: "Disabled policy", structuredOutput: false};
 
-@mcp:StreamableHttpServiceConfig {info: {name: "structured-http", version: "1.0.0"}}
-service mcp:StreamableHttpService /structuredHttp on structuredListener {
-    @mcp:Tool {structuredOutput: DISABLED_POLICY}
+@mcpv2:StreamableHttpServiceConfig {info: {name: "structured-http", version: "1.0.0"}}
+service mcpv2:StreamableHttpService /structuredHttp on structuredListener {
+    @mcpv2:Tool {structuredOutput: DISABLED_POLICY}
     remote isolated function constantDisabledValue() returns int => 10;
 
-    @mcp:Tool {structuredOutput}
+    @mcpv2:Tool {structuredOutput}
     remote isolated function shorthandDisabledValue() returns int => 11;
 
-    @mcp:Tool {structuredOutput: runtimeOutputPolicy}
+    @mcpv2:Tool {structuredOutput: runtimeOutputPolicy}
     remote isolated function runtimeDisabledValue() returns int => 12;
 
-    @mcp:Tool {structuredOutput: ()}
+    @mcpv2:Tool {structuredOutput: ()}
     remote isolated function nilPolicyValue() returns int => 13;
 
-    @mcp:Tool {...automaticPolicyConfig}
+    @mcpv2:Tool {...automaticPolicyConfig}
     remote isolated function spreadAutomaticValue() returns int => 42;
 
-    @mcp:Tool {...disabledPolicyConfig}
+    @mcpv2:Tool {...disabledPolicyConfig}
     remote isolated function spreadDisabledValue() returns int => 7;
 
     remote isolated function stringValue() returns string => "hello";
@@ -65,7 +65,7 @@ service mcp:StreamableHttpService /structuredHttp on structuredListener {
 
     remote isolated function nullableValue() returns string? => ();
 
-    @mcp:Tool {structuredOutput: false}
+    @mcpv2:Tool {structuredOutput: false}
     remote isolated function textOnlyValue() returns string => "text only";
 
     remote isolated function noReturnValue() {
@@ -78,86 +78,86 @@ service mcp:StreamableHttpService /structuredHttp on structuredListener {
         {name: string `Al "the pal" \ O'Neil` + "\nsecond line", age: 40};
 }
 
-@mcp:StreamableHttpServiceConfig {info: {name: "structured-generic", version: "1.0.0"}}
-service mcp:StreamableHttpService /structuredGeneric on structuredListener {
+@mcpv2:StreamableHttpServiceConfig {info: {name: "structured-generic", version: "1.0.0"}}
+service mcpv2:StreamableHttpService /structuredGeneric on structuredListener {
     remote isolated function booleanValue() returns boolean => true;
 }
 
-@mcp:StreamableHttpServiceConfig {info: {name: "argument-headers", version: "1.0.0"}}
-service mcp:StreamableHttpService /argumentHeaders on structuredListener {
+@mcpv2:StreamableHttpServiceConfig {info: {name: "argument-headers", version: "1.0.0"}}
+service mcpv2:StreamableHttpService /argumentHeaders on structuredListener {
     remote isolated function mirrorArguments(
-            @mcp:Argument {headerName: "Region"} string region,
-            @mcp:Argument {headerName: "Retry-Count"} int retries,
-            @mcp:Argument {headerName: "Enabled"} boolean enabled) returns string {
+            @mcpv2:Argument {headerName: "Region"} string region,
+            @mcpv2:Argument {headerName: "Retry-Count"} int retries,
+            @mcpv2:Argument {headerName: "Enabled"} boolean enabled) returns string {
         return string `${region}:${retries}:${enabled}`;
     }
 }
 
 @test:Config {}
 function testCompilerGeneratedSchemasAndRawStructuredValues() returns error? {
-    mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+    mcpv2:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
             protocolMode = "modern");
     _ = check httpClient->connect();
-    mcp:ListToolsResult listedTools = check httpClient->listTools();
-    map<mcp:ToolDefinition> toolsByName = {};
-    foreach mcp:ToolDefinition toolInfo in listedTools.tools {
+    mcpv2:ListToolsResult listedTools = check httpClient->listTools();
+    map<mcpv2:ToolDefinition> toolsByName = {};
+    foreach mcpv2:ToolDefinition toolInfo in listedTools.tools {
         toolsByName[toolInfo.name] = toolInfo;
     }
     check assertSchemaType(check toolsByName["stringValue"].ensureType(), "string");
     check assertSchemaType(check toolsByName["arrayValue"].ensureType(), "array");
     check assertSchemaType(check toolsByName["personValue"].ensureType(), "object");
-    mcp:ToolDefinition nullableTool = check toolsByName["nullableValue"].ensureType();
-    mcp:OutputSchema nullableSchema = check nullableTool.outputSchema.ensureType();
+    mcpv2:ToolDefinition nullableTool = check toolsByName["nullableValue"].ensureType();
+    mcpv2:OutputSchema nullableSchema = check nullableTool.outputSchema.ensureType();
     test:assertTrue(nullableSchema.hasKey("anyOf"));
-    mcp:ToolDefinition textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
+    mcpv2:ToolDefinition textOnlyTool = check toolsByName["textOnlyValue"].ensureType();
     test:assertEquals(textOnlyTool.outputSchema, ());
 
-    mcp:CallToolResult stringResult = check httpClient->callTool({name: "stringValue"});
+    mcpv2:CallToolResult stringResult = check httpClient->callTool({name: "stringValue"});
     assertStructuredValue(stringResult, "hello");
-    mcp:CallToolResult arrayResult = check httpClient->callTool({name: "arrayValue"});
+    mcpv2:CallToolResult arrayResult = check httpClient->callTool({name: "arrayValue"});
     assertStructuredValue(arrayResult, <json>[1, 2, 3]);
-    mcp:CallToolResult personResult = check httpClient->callTool({name: "personValue"});
+    mcpv2:CallToolResult personResult = check httpClient->callTool({name: "personValue"});
     assertStructuredValue(personResult, <json>{name: "Alice", age: 30});
-    mcp:CallToolResult nullableResult = check httpClient->callTool({name: "nullableValue"});
+    mcpv2:CallToolResult nullableResult = check httpClient->callTool({name: "nullableValue"});
     test:assertTrue(nullableResult.hasKey("structuredContent"));
     test:assertEquals(nullableResult["structuredContent"], ());
-    mcp:CallToolResult textOnlyResult = check httpClient->callTool({name: "textOnlyValue"});
+    mcpv2:CallToolResult textOnlyResult = check httpClient->callTool({name: "textOnlyValue"});
     test:assertFalse(textOnlyResult.hasKey("structuredContent"));
     check httpClient->close();
 
-    mcp:StreamableHttpClient legacyClient = check new ("http://localhost:8789/structuredHttp",
+    mcpv2:StreamableHttpClient legacyClient = check new ("http://localhost:8789/structuredHttp",
             protocolMode = "legacy");
     _ = check legacyClient->connect();
-    mcp:ListToolsResult legacyTools = check legacyClient->listTools();
-    foreach mcp:ToolDefinition toolInfo in legacyTools.tools {
+    mcpv2:ListToolsResult legacyTools = check legacyClient->listTools();
+    foreach mcpv2:ToolDefinition toolInfo in legacyTools.tools {
         test:assertEquals(toolInfo.outputSchema, ());
     }
-    mcp:CallToolResult legacyResult = check legacyClient->callTool({name: "arrayValue"});
+    mcpv2:CallToolResult legacyResult = check legacyClient->callTool({name: "arrayValue"});
     test:assertFalse(legacyResult.hasKey("structuredContent"));
     check legacyClient->close();
 
-    mcp:StreamableHttpClient genericClient = check new ("http://localhost:8789/structuredGeneric",
+    mcpv2:StreamableHttpClient genericClient = check new ("http://localhost:8789/structuredGeneric",
             protocolMode = "modern");
     _ = check genericClient->connect();
-    mcp:CallToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
+    mcpv2:CallToolResult booleanResult = check genericClient->callTool({name: "booleanValue"});
     assertStructuredValue(booleanResult, true);
     check genericClient->close();
 }
 
 @test:Config {}
 function testNilOnlyReturnsAreUnstructured() returns error? {
-    mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+    mcpv2:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
             protocolMode = "modern");
     _ = check httpClient->connect();
-    mcp:ListToolsResult listedTools = check httpClient->listTools();
-    foreach mcp:ToolDefinition toolInfo in listedTools.tools {
+    mcpv2:ListToolsResult listedTools = check httpClient->listTools();
+    foreach mcpv2:ToolDefinition toolInfo in listedTools.tools {
         if toolInfo.name == "noReturnValue" || toolInfo.name == "errorOrNilValue" {
             test:assertEquals(toolInfo.outputSchema, (), toolInfo.name);
         }
     }
 
     foreach string toolName in ["noReturnValue", "errorOrNilValue"] {
-        mcp:CallToolResult result = check httpClient->callTool({name: toolName});
+        mcpv2:CallToolResult result = check httpClient->callTool({name: toolName});
         test:assertFalse(result.hasKey("structuredContent"), toolName);
         test:assertEquals(result.isError, (), toolName);
     }
@@ -166,12 +166,12 @@ function testNilOnlyReturnsAreUnstructured() returns error? {
 
 @test:Config {}
 function testNilResultHasNoTextContent() returns error? {
-    foreach mcp:ProtocolMode mode in PROTOCOL_MODES {
-        mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+    foreach mcpv2:ProtocolMode mode in PROTOCOL_MODES {
+        mcpv2:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
                 protocolMode = mode);
         _ = check httpClient->connect();
         foreach string toolName in ["nullableValue", "noReturnValue"] {
-            mcp:CallToolResult result = check httpClient->callTool({name: toolName});
+            mcpv2:CallToolResult result = check httpClient->callTool({name: toolName});
             test:assertEquals(result.content.length(), 0, string `${mode} ${toolName}`);
         }
         check httpClient->close();
@@ -181,13 +181,13 @@ function testNilResultHasNoTextContent() returns error? {
 @test:Config {}
 function testStructuredTextContentIsJson() returns error? {
     json expected = {name: string `Al "the pal" \ O'Neil` + "\nsecond line", age: 40};
-    foreach mcp:ProtocolMode mode in PROTOCOL_MODES {
-        mcp:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
+    foreach mcpv2:ProtocolMode mode in PROTOCOL_MODES {
+        mcpv2:StreamableHttpClient httpClient = check new ("http://localhost:8789/structuredHttp",
                 protocolMode = mode);
         _ = check httpClient->connect();
-        mcp:CallToolResult result = check httpClient->callTool({name: "escapedPersonValue"});
+        mcpv2:CallToolResult result = check httpClient->callTool({name: "escapedPersonValue"});
         test:assertEquals(result.content.length(), 1);
-        mcp:TextContent textContent = check result.content[0].ensureType();
+        mcpv2:TextContent textContent = check result.content[0].ensureType();
         test:assertEquals(check textContent.text.fromJsonString(), expected, mode);
         if mode == "modern" {
             assertStructuredValue(result, expected);
@@ -198,11 +198,11 @@ function testStructuredTextContentIsJson() returns error? {
 
 @test:Config {}
 function testMcpArgumentHeadersFromGeneratedSchema() returns error? {
-    mcp:StreamableHttpClient argumentClient = check new ("http://localhost:8789/argumentHeaders",
+    mcpv2:StreamableHttpClient argumentClient = check new ("http://localhost:8789/argumentHeaders",
             protocolMode = "modern");
     _ = check argumentClient->connect();
-    mcp:ListToolsResult listedTools = check argumentClient->listTools();
-    mcp:ToolDefinition mirrorTool = check listedTools.tools[0].ensureType();
+    mcpv2:ListToolsResult listedTools = check argumentClient->listTools();
+    mcpv2:ToolDefinition mirrorTool = check listedTools.tools[0].ensureType();
     map<json> properties = check mirrorTool.inputSchema.properties.ensureType();
     map<json> expectedHeaders = {
         "region": "Region",
@@ -214,7 +214,7 @@ function testMcpArgumentHeadersFromGeneratedSchema() returns error? {
         test:assertEquals(propertySchema["x-mcp-header"], expectedHeaders[parameterName]);
     }
 
-    mcp:CallToolResult result = check argumentClient->callTool({
+    mcpv2:CallToolResult result = check argumentClient->callTool({
         name: "mirrorArguments",
         arguments: {
             "region": "世界",
@@ -226,18 +226,18 @@ function testMcpArgumentHeadersFromGeneratedSchema() returns error? {
     check argumentClient->close();
 }
 
-function assertSchemaType(mcp:ToolDefinition toolInfo, string expectedType) returns error? {
-    mcp:OutputSchema outputSchema = check toolInfo.outputSchema.ensureType();
+function assertSchemaType(mcpv2:ToolDefinition toolInfo, string expectedType) returns error? {
+    mcpv2:OutputSchema outputSchema = check toolInfo.outputSchema.ensureType();
     test:assertEquals(outputSchema["type"], expectedType);
 }
 
-function assertStructuredValue(mcp:CallToolResult resultValue, json expectedValue) {
+function assertStructuredValue(mcpv2:CallToolResult resultValue, json expectedValue) {
     test:assertEquals(resultValue["structuredContent"], expectedValue);
 }
 
 @test:Config {}
 function testStructuredOutputPolicySurvivesConfigurationSpreads() returns error? {
-    mcp:StreamableHttpClient policyClient = check new ("http://localhost:8789/structuredHttp",
+    mcpv2:StreamableHttpClient policyClient = check new ("http://localhost:8789/structuredHttp",
         protocolMode = "modern");
     _ = check policyClient->connect();
     error? verificationError = trap assertSpreadPolicyResults(policyClient);
@@ -245,13 +245,13 @@ function testStructuredOutputPolicySurvivesConfigurationSpreads() returns error?
     return verificationError;
 }
 
-function assertSpreadPolicyResults(mcp:StreamableHttpClient policyClient) returns error? {
-    mcp:ListToolsResult toolList = check policyClient->listTools();
+function assertSpreadPolicyResults(mcpv2:StreamableHttpClient policyClient) returns error? {
+    mcpv2:ListToolsResult toolList = check policyClient->listTools();
     int matchedTools = 0;
-    foreach mcp:ToolDefinition toolInfo in toolList.tools {
+    foreach mcpv2:ToolDefinition toolInfo in toolList.tools {
         if toolInfo.name == "spreadAutomaticValue" {
             test:assertEquals(toolInfo.description, "Automatic policy");
-            test:assertTrue(toolInfo.outputSchema is mcp:OutputSchema);
+            test:assertTrue(toolInfo.outputSchema is mcpv2:OutputSchema);
             matchedTools += 1;
         } else if toolInfo.name == "spreadDisabledValue" {
             test:assertEquals(toolInfo.description, "Disabled policy");
@@ -260,23 +260,23 @@ function assertSpreadPolicyResults(mcp:StreamableHttpClient policyClient) return
         }
     }
     test:assertEquals(matchedTools, 2);
-    mcp:CallToolResult automaticResult = check policyClient->callTool({name: "spreadAutomaticValue"});
+    mcpv2:CallToolResult automaticResult = check policyClient->callTool({name: "spreadAutomaticValue"});
     test:assertEquals(automaticResult["structuredContent"], 42);
-    mcp:CallToolResult disabledResult = check policyClient->callTool({name: "spreadDisabledValue"});
+    mcpv2:CallToolResult disabledResult = check policyClient->callTool({name: "spreadDisabledValue"});
     test:assertFalse(disabledResult.hasKey("structuredContent"));
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "runtime-legacy", version: "1"}, protocolMode: runtimeLegacyMode
 }
-service mcp:StreamableHttpService /policyLegacy on structuredListener {
-    @mcp:Tool {structuredOutput: true}
+service mcpv2:StreamableHttpService /policyLegacy on structuredListener {
+    @mcpv2:Tool {structuredOutput: true}
     remote isolated function anyValue() returns any => 42;
 }
 
 @test:Config {}
 function testStructuredOutputPolicyAcrossFieldForms() returns error? {
-    mcp:StreamableHttpClient policyClient = check new (serverUrl = "http://localhost:8789/structuredHttp",
+    mcpv2:StreamableHttpClient policyClient = check new (serverUrl = "http://localhost:8789/structuredHttp",
         protocolMode = "modern");
     _ = check policyClient->connect();
     error? verificationError = trap assertFieldPolicyResults(policyClient);
@@ -284,54 +284,54 @@ function testStructuredOutputPolicyAcrossFieldForms() returns error? {
     return verificationError;
 }
 
-function assertFieldPolicyResults(mcp:StreamableHttpClient policyClient) returns error? {
-    mcp:ListToolsResult toolList = check policyClient->listTools();
+function assertFieldPolicyResults(mcpv2:StreamableHttpClient policyClient) returns error? {
+    mcpv2:ListToolsResult toolList = check policyClient->listTools();
     int disabledTools = 0;
-    foreach mcp:ToolDefinition toolInfo in toolList.tools {
+    foreach mcpv2:ToolDefinition toolInfo in toolList.tools {
         if toolInfo.name == "constantDisabledValue" || toolInfo.name == "shorthandDisabledValue" ||
                 toolInfo.name == "runtimeDisabledValue" {
             disabledTools += 1;
             test:assertEquals(actual = toolInfo.outputSchema, expected = ());
-            mcp:CallToolResult disabledResult = check policyClient->callTool(params = {name: toolInfo.name});
+            mcpv2:CallToolResult disabledResult = check policyClient->callTool(params = {name: toolInfo.name});
             test:assertFalse(condition = disabledResult.hasKey("structuredContent"));
         }
     }
     test:assertEquals(actual = disabledTools, expected = 3);
-    mcp:CallToolResult automaticResult = check policyClient->callTool(params = {name: "nilPolicyValue"});
+    mcpv2:CallToolResult automaticResult = check policyClient->callTool(params = {name: "nilPolicyValue"});
     test:assertEquals(actual = automaticResult["structuredContent"], expected = 13);
 }
 
 @test:Config {}
 function testRuntimeLegacyModeIgnoresUnusedRequiredOutput() returns error? {
-    mcp:StreamableHttpClient policyClient = check new (serverUrl = "http://localhost:8789/policyLegacy",
+    mcpv2:StreamableHttpClient policyClient = check new (serverUrl = "http://localhost:8789/policyLegacy",
         protocolMode = "legacy");
     _ = check policyClient->connect();
-    mcp:CallToolResult legacyResult = check policyClient->callTool(params = {name: "anyValue"});
+    mcpv2:CallToolResult legacyResult = check policyClient->callTool(params = {name: "anyValue"});
     test:assertFalse(condition = legacyResult.hasKey("structuredContent"));
     check policyClient->close();
 }
 
 
-final mcp:OutputSchema? optionalPolicySchema = selectOptionalPolicySchema();
-final mcp:McpToolConfig optionalSchemaConfig = {structuredOutput: true, outputSchema: optionalPolicySchema};
+final mcpv2:OutputSchema? optionalPolicySchema = selectOptionalPolicySchema();
+final mcpv2:McpToolConfig optionalSchemaConfig = {structuredOutput: true, outputSchema: optionalPolicySchema};
 
-function selectOptionalPolicySchema() returns mcp:OutputSchema? => ();
+function selectOptionalPolicySchema() returns mcpv2:OutputSchema? => ();
 
-service mcp:StreamableHttpService /optionalPolicy on structuredListener {
-    @mcp:Tool {structuredOutput: true, outputSchema: optionalPolicySchema}
+service mcpv2:StreamableHttpService /optionalPolicy on structuredListener {
+    @mcpv2:Tool {structuredOutput: true, outputSchema: optionalPolicySchema}
     remote isolated function inlineValue() returns int => 21;
 
-    @mcp:Tool {...optionalSchemaConfig}
+    @mcpv2:Tool {...optionalSchemaConfig}
     remote isolated function spreadValue() returns int => 21;
 }
 
 @test:Config {}
 function testOptionalOutputSchemaFallsBackToGeneratedSchema() returns error? {
-    mcp:StreamableHttpClient policyClient = check new (serverUrl = "http://localhost:8789/optionalPolicy",
+    mcpv2:StreamableHttpClient policyClient = check new (serverUrl = "http://localhost:8789/optionalPolicy",
         protocolMode = "modern");
     _ = check policyClient->connect();
     foreach string toolName in ["inlineValue", "spreadValue"] {
-        mcp:CallToolResult toolResult = check policyClient->callTool(params = {name: toolName});
+        mcpv2:CallToolResult toolResult = check policyClient->callTool(params = {name: toolName});
         test:assertEquals(actual = toolResult["structuredContent"], expected = 21);
     }
     check policyClient->close();

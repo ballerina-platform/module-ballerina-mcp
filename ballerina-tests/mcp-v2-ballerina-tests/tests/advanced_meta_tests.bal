@@ -14,20 +14,20 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
-// An mcp:StreamableHttpAdvancedService builds the whole CallToolResult, so it can attach server-originated
+// An mcpv2:StreamableHttpAdvancedService builds the whole CallToolResult, so it can attach server-originated
 // response _meta regardless of whether the client sent request _meta.
-listener mcp:StreamableHttpListener advancedMetaListener = check new (8768);
+listener mcpv2:StreamableHttpListener advancedMetaListener = check new (8768);
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "advanced-meta-test-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-service mcp:StreamableHttpAdvancedService /mcp on advancedMetaListener {
+service mcpv2:StreamableHttpAdvancedService /mcp on advancedMetaListener {
 
-    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    remote isolated function onListTools() returns mcpv2:ListToolsResult|mcpv2:ServerError {
         return {
             tools: [
                 {
@@ -39,10 +39,10 @@ service mcp:StreamableHttpAdvancedService /mcp on advancedMetaListener {
         };
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+    remote isolated function onCallTool(mcpv2:CallToolParams params, mcpv2:HttpSession? session)
+            returns mcpv2:CallToolResult|mcpv2:ServerError {
         // Server-originated metadata, independent of the request.
-        mcp:ResultMeta responseMeta = {"serverId": "srv-1"};
+        mcpv2:ResultMeta responseMeta = {"serverId": "srv-1"};
 
         // Optionally fold in a client-supplied key, if present.
         if params._meta is record {} {
@@ -60,15 +60,15 @@ service mcp:StreamableHttpAdvancedService /mcp on advancedMetaListener {
     }
 }
 
-final mcp:StreamableHttpClient advancedMetaClient = check new ("http://localhost:8768/mcp");
-final mcp:Implementation advancedMetaClientInfo = {name: "advanced-meta-test-client", version: "1.0.0"};
+final mcpv2:StreamableHttpClient advancedMetaClient = check new ("http://localhost:8768/mcp");
+final mcpv2:Implementation advancedMetaClientInfo = {name: "advanced-meta-test-client", version: "1.0.0"};
 
 @test:Config
 function testAdvancedServiceOriginatesResponseMetaWithoutRequestMeta() returns error? {
     _ = check advancedMetaClient->connect(advancedMetaClientInfo);
 
     // The client sends no _meta, yet the server attaches its own response _meta.
-    mcp:CallToolResult result = check advancedMetaClient->callTool({name: "ping"});
+    mcpv2:CallToolResult result = check advancedMetaClient->callTool({name: "ping"});
 
     test:assertTrue(result._meta is record {},
             msg = "AdvancedService must be able to originate response _meta with no request _meta");
@@ -80,7 +80,7 @@ function testAdvancedServiceOriginatesResponseMetaWithoutRequestMeta() returns e
 
 @test:Config {dependsOn: [testAdvancedServiceOriginatesResponseMetaWithoutRequestMeta]}
 function testAdvancedServiceReadsRequestMetaAndReturnsOwn() returns error? {
-    mcp:CallToolResult result = check advancedMetaClient->callTool({
+    mcpv2:CallToolResult result = check advancedMetaClient->callTool({
         name: "ping",
         _meta: {"traceId": "trace-xyz"}
     });

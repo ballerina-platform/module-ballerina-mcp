@@ -15,36 +15,36 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
 // Streamable HTTP service configured through the transport-specific
-// @mcp:StreamableHttpServiceConfig annotation; header binding is allowed here.
-@mcp:StreamableHttpServiceConfig {
+// @mcpv2:StreamableHttpServiceConfig annotation; header binding is allowed here.
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "transport-named-listener-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS,
+    sessionMode: mcpv2:STATELESS,
     httpConfig: {treatNilableAsOptional: false}
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8769) {
+isolated service mcpv2:StreamableHttpService /mcp on new mcpv2:StreamableHttpListener(8769) {
 
-    @mcp:Tool {description: "Header binding on the Streamable HTTP service"}
+    @mcpv2:Tool {description: "Header binding on the Streamable HTTP service"}
     isolated remote function greet(@http:Header string authorization, string name) returns string {
         return name + ":" + authorization;
     }
 
-    @mcp:Tool {description: "Nilable header under strict mode set via @mcp:StreamableHttpServiceConfig"}
+    @mcpv2:Tool {description: "Nilable header under strict mode set via @mcpv2:StreamableHttpServiceConfig"}
     isolated remote function tenant(@http:Header {name: "X-Tenant-Id"} string? tenant) returns string {
         return tenant ?: "<none>";
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "transport-config-precedence-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8791) {
+isolated service mcpv2:StreamableHttpService /mcp on new mcpv2:StreamableHttpListener(8791) {
 
-    @mcp:Tool {description: "Returns a fixed value"}
+    @mcpv2:Tool {description: "Returns a fixed value"}
     isolated remote function echo() returns string {
         return "ok";
     }
@@ -67,7 +67,7 @@ function testHeaderBindingOnStreamableHttpListener() returns error? {
 
 @test:Config
 function testStrictModeViaTransportConfigAnnotation() returns error? {
-    // treatNilableAsOptional=false comes from @mcp:StreamableHttpServiceConfig.httpConfig:
+    // treatNilableAsOptional=false comes from @mcpv2:StreamableHttpServiceConfig.httpConfig:
     // a missing nilable header must be rejected as invalid params
     json payload = check rawCallTool(rawTransportClient, "tenant", {});
     string message = check getRawErrorMessage(payload);
@@ -82,11 +82,11 @@ function testStrictModeViaTransportConfigAnnotation() returns error? {
 @test:Config
 function testTransportConfigSessionMode() returns error? {
     // No initialize handshake and no mcp-session-id header: only works if the effective
-    // session mode is STATELESS as configured by @mcp:StreamableHttpServiceConfig.
+    // session mode is STATELESS as configured by @mcpv2:StreamableHttpServiceConfig.
     json payload = check rawCallTool(rawPrecedenceClient, "echo", {});
     json|error errorField = payload.'error;
     if errorField is json {
-        test:assertFail("expected STATELESS behavior from @mcp:StreamableHttpServiceConfig, got: "
+        test:assertFail("expected STATELESS behavior from @mcpv2:StreamableHttpServiceConfig, got: "
             + errorField.toString());
     }
     test:assertEquals(check getRawTextResult(payload), "ok");

@@ -4,7 +4,7 @@ This package provides APIs for building MCP (Model Context Protocol) clients and
 
 | Module | Import | Protocol |
 | --- | --- | --- |
-| `ballerina/mcp.v2`, the v2 module | `import ballerina/mcp.v2 as mcp;` | MCP `2026-07-28`, which can still communicate with servers and clients using the initialize-based protocol through `2025-11-25` |
+| `ballerina/mcp.v2`, the v2 module | `import ballerina/mcp.v2 as mcpv2;` | MCP `2026-07-28`, which can still communicate with servers and clients using the initialize-based protocol through `2025-11-25` |
 | `ballerina/mcp`, the 1.x API | `import ballerina/mcp;` | The initialize-based protocol through `2025-11-25` |
 
 Use the v2 module for new code. The 1.x API keeps working unchanged, but its client and its transport-agnostic services are deprecated in favour of the v2 module.
@@ -14,7 +14,7 @@ Use the v2 module for new code. The 1.x API keeps working unchanged, but its cli
 Import the v2 module with the `mcp` prefix, so that its documentation and examples apply as written:
 
 ```ballerina
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 ```
 
 ### Key Features
@@ -30,17 +30,17 @@ import ballerina/mcp.v2 as mcp;
 A basic service exposes each remote method as a tool. The compiler derives its input and output schemas from the method signature.
 
 ```ballerina
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 
-listener mcp:StreamableHttpListener mcpListener = check new (9090);
+listener mcpv2:StreamableHttpListener mcpListener = check new (9090);
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {
         name: "calculator",
         version: "1.0.0"
     }
 }
-service mcp:StreamableHttpService /mcp on mcpListener {
+service mcpv2:StreamableHttpService /mcp on mcpListener {
     # Add two numbers.
     remote isolated function add(int left, int right) returns int {
         return left + right;
@@ -52,13 +52,13 @@ service mcp:StreamableHttpService /mcp on mcpListener {
 
 ```ballerina
 import ballerina/io;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 
 public function main() returns error? {
-    final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp");
+    final mcpv2:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp");
     _ = check mcpClient->connect({name: "example-client", version: "1.0.0"});
 
-    mcp:CallToolResult result = check mcpClient->callTool({
+    mcpv2:CallToolResult result = check mcpClient->callTool({
         name: "add",
         arguments: {"left": 2, "right": 3}
     });
@@ -95,11 +95,11 @@ These 1.x symbols are deprecated in favour of the v2 module:
 
 | Deprecated | Replacement in the v2 module |
 | --- | --- |
-| `mcp:StreamableHttpClient` | `mcp.v2:StreamableHttpClient` |
-| `mcp:Service` | `mcp.v2:StreamableHttpService` on an `mcp.v2:StreamableHttpListener` |
-| `mcp:AdvancedService` | `mcp.v2:StreamableHttpAdvancedService` on an `mcp.v2:StreamableHttpListener` |
-| `@mcp:ServiceConfig` | `@mcp.v2:StreamableHttpServiceConfig` |
-| `mcp:Listener` | `mcp:StreamableHttpListener`, or `mcp.v2:StreamableHttpListener` |
+| `mcp:StreamableHttpClient` | `mcpv2:StreamableHttpClient` |
+| `mcp:Service` | `mcpv2:StreamableHttpService` on an `mcpv2:StreamableHttpListener` |
+| `mcp:AdvancedService` | `mcpv2:StreamableHttpAdvancedService` on an `mcpv2:StreamableHttpListener` |
+| `@mcp:ServiceConfig` | `@mcpv2:StreamableHttpServiceConfig` |
+| `mcp:Listener` | `mcp:StreamableHttpListener`, or `mcpv2:StreamableHttpListener` |
 
 ### Quickstart
 

@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
 type CartItem record {|
@@ -23,13 +23,13 @@ type CartItem record {|
     int qty;
 |};
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "error-handling-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8778) {
+isolated service mcpv2:StreamableHttpService /mcp on new mcpv2:StreamableHttpListener(8778) {
 
-    @mcp:Tool {description: "Divides two numbers"}
+    @mcpv2:Tool {description: "Divides two numbers"}
     isolated remote function divide(int a, int b) returns int|error {
         if b == 0 {
             return error("division by zero: b must be non-zero");
@@ -37,50 +37,50 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
         return a / b;
     }
 
-    @mcp:Tool {description: "Panics with an index out of range"}
+    @mcpv2:Tool {description: "Panics with an index out of range"}
     isolated remote function panicking() returns int {
         int[] empty = [];
         return empty[5];
     }
 
-    @mcp:Tool {description: "Scales a fixed value by the given factor"}
+    @mcpv2:Tool {description: "Scales a fixed value by the given factor"}
     isolated remote function scale(float factor) returns float => 2.0 * factor;
 
-    @mcp:Tool {description: "Adds an item to the cart"}
+    @mcpv2:Tool {description: "Adds an item to the cart"}
     isolated remote function addItem(CartItem item, int count) returns string {
         return string `${item.name}:${item.qty}x${count}`;
     }
 
-    @mcp:Tool {description: "Greets by name, with an optional greeting"}
+    @mcpv2:Tool {description: "Greets by name, with an optional greeting"}
     isolated remote function greet(string name, string? greeting) returns string {
         return string `${greeting ?: "Hello"}, ${name}`;
     }
 
-    @mcp:Tool {description: "Returns the weather for a city"}
+    @mcpv2:Tool {description: "Returns the weather for a city"}
     isolated remote function weather(string city, string unit = "celsius") returns string {
         return string `city=${city} unit=${unit}`;
     }
 
-    @mcp:Tool {description: "Returns at most the given number of results"}
+    @mcpv2:Tool {description: "Returns at most the given number of results"}
     isolated remote function search(int? maxCount = 6) returns string {
         return maxCount is () ? "maxCount=()" : string `maxCount=${maxCount}`;
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "advanced-error-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8779) {
+isolated service mcpv2:StreamableHttpAdvancedService /mcp on new mcpv2:StreamableHttpListener(8779) {
 
-    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    isolated remote function onListTools() returns mcpv2:ListToolsResult|mcpv2:ServerError {
         return {tools: [{name: "ping", description: "Pings the server", inputSchema: {"type": "object"}}]};
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+    isolated remote function onCallTool(mcpv2:CallToolParams params, mcpv2:HttpSession? session)
+            returns mcpv2:CallToolResult|mcpv2:ServerError {
         if params.name == "failing" {
-            return error mcp:ServerError("upstream API returned 503");
+            return error mcpv2:ServerError("upstream API returned 503");
         }
         if params.name == "panicking" {
             int[] empty = [];
@@ -90,45 +90,45 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "stateful-error-server", version: "1.0.0"},
-    sessionMode: mcp:STATEFUL
+    sessionMode: mcpv2:STATEFUL
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8780) {
+isolated service mcpv2:StreamableHttpService /mcp on new mcpv2:StreamableHttpListener(8780) {
 
-    @mcp:Tool {description: "Returns a greeting"}
+    @mcpv2:Tool {description: "Returns a greeting"}
     isolated remote function greet() returns string => "hello";
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "list-tools-failing-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8781) {
+isolated service mcpv2:StreamableHttpAdvancedService /mcp on new mcpv2:StreamableHttpListener(8781) {
 
-    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
-        return error mcp:ServerError("tool registry is unavailable");
+    isolated remote function onListTools() returns mcpv2:ListToolsResult|mcpv2:ServerError {
+        return error mcpv2:ServerError("tool registry is unavailable");
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+    isolated remote function onCallTool(mcpv2:CallToolParams params, mcpv2:HttpSession? session)
+            returns mcpv2:CallToolResult|mcpv2:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "list-tools-panicking-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8782) {
+isolated service mcpv2:StreamableHttpAdvancedService /mcp on new mcpv2:StreamableHttpListener(8782) {
 
-    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    isolated remote function onListTools() returns mcpv2:ListToolsResult|mcpv2:ServerError {
         int[] empty = [];
         return {tools: [{name: empty[5].toString(), inputSchema: {"type": "object"}}]};
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+    isolated remote function onCallTool(mcpv2:CallToolParams params, mcpv2:HttpSession? session)
+            returns mcpv2:CallToolResult|mcpv2:ServerError {
         return {content: [{'type: "text", text: "unused"}]};
     }
 }
@@ -308,7 +308,7 @@ function testAdvancedServiceServerErrorStaysProtocolError() returns error? {
     http:Response response = check callTool(advancedErrorClient, "failing");
     test:assertEquals(response.statusCode, http:STATUS_OK);
     json payload = check response.getJsonPayload();
-    test:assertEquals(check payload.'error.code, mcp:INTERNAL_ERROR);
+    test:assertEquals(check payload.'error.code, mcpv2:INTERNAL_ERROR);
     test:assertEquals(check payload.'error.message,
             "Failed to call tool 'failing': upstream API returned 503");
 }
@@ -326,7 +326,7 @@ function testPanicInAdvancedServiceIsReportedAsInternalError() returns error? {
     http:Response response = check callTool(advancedErrorClient, "panicking");
     test:assertEquals(response.statusCode, http:STATUS_OK);
     json payload = check response.getJsonPayload();
-    test:assertEquals(check payload.'error.code, mcp:INTERNAL_ERROR);
+    test:assertEquals(check payload.'error.code, mcpv2:INTERNAL_ERROR);
 }
 
 @test:Config {dependsOn: [testPanicInAdvancedServiceIsReportedAsInternalError]}
@@ -345,7 +345,7 @@ function testUnknownMethodReturnsMethodNotFoundWithOkStatus() returns error? {
     http:Response response = check errorHandlingClient->post("/mcp", request);
     test:assertEquals(response.statusCode, http:STATUS_OK);
     json payload = check response.getJsonPayload();
-    test:assertEquals(check payload.'error.code, mcp:METHOD_NOT_FOUND);
+    test:assertEquals(check payload.'error.code, mcpv2:METHOD_NOT_FOUND);
 }
 
 @test:Config
@@ -357,7 +357,7 @@ function testMalformedJsonBodyReturnsParseError() returns error? {
     http:Response response = check errorHandlingClient->post("/mcp", request);
     test:assertEquals(response.statusCode, http:STATUS_BAD_REQUEST);
     json payload = check response.getJsonPayload();
-    test:assertEquals(check payload.'error.code, mcp:PARSE_ERROR);
+    test:assertEquals(check payload.'error.code, mcpv2:PARSE_ERROR);
 }
 
 @test:Config
@@ -368,7 +368,7 @@ function testNonJsonRpcBodyReturnsInvalidRequest() returns error? {
     http:Response response = check errorHandlingClient->post("/mcp", request);
     test:assertEquals(response.statusCode, http:STATUS_BAD_REQUEST);
     json payload = check response.getJsonPayload();
-    test:assertEquals(check payload.'error.code, mcp:INVALID_REQUEST);
+    test:assertEquals(check payload.'error.code, mcpv2:INVALID_REQUEST);
     test:assertEquals(check payload.'error.message, "Invalid Request: not a valid JSON-RPC message");
 }
 
@@ -381,7 +381,7 @@ function testUnknownSessionReturnsNotFound() returns error? {
     http:Response response = check statefulErrorClient->post("/mcp", request);
     test:assertEquals(response.statusCode, http:STATUS_NOT_FOUND);
     json payload = check response.getJsonPayload();
-    test:assertEquals(check payload.'error.code, mcp:INVALID_REQUEST);
+    test:assertEquals(check payload.'error.code, mcpv2:INVALID_REQUEST);
 }
 
 @test:Config
@@ -389,7 +389,7 @@ function testDeleteOnStatelessServiceReturnsBadRequest() returns error? {
     http:Response response = check errorHandlingClient->delete("/mcp", new http:Request());
     test:assertEquals(response.statusCode, http:STATUS_BAD_REQUEST);
     json payload = check response.getJsonPayload();
-    test:assertEquals(check payload.'error.code, mcp:INVALID_REQUEST);
+    test:assertEquals(check payload.'error.code, mcpv2:INVALID_REQUEST);
 }
 
 @test:Config
@@ -428,7 +428,7 @@ function testCallToolWithoutNameReturnsInvalidParams() returns error? {
             {jsonrpc: "2.0", id: 1, method: "tools/call", params: {arguments: {}}});
     test:assertEquals(response.statusCode, http:STATUS_OK);
     [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
-    test:assertEquals(code, mcp:INVALID_PARAMS);
+    test:assertEquals(code, mcpv2:INVALID_PARAMS);
     test:assertEquals(message, "Invalid parameters for 'tools/call'");
 }
 
@@ -438,7 +438,7 @@ function testInitializeWithInvalidParamsReturnsInvalidParams() returns error? {
             {jsonrpc: "2.0", id: 1, method: "initialize", params: {capabilities: {}}});
     test:assertEquals(response.statusCode, http:STATUS_OK);
     [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
-    test:assertEquals(code, mcp:INVALID_PARAMS);
+    test:assertEquals(code, mcpv2:INVALID_PARAMS);
     test:assertEquals(message, "Invalid parameters for 'initialize'");
     test:assertFalse(message.includes("record {|"), "record definitions must not reach the caller");
 }
@@ -489,7 +489,7 @@ function testCallToolWithUnknownSessionReturnsNotFound() returns error? {
             "00000000-0000-0000-0000-000000000000");
     test:assertEquals(response.statusCode, http:STATUS_NOT_FOUND);
     [int, string] [code, _] = check getJsonRpcError(check response.getJsonPayload());
-    test:assertEquals(code, mcp:INVALID_REQUEST);
+    test:assertEquals(code, mcpv2:INVALID_REQUEST);
 }
 
 @test:Config
@@ -507,7 +507,7 @@ function testReinitializingAnActiveSessionIsRejected() returns error? {
     }, sessionId);
     test:assertEquals(response.statusCode, http:STATUS_OK);
     [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
-    test:assertEquals(code, mcp:INVALID_REQUEST);
+    test:assertEquals(code, mcpv2:INVALID_REQUEST);
     test:assertTrue(message.startsWith("Session already initialized"), message);
 }
 
@@ -516,7 +516,7 @@ function testListToolsServerErrorIsReportedAsInternalError() returns error? {
     http:Response response = check listTools(listToolsFailingClient);
     test:assertEquals(response.statusCode, http:STATUS_OK);
     [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
-    test:assertEquals(code, mcp:INTERNAL_ERROR);
+    test:assertEquals(code, mcpv2:INTERNAL_ERROR);
     test:assertEquals(message, "Failed to list tools: tool registry is unavailable");
 }
 
@@ -525,7 +525,7 @@ function testPanicInListToolsIsReportedAsInternalError() returns error? {
     http:Response response = check listTools(listToolsPanickingClient);
     test:assertEquals(response.statusCode, http:STATUS_OK);
     [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
-    test:assertEquals(code, mcp:INTERNAL_ERROR);
+    test:assertEquals(code, mcpv2:INTERNAL_ERROR);
     test:assertEquals(message, "Failed to list tools: Listing tools failed unexpectedly.");
     test:assertFalse(message.includes("array index out of range"), "panic detail must not reach the caller");
 }

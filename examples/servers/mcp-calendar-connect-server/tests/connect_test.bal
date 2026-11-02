@@ -16,39 +16,39 @@
 
 import ballerina/http;
 import ballerina/jwt;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
 final http:Client browser = check new (origin);
 
 @test:Config {}
 function testToolCompletesOnlyAfterTheConnectPageRecordsTheConnection() returns error? {
-    mcp:StreamableHttpClient alice = check userClient("alice");
-    mcp:CallToolResult|mcp:InputRequiredResult result = check alice->callToolOnce({name: "listEvents"});
-    mcp:InputRequiredResult firstAsk = check askedToConnect(result);
+    mcpv2:StreamableHttpClient alice = check userClient("alice");
+    mcpv2:CallToolResult|mcpv2:InputRequiredResult result = check alice->callToolOnce({name: "listEvents"});
+    mcpv2:InputRequiredResult firstAsk = check askedToConnect(result);
 
     // Accepting only means the user agreed to open the link, so the tool asks again.
     result = check alice->callToolOnce(continuation(firstAsk));
-    mcp:InputRequiredResult secondAsk = check askedToConnect(result);
+    mcpv2:InputRequiredResult secondAsk = check askedToConnect(result);
     test:assertEquals(connectUrl(secondAsk), connectUrl(firstAsk));
 
     http:Response page = check openConnectPage(connectUrl(secondAsk), "alice");
     test:assertEquals(page.statusCode, http:STATUS_OK);
 
     result = check alice->callToolOnce(continuation(secondAsk));
-    if result !is mcp:CallToolResult {
+    if result !is mcpv2:CallToolResult {
         return error("Expected the tool to complete after the connection was recorded");
     }
     test:assertEquals(result.content[0],
-            <mcp:TextContent>{'type: "text", text: "[\"09:30 Standup\",\"14:00 Design review\"]"});
+            <mcpv2:TextContent>{'type: "text", text: "[\"09:30 Standup\",\"14:00 Design review\"]"});
     check alice->close();
 }
 
 @test:Config {}
 function testConnectPageRejectsAnotherUser() returns error? {
-    mcp:StreamableHttpClient carol = check userClient("carol");
-    mcp:CallToolResult|mcp:InputRequiredResult result = check carol->callToolOnce({name: "listEvents"});
-    mcp:InputRequiredResult ask = check askedToConnect(result);
+    mcpv2:StreamableHttpClient carol = check userClient("carol");
+    mcpv2:CallToolResult|mcpv2:InputRequiredResult result = check carol->callToolOnce({name: "listEvents"});
+    mcpv2:InputRequiredResult ask = check askedToConnect(result);
 
     http:Response page = check openConnectPage(connectUrl(ask), "mallory");
     test:assertEquals(page.statusCode, http:STATUS_FORBIDDEN);
@@ -61,12 +61,12 @@ function testConnectPageRejectsAnotherUser() returns error? {
 
 @test:Config {}
 function testDecliningToConnectEndsTheCall() returns error? {
-    mcp:StreamableHttpClient dave = check userClient("dave");
-    mcp:CallToolResult|mcp:InputRequiredResult result = check dave->callToolOnce({name: "listEvents"});
-    mcp:InputRequiredResult ask = check askedToConnect(result);
+    mcpv2:StreamableHttpClient dave = check userClient("dave");
+    mcpv2:CallToolResult|mcpv2:InputRequiredResult result = check dave->callToolOnce({name: "listEvents"});
+    mcpv2:InputRequiredResult ask = check askedToConnect(result);
 
     result = check dave->callToolOnce(continuation(ask, {action: "decline"}));
-    if result !is mcp:CallToolResult {
+    if result !is mcpv2:CallToolResult {
         return error("Expected the tool to stop asking after a decline");
     }
     test:assertEquals(result.isError, true);
@@ -82,33 +82,33 @@ isolated function userToken(string subject) returns string|error {
     });
 }
 
-function userClient(string subject) returns mcp:StreamableHttpClient|error {
-    mcp:StreamableHttpClient mcpClient = check new (mcpUrl,
+function userClient(string subject) returns mcpv2:StreamableHttpClient|error {
+    mcpv2:StreamableHttpClient mcpClient = check new (mcpUrl,
         protocolMode = "modern",
         httpConfig = {auth: {token: check userToken(subject)}},
         // Advertises URL-mode elicitation; callToolOnce never invokes it.
-        elicitationHandler = isolated function(mcp:ElicitRequest request) returns mcp:ElicitResult|mcp:ClientError =>
-            error mcp:ClientError("Not called by callToolOnce")
+        elicitationHandler = isolated function(mcpv2:ElicitRequest request) returns mcpv2:ElicitResult|mcpv2:ClientError =>
+            error mcpv2:ClientError("Not called by callToolOnce")
     );
     _ = check mcpClient->connect();
     return mcpClient;
 }
 
-isolated function askedToConnect(mcp:CallToolResult|mcp:InputRequiredResult result)
-        returns mcp:InputRequiredResult|error {
-    if result is mcp:InputRequiredResult {
+isolated function askedToConnect(mcpv2:CallToolResult|mcpv2:InputRequiredResult result)
+        returns mcpv2:InputRequiredResult|error {
+    if result is mcpv2:InputRequiredResult {
         return result;
     }
     return error("Expected the tool to ask the user to connect");
 }
 
-isolated function connectUrl(mcp:InputRequiredResult result) returns string {
-    mcp:InputRequest request = (<map<mcp:InputRequest>>result.inputRequests).get("connect");
-    return (<mcp:UrlElicitationParams>request.params).url;
+isolated function connectUrl(mcpv2:InputRequiredResult result) returns string {
+    mcpv2:InputRequest request = (<map<mcpv2:InputRequest>>result.inputRequests).get("connect");
+    return (<mcpv2:UrlElicitationParams>request.params).url;
 }
 
-isolated function continuation(mcp:InputRequiredResult result, mcp:ElicitResult answer = {action: "accept"})
-        returns mcp:CallToolParams => {
+isolated function continuation(mcpv2:InputRequiredResult result, mcpv2:ElicitResult answer = {action: "accept"})
+        returns mcpv2:CallToolParams => {
     name: "listEvents",
     inputResponses: {"connect": answer},
     requestState: <string>result.requestState

@@ -15,29 +15,29 @@
 // under the License.
 
 import ballerina/log;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/time;
 
-listener mcp:StreamableHttpListener mcpListener = check new (9090);
+listener mcpv2:StreamableHttpListener mcpListener = check new (9090);
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {
         name: "MCP Weather Server",
         version: "1.0.0"
     },
-    sessionMode: mcp:AUTO
+    sessionMode: mcpv2:AUTO
 }
-service mcp:StreamableHttpService /mcp on mcpListener {
-    @mcp:Tool {
+service mcpv2:StreamableHttpService /mcp on mcpListener {
+    @mcpv2:Tool {
         description: string `
             **Description**: Get current weather conditions for a location
             **Parameters**:
             - location (string, required): City name or coordinates (e.g., "London", "40.7128,-74.0060")
             `
     }
-    remote function getCurrentWeather(string city, mcp:RequestMeta? meta) returns Weather|error {
+    remote function getCurrentWeather(string city, mcpv2:RequestMeta? meta) returns Weather|error {
         // Log received metadata if present
-        if meta is mcp:RequestMeta {
+        if meta is mcpv2:RequestMeta {
             log:printInfo(string `Received _meta from client: ${meta.toJsonString()}`);
         }
 
@@ -74,9 +74,9 @@ service mcp:StreamableHttpService /mcp on mcpListener {
     # + days - Number of days to forecast (1-7)
     # + meta - Optional metadata for the request
     # + return - Weather forecast for the specified location and days
-    remote function getWeatherForecast(string location, int days, mcp:RequestMeta? meta) returns WeatherForecast|error {
+    remote function getWeatherForecast(string location, int days, mcpv2:RequestMeta? meta) returns WeatherForecast|error {
         // Log received metadata if present
-        if meta is mcp:RequestMeta {
+        if meta is mcpv2:RequestMeta {
             log:printInfo(string `Received _meta from client: ${meta.toJsonString()}`);
         }
 

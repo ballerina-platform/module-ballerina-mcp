@@ -17,8 +17,8 @@
 # Represents an MCP client built on top of the Streamable HTTP transport.
 #
 # # Deprecated
-# The 1.x client is replaced by the v2 module's client. Use `mcp.v2:StreamableHttpClient`
-# (`import ballerina/mcp.v2 as mcp;`) instead.
+# The 1.x client is replaced by the v2 module's client. Use `mcpv2:StreamableHttpClient`
+# (`import ballerina/mcp.v2 as mcpv2;`) instead.
 @deprecated
 public distinct isolated client class StreamableHttpClient {
     # Transport for communication with the MCP server.

@@ -7,7 +7,7 @@ supports MCP `2026-07-28` and can still communicate with servers and clients usi
 Import it with the `mcp` prefix, which the rest of this documentation uses:
 
 ```ballerina
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 ```
 
 ### Key Features
@@ -19,7 +19,7 @@ import ballerina/mcp.v2 as mcp;
 
 ## Protocol modes
 
-Set `protocolMode` on the client or in `@mcp:StreamableHttpServiceConfig`.
+Set `protocolMode` on the client or in `@mcpv2:StreamableHttpServiceConfig`.
 
 | Mode | Client behavior | Server behavior |
 | --- | --- | --- |
@@ -30,9 +30,9 @@ Set `protocolMode` on the client or in `@mcp:StreamableHttpServiceConfig`.
 `"auto"` is the default. Existing MCP clients can continue to connect to an auto-mode Ballerina server. The server
 recognizes the request form and follows the corresponding lifecycle.
 
-Modern MCP requests are sessionless. A service that requires an `mcp:HttpSession` parameter can serve legacy requests
+Modern MCP requests are sessionless. A service that requires an `mcpv2:HttpSession` parameter can serve legacy requests
 in `"auto"` or `"legacy"` mode. It cannot serve modern tool calls. The compiler reports this combination. A nilable
-`mcp:HttpSession?` is permitted and receives `()` for a modern request; the compiler warns so that application code
+`mcpv2:HttpSession?` is permitted and receives `()` for a modern request; the compiler warns so that application code
 can handle that case deliberately.
 
 ## Basic server
@@ -41,22 +41,22 @@ A basic service exposes each remote method as a tool. The compiler derives its i
 signature.
 
 ```ballerina
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 
-listener mcp:StreamableHttpListener mcpListener = check new (9090);
+listener mcpv2:StreamableHttpListener mcpListener = check new (9090);
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {
         name: "calculator",
         version: "2.0.0"
     },
     protocolMode: "auto",
-    sessionMode: mcp:AUTO
+    sessionMode: mcpv2:AUTO
 }
-service mcp:StreamableHttpService /mcp on mcpListener {
+service mcpv2:StreamableHttpService /mcp on mcpListener {
     # Add two numbers.
     remote isolated function add(int left, int right,
-            mcp:RequestMeta? meta) returns int {
+            mcpv2:RequestMeta? meta) returns int {
         return left + right;
     }
 }
@@ -67,7 +67,7 @@ the MCP transport's required inbound `Origin` validation, on modern and legacy r
 request without an `Origin` header is accepted; one whose origin is not listed, or matched by `*`, gets `403 Forbidden`.
 
 ```ballerina
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "calculator", version: "2.0.0"},
     httpConfig: {
         cors: {
@@ -76,17 +76,17 @@ request without an `Origin` header is accepted; one whose origin is not listed, 
         }
     }
 }
-service mcp:StreamableHttpService /mcp on mcpListener {
+service mcpv2:StreamableHttpService /mcp on mcpListener {
     // Tools
 }
 ```
 
 A tool may bind these runtime values in addition to ordinary `anydata` arguments:
 
-- `mcp:HttpSession` or `mcp:HttpSession?`, at any position, for legacy HTTP session state.
-- `mcp:RequestMeta?`, at any position, for the request's `_meta` value.
+- `mcpv2:HttpSession` or `mcpv2:HttpSession?`, at any position, for legacy HTTP session state.
+- `mcpv2:RequestMeta?`, at any position, for the request's `_meta` value.
 - `@http:Header` parameters, `http:Headers`, and `http:Request` for Streamable HTTP request data.
-- `mcp:Context`, at any position, for the input responses and request state of a continuation (see
+- `mcpv2:Context`, at any position, for the input responses and request state of a continuation (see
   [Eliciting input from a basic service](#eliciting-input-from-a-basic-service)).
 
 Runtime parameters do not appear in the generated tool input schema. Request metadata must be nilable because clients
@@ -128,10 +128,10 @@ For a legacy request, basic tools keep the 1.x wire shape: `tools/list` advertis
 carry only the text content block, without `structuredContent`. Results from an advanced service are kept within the
 legacy schema: an `outputSchema` or `structuredContent` whose root is not an object is removed.
 
-Use `@mcp:Tool` to override generated metadata:
+Use `@mcpv2:Tool` to override generated metadata:
 
 ```ballerina
-@mcp:Tool {
+@mcpv2:Tool {
     description: "Return account balances",
     schema: {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -150,7 +150,7 @@ remote isolated function balances(string accountId) returns decimal[] {
 }
 ```
 
-Set `structuredOutput: false` in `@mcp:Tool` to disable structured output. An automatically generated schema can be
+Set `structuredOutput: false` in `@mcpv2:Tool` to disable structured output. An automatically generated schema can be
 disabled by a runtime policy value; a supplied `outputSchema` conflicts with `false` in `auto` and `modern` modes.
 
 `InputSchema` enforces an object root. `OutputSchema` allows any JSON Schema root. Both are open records and accept
@@ -158,17 +158,17 @@ JSON Schema keywords that the module does not declare. Until Ballerina provides 
 documents are carried as metadata; Ballerina type binding remains responsible for ordinary tool arguments.
 
 To mirror a regular-service tool argument into the modern MCP parameter header, annotate the argument with
-`@mcp:Argument`. The argument remains in `tools/call.params.arguments`; the generated input schema carries the
+`@mcpv2:Argument`. The argument remains in `tools/call.params.arguments`; the generated input schema carries the
 standard `x-mcp-header` extension used by interoperable clients and servers.
 
 ```ballerina
 remote isolated function weather(
-        @mcp:Argument {headerName: "Region"} string region) returns Weather|error {
+        @mcpv2:Argument {headerName: "Region"} string region) returns Weather|error {
     // ...
 }
 ```
 
-This produces a `region` property containing `"x-mcp-header": "Region"`. `@mcp:Argument` applies to a non-nilable
+This produces a `region` property containing `"x-mcp-header": "Region"`. `@mcpv2:Argument` applies to a non-nilable
 `string`, `int` or `boolean` argument. Header names are compared case-insensitively, and the client rejects a call whose
 `int` argument header is outside ±(2<sup>53</sup>−1) with a `ToolCallError`. Only `string`, `integer` and `boolean`
 schema properties may carry `x-mcp-header`, so the client leaves out of `listTools()` any tool whose header
@@ -177,23 +177,23 @@ header and must not be part of the MCP tool arguments.
 
 ### Eliciting input from a basic service
 
-On the modern protocol, a tool can ask the user for input by returning an `mcp:InputRequiredResult` instead of its
-result. Build its elicitations with `mcp:elicitForm(message, schema)` or `mcp:elicitUrl(message, url)`. The client
+On the modern protocol, a tool can ask the user for input by returning an `mcpv2:InputRequiredResult` instead of its
+result. Build its elicitations with `mcpv2:elicitForm(message, schema)` or `mcpv2:elicitUrl(message, url)`. The client
 answers them and retries the call as a continuation. The tool then runs again from the top and reads the answers
-through an `mcp:Context` parameter.
+through an `mcpv2:Context` parameter.
 
 ```ballerina
 type Confirmation record {|
     boolean confirmed;
 |};
 
-remote isolated function deleteRepository(string name, mcp:Context context)
-        returns string|mcp:InputRequiredResult {
+remote isolated function deleteRepository(string name, mcpv2:Context context)
+        returns string|mcpv2:InputRequiredResult {
     Confirmation? confirmation = context.acceptedContent("confirm");
     if confirmation is () {
         return {
             inputRequests: {
-                "confirm": mcp:elicitForm(string `Delete ${name}?`, {
+                "confirm": mcpv2:elicitForm(string `Delete ${name}?`, {
                     properties: {confirmed: {'type: "boolean", description: "Confirm deletion"}},
                     required: ["confirmed"]
                 })
@@ -225,10 +225,10 @@ type TableBooking record {|
     string notes?;
 |};
 
-remote isolated function bookTable(mcp:Context context) returns string|mcp:InputRequiredResult {
+remote isolated function bookTable(mcpv2:Context context) returns string|mcpv2:InputRequiredResult {
     TableBooking? booking = context.acceptedContent("booking");
     if booking is () {
-        return {inputRequests: {"booking": mcp:elicitForm("Book a table", TableBooking)}};
+        return {inputRequests: {"booking": mcpv2:elicitForm("Book a table", TableBooking)}};
     }
     return string `Booked for ${booking.name}`;
 }
@@ -239,15 +239,15 @@ fields; a union of string constants or an `enum`, which becomes a single-select 
 becomes a multi-select field. Any other field type, such as a nested record, `json`, an array of records or a nilable
 type, is a compile error. The record type must be named at the call site; a `typedesc` variable is a compile error.
 
-`mcp:Context` is read-only and covers one round:
+`mcpv2:Context` is read-only and covers one round:
 
 - `acceptedContent(key, T)` returns the submitted content as `T`. It returns `()` when the input request was not
   answered, was declined or cancelled, or its content does not convert to `T`, so treat `()` as "ask again".
-- `elicitResult(key)` returns the raw `mcp:ElicitResult`, to tell a decline from a cancel or to read the answer to
+- `elicitResult(key)` returns the raw `mcpv2:ElicitResult`, to tell a decline from a cancel or to read the answer to
   a URL elicitation (see [Completing a URL elicitation](#completing-a-url-elicitation)).
 - `requestState()` returns the request state the tool returned in the previous round.
 
-Neither `mcp:Context` nor `mcp:InputRequiredResult` appears in the generated tool schemas.
+Neither `mcpv2:Context` nor `mcpv2:InputRequiredResult` appears in the generated tool schemas.
 
 Because the tool runs again on every round, work done before it decides to ask is repeated. Keep that work safe to
 repeat, and put anything expensive or non-repeatable after the ask or in the request state. The request state is
@@ -265,8 +265,8 @@ completion to the service out of band, so on each continuation the tool checks i
 done, returns the URL elicitation again. A `decline` or `cancel` answer means the user will not open it.
 
 ```ballerina
-remote isolated function listEvents(mcp:AuthContext auth, mcp:Context context)
-        returns string[]|mcp:InputRequiredResult|error {
+remote isolated function listEvents(mcpv2:AuthContext auth, mcpv2:Context context)
+        returns string[]|mcpv2:InputRequiredResult|error {
     string? subject = auth.subject;
     if subject is () {
         return error("The access token names no user");
@@ -274,15 +274,15 @@ remote isolated function listEvents(mcp:AuthContext auth, mcp:Context context)
     if isConnected(subject) {
         return fetchEvents(subject);
     }
-    mcp:ElicitResult? answer = context.elicitResult("connect");
-    if answer is mcp:ElicitResult && answer.action != "accept" {
+    mcpv2:ElicitResult? answer = context.elicitResult("connect");
+    if answer is mcpv2:ElicitResult && answer.action != "accept" {
         return error("The calendar is not connected");
     }
     // Reuse the previous round's link, whose id the request state carries, or issue a new one.
     string connectionId = check issueConnectLink(context.requestState(), subject);
     return {
         inputRequests: {
-            "connect": mcp:elicitUrl("Connect your calendar",
+            "connect": mcpv2:elicitUrl("Connect your calendar",
                     string `https://calendar.example.com/connect?id=${connectionId}`)
         },
         requestState: connectionId
@@ -291,7 +291,7 @@ remote isolated function listEvents(mcp:AuthContext auth, mcp:Context context)
 ```
 
 Anyone the URL is passed to can open it, so the page must check that the user who opened it is the user the
-elicitation was issued to. Record the `mcp:AuthContext` subject when issuing the link, sign the user in on the page
+elicitation was issued to. Record the `mcpv2:AuthContext` subject when issuing the link, sign the user in on the page
 through the same authorization server, and compare the subjects before accepting anything. Keep the URL free of
 credentials and user identifiers, do not make it grant access by itself, and serve it over HTTPS outside development.
 Store third-party tokens obtained on the page in the service; never return them to the client.
@@ -307,18 +307,18 @@ including a connect page that rejects other users.
 
 Legacy requests support three `HttpSessionMode` values:
 
-- `mcp:STATEFUL`: require and maintain an MCP session ID.
-- `mcp:STATELESS`: process every request independently.
-- `mcp:AUTO`: select behavior from the request lifecycle.
+- `mcpv2:STATEFUL`: require and maintain an MCP session ID.
+- `mcpv2:STATELESS`: process every request independently.
+- `mcpv2:AUTO`: select behavior from the request lifecycle.
 
 ```ballerina
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "cart", version: "2.0.0"},
     protocolMode: "auto",
-    sessionMode: mcp:STATEFUL
+    sessionMode: mcpv2:STATEFUL
 }
-service mcp:StreamableHttpService /mcp on mcpListener {
-    remote isolated function addItem(mcp:HttpSession session, string item) returns string {
+service mcpv2:StreamableHttpService /mcp on mcpListener {
+    remote isolated function addItem(mcpv2:HttpSession session, string item) returns string {
         string[] items = session.hasKey("items")
             ? checkpanic session.getWithType("items")
             : [];
@@ -333,11 +333,11 @@ Prefer explicit application-level handles for state that modern clients must acc
 
 ## Advanced server
 
-Use `mcp:StreamableHttpAdvancedService` when the application must define tool discovery and dispatch itself.
+Use `mcpv2:StreamableHttpAdvancedService` when the application must define tool discovery and dispatch itself.
 
 ```ballerina
-service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
-    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+service mcpv2:StreamableHttpAdvancedService /mcp on mcpListener {
+    remote isolated function onListTools() returns mcpv2:ListToolsResult|mcpv2:ServerError {
         return {
             tools: [{
                 name: "echo",
@@ -351,13 +351,13 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
         };
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params)
-            returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
+    remote isolated function onCallTool(mcpv2:CallToolParams params)
+            returns mcpv2:CallToolResult|mcpv2:InputRequiredResult|mcpv2:ServerError {
         if params.name != "echo" {
-            return error mcp:ServerError("Unknown tool");
+            return error mcpv2:ServerError("Unknown tool");
         }
         json value = (params.arguments ?: {})["value"].toJson();
-        mcp:CallToolResult result = {
+        mcpv2:CallToolResult result = {
             content: [{'type: "text", text: value.toJsonString()}],
             structuredContent: value
         };
@@ -368,25 +368,25 @@ service mcp:StreamableHttpAdvancedService /mcp on mcpListener {
 
 `onListTools` and `onCallTool` are required. `onCallTool` may return `InputRequiredResult` for a modern
 continuation. Both handlers can bind the same HTTP request values as basic tools (`http:Headers`, `http:Request`,
-`@http:Header` and `mcp:AuthContext`). `onCallTool` reads request metadata from `CallToolParams._meta`.
+`@http:Header` and `mcpv2:AuthContext`). `onCallTool` reads request metadata from `CallToolParams._meta`.
 
-A handler returns an `mcp:InvalidParamsError` to reject the request's parameters, such as an unknown cursor or a
+A handler returns an `mcpv2:InvalidParamsError` to reject the request's parameters, such as an unknown cursor or a
 missing argument. The service answers with a JSON-RPC `INVALID_PARAMS` error carrying the error's message, on both
-protocols. Any other `mcp:ServerError` is answered with `INTERNAL_ERROR` and its message.
+protocols. Any other `mcpv2:ServerError` is answered with `INTERNAL_ERROR` and its message.
 
-`onListTools` may declare an `mcp:Cursor?` parameter to return its tools in pages. It receives the request's cursor,
+`onListTools` may declare an `mcpv2:Cursor?` parameter to return its tools in pages. It receives the request's cursor,
 or `()` for the first page, and sets `nextCursor` on every page but the last. A basic service always returns all of
 its tools in one page. A modern `tools/call` reads at most 100 pages to find the called tool.
 
 ```ballerina
-remote isolated function onListTools(mcp:Cursor? cursor) returns mcp:ListToolsResult|mcp:ServerError {
+remote isolated function onListTools(mcpv2:Cursor? cursor) returns mcpv2:ListToolsResult|mcpv2:ServerError {
     if cursor is () {
         return {tools: firstPage, nextCursor: "page-2"};
     }
     if cursor == "page-2" {
         return {tools: secondPage};
     }
-    return error mcp:InvalidParamsError("Unknown cursor");
+    return error mcpv2:InvalidParamsError("Unknown cursor");
 }
 ```
 
@@ -398,9 +398,9 @@ elicitations. The client answers them and retries the call as a continuation, wh
 to ask is repeated on every round.
 
 ```ballerina
-remote isolated function onCallTool(mcp:CallToolParams params)
-        returns mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError {
-    mcp:ElicitResult? answer = (params.inputResponses ?: {})["confirm"];
+remote isolated function onCallTool(mcpv2:CallToolParams params)
+        returns mcpv2:CallToolResult|mcpv2:InputRequiredResult|mcpv2:ServerError {
+    mcpv2:ElicitResult? answer = (params.inputResponses ?: {})["confirm"];
     if answer is () {
         return {
             inputRequests: {
@@ -424,7 +424,7 @@ remote isolated function onCallTool(mcp:CallToolParams params)
 A form schema is a flat object whose fields are string, number or integer, boolean, single-select enum (`enum`,
 or `oneOf` with titles) and multi-select enum (`items.enum`, or `items.anyOf` with titles) schemas. Elicitations
 use form mode by default; set `mode: "url"` with a `url` to send the user to an out-of-band page. The
-`mcp:elicitForm` and `mcp:elicitUrl` builders also work here. The older single-select shape with labels in
+`mcpv2:elicitForm` and `mcpv2:elicitUrl` builders also work here. The older single-select shape with labels in
 `enumNames` is rejected; use `oneOf` with titles instead. The client still accepts it from other servers.
 
 Before sending an input-required result, the service checks it:
@@ -437,8 +437,8 @@ Before sending an input-required result, the service checks it:
 - An elicitation in a mode the client did not declare is rejected with the missing-capability error, whose
   `requiredCapabilities` names the mode. A client that declares an empty `elicitation` capability supports form.
 
-`inputRequests` and `inputResponses` hold `mcp:InputRequest` and `mcp:InputResponse` values. Elicitation is the only
-kind of input request, so these are `mcp:ElicitRequest` and `mcp:ElicitResult`.
+`inputRequests` and `inputResponses` hold `mcpv2:InputRequest` and `mcpv2:InputResponse` values. Elicitation is the only
+kind of input request, so these are `mcpv2:ElicitRequest` and `mcpv2:ElicitResult`.
 
 On a legacy call, `onCallTool` receives neither `inputResponses` nor `requestState`.
 
@@ -448,7 +448,7 @@ The service signs every request state a handler returns (HMAC-SHA256) and verifi
 the handler runs, so handlers only ever see the plain text they returned. The signature binds the state to:
 
 - the tool name and the arguments of the call, regardless of key order;
-- the caller's `mcp:AuthContext` (its issuer, client and subject), or to having no auth context;
+- the caller's `mcpv2:AuthContext` (its issuer, client and subject), or to having no auth context;
 - an expiry, renewed on every round.
 
 A continuation whose state is malformed, tampered with, expired, or issued for another call or caller is rejected
@@ -457,17 +457,17 @@ reason is logged at debug level on the server only.
 
 Request state is signed, not encrypted: the client can read it, so do not put secrets in it.
 
-Configure signing with `requestState` on `@mcp:StreamableHttpServiceConfig`:
+Configure signing with `requestState` on `@mcpv2:StreamableHttpServiceConfig`:
 
 ```ballerina
 configurable string requestStateKey = ?;
 configurable string previousRequestStateKey = ?;
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "files", version: "1.0.0"},
     requestState: {keys: [requestStateKey, previousRequestStateKey], ttl: 300}
 }
-service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(9090) {
+service mcpv2:StreamableHttpService /mcp on new mcpv2:StreamableHttpListener(9090) {
 }
 ```
 
@@ -484,8 +484,9 @@ Invalid keys or a non-positive `ttl` fail when the service is attached.
 
 ## Server authorization
 
-Set `httpConfig.auth` on `@mcp:StreamableHttpServiceConfig` to an `mcp:OAuthProtectedResourceConfig` to protect a service as an OAuth
-protected resource (RFC 9728), as the MCP authorization specification requires. The service then:
+Set `httpConfig.auth` on `@mcpv2:StreamableHttpServiceConfig` to an `mcpv2:OAuthProtectedResourceConfig` to
+protect a service as an OAuth protected resource (RFC 9728), as the MCP authorization specification requires.
+The service then:
 
 - publishes protected resource metadata at `<origin>/.well-known/oauth-protected-resource<path>`,
 - answers requests without a valid bearer token with `401` and a `WWW-Authenticate` challenge that points to
@@ -495,7 +496,7 @@ protected resource (RFC 9728), as the MCP authorization specification requires. 
   obtain a token with more scopes and retry.
 
 ```ballerina
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "files", version: "1.0.0"},
     httpConfig: {
         cors: {allowOrigins: ["https://app.example.com"]},
@@ -522,9 +523,9 @@ protected resource (RFC 9728), as the MCP authorization specification requires. 
         }
     }
 }
-service mcp:StreamableHttpService /files on mcpListener {
-    @mcp:Tool {scopes: ["files:write"]}
-    remote isolated function deleteFile(mcp:AuthContext auth, string path) returns string|error {
+service mcpv2:StreamableHttpService /files on mcpListener {
+    @mcpv2:Tool {scopes: ["files:write"]}
+    remote isolated function deleteFile(mcpv2:AuthContext auth, string path) returns string|error {
         // auth.subject, auth.issuer, auth.scopes, auth.claims and auth.token describe the authenticated caller.
         return "deleted " + path;
     }
@@ -545,11 +546,11 @@ service mcp:StreamableHttpService /files on mcpListener {
   `jwtValidatorConfig`.
 - `requiredScopes` is local authorization policy applied to every request; it is not an OPRM field.
   `scopesSupported` controls the informational `scopes_supported` field in protected resource metadata and defaults
-  to `requiredScopes`. `scopes` on `@mcp:Tool` are enforced by the server, are never sent to clients in `tools/list`,
+  to `requiredScopes`. `scopes` on `@mcpv2:Tool` are enforced by the server, are never sent to clients in `tools/list`,
   and are requested through `403` challenges.
 - When the authorization server issues hierarchical scopes, declare them in `scopeHierarchy`, keyed by the broader
   scope. A token granted a broader scope then satisfies every scope it implies, transitively; challenges still name the
-  exact scopes an operation needs, and `mcp:AuthContext.scopes` holds the implied scopes too.
+  exact scopes an operation needs, and `mcpv2:AuthContext.scopes` holds the implied scopes too.
 
   ```ballerina
   scopeHierarchy: {
@@ -559,10 +560,11 @@ service mcp:StreamableHttpService /files on mcpListener {
   ```
 - `offline_access` cannot be used in `requiredScopes`, `scopesSupported`, or tool `scopes`. It asks the authorization
   server for a refresh token rather than granting access to this server, so clients request it themselves.
-- Declare an `mcp:AuthContext` parameter on a tool, or on a handler of an advanced service, to
-  receive the authenticated caller. Declare it as `mcp:AuthContext?` on services without an `mcp:OAuthProtectedResourceConfig`.
+- Declare an `mcpv2:AuthContext` parameter on a tool, or on a handler of an advanced service, to receive the
+  authenticated caller. Declare it as `mcpv2:AuthContext?` on services without an
+  `mcpv2:OAuthProtectedResourceConfig`.
 - A tool or an advanced handler that decides at runtime that more scopes are needed returns
-  `error mcp:InsufficientScopeError("...", scopes = ["admin"])`; the server answers with the `403` challenge.
+  `error mcpv2:InsufficientScopeError("...", scopes = ["admin"])`; the server answers with the `403` challenge.
 - Scopes must be valid OAuth scope tokens: printable ASCII without spaces, `"` or `\`.
 - When the introspection endpoint cannot be reached, requests are answered with `503` rather than `invalid_token`, so
   clients keep their token and retry.
@@ -571,7 +573,7 @@ service mcp:StreamableHttpService /files on mcpListener {
   neither a subject nor a client gets no session.
 
 `httpConfig.auth` still accepts `http:ListenerAuthConfig[]`, HTTP listener authentication without discovery, exactly
-as in 1.x. Failures are answered with `401` or `403` without a challenge, and tool scopes and `mcp:AuthContext` are
+as in 1.x. Failures are answered with `401` or `403` without a challenge, and tool scopes and `mcpv2:AuthContext` are
 not available.
 
 ## Client
@@ -581,19 +583,19 @@ Creating a client configures its transport. `connect()` performs protocol select
 
 ```ballerina
 import ballerina/io;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 
 public function main() returns error? {
-    final mcp:StreamableHttpClient mcpClient = check new (
+    final mcpv2:StreamableHttpClient mcpClient = check new (
         "http://localhost:9090/mcp",
         protocolMode = "auto"
     );
 
-    mcp:ConnectionInfo connection = check mcpClient->connect({name: "example-client", version: "2.0.0"});
+    mcpv2:ConnectionInfo connection = check mcpClient->connect({name: "example-client", version: "2.0.0"});
     io:println("Using MCP ", connection.protocolVersion);
 
-    mcp:ListToolsResult listed = check mcpClient->listTools();
-    mcp:CallToolResult result = check mcpClient->callTool({
+    mcpv2:ListToolsResult listed = check mcpClient->listTools();
+    mcpv2:CallToolResult result = check mcpClient->callTool({
         name: "add",
         arguments: {"left": 2, "right": 3}
     });
@@ -611,7 +613,7 @@ it needs a Resource Authorization Server access token, after discovery has resol
 Resource-AS client ID, and scopes.
 
 ```ballerina
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 
 configurable string resourceAsClientSecret = ?;
 configurable string idpClientSecret = ?;
@@ -621,19 +623,19 @@ isolated function currentIdToken() returns string|error {
     return "...";
 }
 
-isolated function provideIdJag(mcp:IdentityAssertionContext context)
+isolated function provideIdJag(mcpv2:IdentityAssertionContext context)
         returns string|error {
-    return mcp:exchangeIdTokenForIdJag(check currentIdToken(), context, {
+    return mcpv2:exchangeIdTokenForIdJag(check currentIdToken(), context, {
         issuer: "https://idp.example.com",
         clientId: "mcp-host-at-idp",
         clientAuth: {
             clientSecret: idpClientSecret,
-            authMethod: mcp:CLIENT_SECRET_POST
+            authMethod: mcpv2:CLIENT_SECRET_POST
         }
     });
 }
 
-final mcp:StreamableHttpClient mcpClient = check new (
+final mcpv2:StreamableHttpClient mcpClient = check new (
     "https://tools.example.com/mcp",
     httpConfig = {
         auth: {
@@ -662,7 +664,7 @@ ignores a refresh token returned by the Resource Authorization Server; it caches
 `assertionProvider` runs while the client holds its authorization lock, so other requests on the same client wait
 until it returns, and it must not call the same client.
 
-A rejected token request is reported as an `mcp:OAuthTokenError` in the cause chain of the returned error. Its
+A rejected token request is reported as an `mcpv2:OAuthTokenError` in the cause chain of the returned error. Its
 `detail()` carries the endpoint's OAuth error response. For example, `insufficient_user_authentication` from the
 OpenID Provider, with `maxAge`, means the user must sign in again:
 
@@ -670,7 +672,7 @@ OpenID Provider, with `maxAge`, means the user must sign in again:
 function needsReauthentication(error err) returns boolean {
     error? current = err;
     while current is error {
-        if current is mcp:OAuthTokenError {
+        if current is mcpv2:OAuthTokenError {
             return current.detail()?.code == "insufficient_user_authentication";
         }
         current = current.cause();
@@ -684,25 +686,25 @@ function needsReauthentication(error err) returns boolean {
 echoes the opaque request state and continues until the call completes or `maxInputRounds` is reached.
 
 ```ballerina
-mcp:StreamableHttpClientConfig config = {
+mcpv2:StreamableHttpClientConfig config = {
     protocolMode: "auto",
     maxInputRounds: 4,
-    elicitationHandler: isolated function (mcp:ElicitRequest request)
-            returns mcp:ElicitResult|mcp:ClientError {
-        mcp:FormElicitationParams|mcp:UrlElicitationParams params = request.params;
-        if params is mcp:UrlElicitationParams {
+    elicitationHandler: isolated function (mcpv2:ElicitRequest request)
+            returns mcpv2:ElicitResult|mcpv2:ClientError {
+        mcpv2:FormElicitationParams|mcpv2:UrlElicitationParams params = request.params;
+        if params is mcpv2:UrlElicitationParams {
             return {action: "decline"};
         }
         return {action: "accept", content: {confirmed: true}};
     },
     httpConfig: {timeout: 30}
 };
-final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp", config);
+final mcpv2:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp", config);
 ```
 
-HTTP settings go under `httpConfig`, an `mcp:HttpClientConfig` with the fields and defaults of
-`http:ClientConfiguration`, except that `auth` also accepts `mcp:OAuth2DiscoveryConfig`. With
-`mcp:OAuth2DiscoveryConfig`, redirects are not followed and `init` returns an error if `followRedirects` enables them;
+HTTP settings go under `httpConfig`, an `mcpv2:HttpClientConfig` with the fields and defaults of
+`http:ClientConfiguration`, except that `auth` also accepts `mcpv2:OAuth2DiscoveryConfig`. With
+`mcpv2:OAuth2DiscoveryConfig`, redirects are not followed and `init` returns an error if `followRedirects` enables them;
 the metadata and token endpoint requests reuse `secureSocket` and `proxy`.
 
 Configuring `elicitationHandler` advertises the `elicitation` capability with form and URL modes on every modern
@@ -733,17 +735,17 @@ The lower-level lifecycle methods are available for applications that manage dis
 Modern `server/discover` and `tools/list` results carry caching hints: `ttlMs`, how long a client may treat the
 result as fresh, and `cacheScope`, whether the result may be shared between callers (`public`) or only reused for
 the same authorization context (`private`). Services default to `ttlMs: 0` and `cacheScope: "private"`, which
-disables reuse. Set hints per method in `@mcp:StreamableHttpServiceConfig`:
+disables reuse. Set hints per method in `@mcpv2:StreamableHttpServiceConfig`:
 
 ```ballerina
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "weather", version: "1.0.0"},
     cacheHints: {
         discover: {ttlMs: 300000, cacheScope: "public"},
         listTools: {ttlMs: 60000, cacheScope: "public"}
     }
 }
-service mcp:StreamableHttpService /mcp on mcpListener {
+service mcpv2:StreamableHttpService /mcp on mcpListener {
     // ...
 }
 ```
@@ -770,10 +772,10 @@ touching the cache. Set `resultCache = ()` in the client configuration to disabl
 ## Migrating from the 1.x API
 
 The 1.x API stays available in the root module, `ballerina/mcp`, and its behaviour is unchanged. To move code to the
-v2 module, change its import:
+v2 module, change its import and rename the `mcp` prefix to `mcpv2`:
 
 ```ballerina
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 ```
 
 Both modules can be used in one package, or even in one file with different prefixes, so services can move one at a
@@ -784,16 +786,16 @@ explicit names.
 
 | 1.x API | v2 module |
 | --- | --- |
-| `mcp:Listener` | `mcp:StreamableHttpListener` |
-| `mcp:Service` | `mcp:StreamableHttpService` |
-| `mcp:AdvancedService` | `mcp:StreamableHttpAdvancedService` |
-| `@mcp:ServiceConfig` | `@mcp:StreamableHttpServiceConfig` |
-| `mcp:Session`, `mcp:SessionEntry` | `mcp:HttpSession`, `mcp:HttpSessionEntry` |
-| `mcp:SessionMode` | `mcp:HttpSessionMode` |
-| `mcp:Meta` | `mcp:RequestMeta` |
-| `mcp:StreamableHttpClientTransportConfig` | `mcp:StreamableHttpClientConfig` |
-| `http:ClientConfiguration` fields at the top level of the client configuration | The same fields under `httpConfig`, an `mcp:HttpClientConfig` |
-| An `http:HttpServiceConfig` value for `httpConfig` | `mcp:HttpServiceConfig`: the same fields, with `auth` also accepting `mcp:OAuthProtectedResourceConfig` |
+| `mcp:Listener` | `mcpv2:StreamableHttpListener` |
+| `mcp:Service` | `mcpv2:StreamableHttpService` |
+| `mcp:AdvancedService` | `mcpv2:StreamableHttpAdvancedService` |
+| `@mcp:ServiceConfig` | `@mcpv2:StreamableHttpServiceConfig` |
+| `mcp:Session`, `mcp:SessionEntry` | `mcpv2:HttpSession`, `mcpv2:HttpSessionEntry` |
+| `mcp:SessionMode` | `mcpv2:HttpSessionMode` |
+| `mcp:Meta` | `mcpv2:RequestMeta` |
+| `mcp:StreamableHttpClientTransportConfig` | `mcpv2:StreamableHttpClientConfig` |
+| `http:ClientConfiguration` fields at the top level of the client configuration | The same fields under `httpConfig`, an `mcpv2:HttpClientConfig` |
+| An `http:HttpServiceConfig` value for `httpConfig` | `mcpv2:HttpServiceConfig`: the same fields, with `auth` also accepting `mcpv2:OAuthProtectedResourceConfig` |
 | `initialize()` | `connect()` or `initializeLegacy()` |
 | `subscribeToServerMessages()` | Removed |
 
@@ -801,28 +803,28 @@ Other differences from the 1.x API:
 
 - The client must call `connect()`, or `initializeLegacy()`, before other operations; 1.x did not enforce
   `initialize()`.
-- An `mcp:HttpSession` parameter may be declared at any position of a tool. A second one is a duplicate parameter.
+- An `mcpv2:HttpSession` parameter may be declared at any position of a tool. A second one is a duplicate parameter.
 - A service validates `Origin`. It rejects browser requests from origins that are not listed in
   `httpConfig.cors.allowOrigins`, which is empty by default, with `403 Forbidden`. 1.x did not validate `Origin`.
 - The text content of a tool result follows the return value: a `string` is used as is, `()` produces no content
   block, and any other value becomes its JSON serialization. A legacy client otherwise keeps receiving the legacy wire
   shapes.
 - Tool failures are mapped the same way on both protocols. A request value that cannot be bound to a parameter, or an
-  `mcp:InvalidParamsError` from an advanced service, is a JSON-RPC `INVALID_PARAMS` error. An `mcp:ServerError` from an
-  advanced service gets a JSON-RPC error with its message, and another error or a panic gets an `INTERNAL_ERROR` with a
-  generic message.
+  `mcpv2:InvalidParamsError` from an advanced service, is a JSON-RPC `INVALID_PARAMS` error. An
+  `mcpv2:ServerError` from an advanced service gets a JSON-RPC error with its message, and another error or a panic
+  gets an `INTERNAL_ERROR` with a generic message.
 - Change notifications are not supported. `subscribeToServerMessages()` has no replacement, a modern service answers
   `subscriptions/listen` with `METHOD_NOT_FOUND`, and `tools.listChanged` is advertised as `false`. Proper support for
   change notification subscriptions is planned for a later release.
 - The `2025-11-25` task fields are removed: `CallToolParams.task`, `ToolDefinition.execution` with the
-  `mcp:ToolExecution` and `mcp:TaskSupport` types, and the `tasks` client and server capabilities. A service ignores a
-  `task` field on `tools/call`, and a client still connects to a server that advertises tasks.
-- The non-standard `data` and `size` fields of `mcp:Icon` are removed, and `src` is required, as in the MCP
+  `mcpv2:ToolExecution` and `mcpv2:TaskSupport` types, and the `tasks` client and server capabilities. A service
+  ignores a `task` field on `tools/call`, and a client still connects to a server that advertises tasks.
+- The non-standard `data` and `size` fields of `mcpv2:Icon` are removed, and `src` is required, as in the MCP
   `2025-11-25` icon schema. Put inline image data in `src` as a `data:` URI.
-- The public error hierarchy is `mcp:Error`, `mcp:ClientError`, `mcp:TransportError`, `mcp:ProtocolError`,
-  `mcp:ToolCallError`, `mcp:StreamError`, and `mcp:ServerError`, with `mcp:InvalidParamsError`,
-  `mcp:InsufficientScopeError`, `mcp:AuthorizationError`, and `mcp:OAuthTokenError`. The transport and decoder error
-  types of 1.x, such as `mcp:ServerResponseError` and `mcp:MissingSseDataError`, are internal.
+- The public error hierarchy is `mcpv2:Error`, `mcpv2:ClientError`, `mcpv2:TransportError`, `mcpv2:ProtocolError`,
+  `mcpv2:ToolCallError`, `mcpv2:StreamError`, and `mcpv2:ServerError`, with `mcpv2:InvalidParamsError`,
+  `mcpv2:InsufficientScopeError`, `mcpv2:AuthorizationError`, and `mcpv2:OAuthTokenError`. The transport and decoder
+  error types of 1.x, such as `mcp:ServerResponseError` and `mcp:MissingSseDataError`, are internal.
 
 ### Importing the v2 module in a locked project
 
@@ -855,7 +857,7 @@ are unchanged.
 | --- | --- | --- |
 | `MCP_101` | `MCP_201` | The tool's input schema cannot be generated |
 | `MCP_102` | `MCP_202` | A tool parameter has an unsupported type |
-| `MCP_104` | `MCP_204` | A required `mcp:HttpSession` parameter in a stateless service |
+| `MCP_104` | `MCP_204` | A required `mcpv2:HttpSession` parameter in a stateless service |
 | `MCP_106` | `MCP_206` | Request metadata is not optional |
 | `MCP_107` | `MCP_207` | Duplicate parameter |
 | `MCP_108` | `MCP_208` | Invalid type of an `@http:Header` parameter |
@@ -863,19 +865,19 @@ are unchanged.
 | `MCP_111` | `MCP_211` | Invalid parameters of an advanced service method |
 | `MCP_112` | `MCP_212` | Invalid return type of an advanced service method |
 | `MCP_113` | `MCP_213` | An unsupported remote method in an advanced service |
-| - | `MCP_214` | A required `mcp:HttpSession` parameter in modern protocol mode |
-| - | `MCP_215` | Invalid type of an `@mcp:Argument` parameter |
-| - | `MCP_216` | Invalid `@mcp:Argument` header name |
-| - | `MCP_217` | Duplicate `@mcp:Argument` header name |
-| - | `MCP_218` | `@mcp:Argument` with an explicit `@mcp:Tool` schema |
+| - | `MCP_214` | A required `mcpv2:HttpSession` parameter in modern protocol mode |
+| - | `MCP_215` | Invalid type of an `@mcpv2:Argument` parameter |
+| - | `MCP_216` | Invalid `@mcpv2:Argument` header name |
+| - | `MCP_217` | Duplicate `@mcpv2:Argument` header name |
+| - | `MCP_218` | `@mcpv2:Argument` with an explicit `@mcpv2:Tool` schema |
 | - | `MCP_219` | A record field that cannot be a form field |
-| - | `MCP_220` | An `mcp:elicitForm` schema that is not a form schema value or a named record type |
+| - | `MCP_220` | An `mcpv2:elicitForm` schema that is not a form schema value or a named record type |
 | - | `MCP_221` | `structuredOutput: false` with an explicit `outputSchema` |
 | - | `MCP_222` | `structuredOutput: true` on a tool whose return type has no JSON Schema |
-| - | `MCP_WARNING_202` | A required `mcp:HttpSession` parameter in auto protocol mode |
-| - | `MCP_WARNING_203` | An `mcp:HttpSession` parameter in modern protocol mode |
-| - | `MCP_WARNING_204` | An optional `mcp:HttpSession` parameter in auto protocol mode |
+| - | `MCP_WARNING_202` | A required `mcpv2:HttpSession` parameter in auto protocol mode |
+| - | `MCP_WARNING_203` | An `mcpv2:HttpSession` parameter in modern protocol mode |
+| - | `MCP_WARNING_204` | An optional `mcpv2:HttpSession` parameter in auto protocol mode |
 
-The 1.x codes `MCP_103`, `MCP_105` and `MCP_109` have no v2 counterpart: an `mcp:HttpSession` or `mcp:RequestMeta?`
+The 1.x codes `MCP_103`, `MCP_105` and `MCP_109` have no v2 counterpart: an `mcpv2:HttpSession` or `mcpv2:RequestMeta?`
 parameter may be declared at any position, and every v2 basic service is a Streamable HTTP service. The
 `MCP_WARNING_101` endpoint metadata warning of `bal build --export-endpoints` is shared by both modules.

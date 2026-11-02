@@ -15,19 +15,19 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
 // An advanced Streamable HTTP service whose onListTools/onCallTool bind transport-specific request
 // information the same way StreamableHttpService tools do: @http:Header, http:Headers, http:Request.
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "advanced-http-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHttpListener(8771) {
+isolated service mcpv2:StreamableHttpAdvancedService /mcp on new mcpv2:StreamableHttpListener(8771) {
 
     isolated remote function onListTools(@http:Header {name: "X-Tools-Filter"} string? filter)
-            returns mcp:ListToolsResult|mcp:ServerError {
+            returns mcpv2:ListToolsResult|mcpv2:ServerError {
         string toolName = filter ?: "whoAmI";
         return {
             tools: [
@@ -36,9 +36,9 @@ isolated service mcp:StreamableHttpAdvancedService /mcp on new mcp:StreamableHtt
         };
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session,
+    isolated remote function onCallTool(mcpv2:CallToolParams params, mcpv2:HttpSession? session,
             @http:Header {name: "Authorization"} string? auth, http:Headers headers)
-            returns mcp:CallToolResult|mcp:ServerError {
+            returns mcpv2:CallToolResult|mcpv2:ServerError {
         string viaAnnotation = auth ?: "<none>";
         string|http:HeaderNotFoundError traceHeader = headers.getHeader("X-Trace");
         string trace = traceHeader is string ? traceHeader : "<none>";

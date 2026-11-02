@@ -15,41 +15,41 @@
 // under the License.
 
 // Regression coverage: the source modifier rewrites every service declaration in a document that
-// contains tools, and used to re-emit only registered '@mcp:Tool' methods -- silently dropping an
+// contains tools, and used to re-emit only registered '@mcpv2:Tool' methods -- silently dropping an
 // advanced service's 'onListTools'/'onCallTool' when it shared a document with a tool-bearing basic
-// service. Because 'mcp:StreamableHttpAdvancedService' is an empty object type (its method shapes
+// service. Because 'mcpv2:StreamableHttpAdvancedService' is an empty object type (its method shapes
 // are validated by the compiler plugin in the analysis phase, before the modifier runs), the drop
 // produced no diagnostic and only failed at runtime.
 //
 // These two services MUST stay in the same document for this test to be meaningful.
 
 import ballerina/http;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
 // The tool-bearing basic service. Its presence is what makes the modifier rewrite this document.
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "shared-doc-basic", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpService /sharedBasic on new mcp:StreamableHttpListener(8774) {
+isolated service mcpv2:StreamableHttpService /sharedBasic on new mcpv2:StreamableHttpListener(8774) {
     isolated remote function greet(string name) returns string => "hello " + name;
 }
 
 // The advanced service sharing the document above.
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "shared-doc-advanced", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpAdvancedService /sharedAdvanced on new mcp:StreamableHttpListener(8775) {
-    isolated remote function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+isolated service mcpv2:StreamableHttpAdvancedService /sharedAdvanced on new mcpv2:StreamableHttpListener(8775) {
+    isolated remote function onListTools() returns mcpv2:ListToolsResult|mcpv2:ServerError {
         return {
             tools: [{name: "sharedDocTool", description: "declared by onListTools", inputSchema: {'type: "object"}}]
         };
     }
 
-    isolated remote function onCallTool(mcp:CallToolParams params, mcp:HttpSession? session)
-            returns mcp:CallToolResult|mcp:ServerError {
+    isolated remote function onCallTool(mcpv2:CallToolParams params, mcpv2:HttpSession? session)
+            returns mcpv2:CallToolResult|mcpv2:ServerError {
         return {content: [{'type: "text", text: "shared-doc-ok"}]};
     }
 }

@@ -13,7 +13,7 @@ This package provides APIs for building MCP (Model Context Protocol) clients and
 The `ballerina/mcp` package has two modules:
 
 - [`ballerina/mcp.v2`](ballerina/modules/v2/README.md), the v2 module, for MCP `2026-07-28`. Import it with
-  `import ballerina/mcp.v2 as mcp;`. It adds automatic modern/legacy protocol selection, modern discovery,
+  `import ballerina/mcp.v2 as mcpv2;`. It adds automatic modern/legacy protocol selection, modern discovery,
   per-request metadata and headers, automatic output schemas and raw structured results for regular services, modern
   tool-result APIs, and bounded input-required continuations. Existing session-dependent services remain on the legacy
   path in auto mode. Change notification subscriptions are not supported yet; proper support is planned for a later

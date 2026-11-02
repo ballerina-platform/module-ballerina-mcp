@@ -14,14 +14,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "inline-listener-test-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8765) {
+isolated service mcpv2:StreamableHttpService /mcp on new mcpv2:StreamableHttpListener(8765) {
 
     # Returns a greeting for the given name.
     # 
@@ -32,13 +32,13 @@ isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListene
     }
 }
 
-final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:8765/mcp");
-final mcp:Implementation clientInfo = {name: "test-client", version: "1.0.0"};
+final mcpv2:StreamableHttpClient mcpClient = check new ("http://localhost:8765/mcp");
+final mcpv2:Implementation clientInfo = {name: "test-client", version: "1.0.0"};
 
 @test:Config
 function testInlineListenerToolDiscovery() returns error? {
     _ = check mcpClient->connect(clientInfo);
-    mcp:ListToolsResult result = check mcpClient->listTools();
+    mcpv2:ListToolsResult result = check mcpClient->listTools();
 
     test:assertEquals(result.tools.length(), 1,
         msg = "Expected 1 tool — compiler plugin must have processed the inline-listener service");
@@ -47,7 +47,7 @@ function testInlineListenerToolDiscovery() returns error? {
 
 @test:Config {dependsOn: [testInlineListenerToolDiscovery]}
 function testInlineListenerToolSchema() returns error? {
-    mcp:ListToolsResult result = check mcpClient->listTools();
+    mcpv2:ListToolsResult result = check mcpClient->listTools();
 
     var inputSchema = result.tools[0].inputSchema;
     test:assertEquals(inputSchema.'type, "object");
@@ -58,20 +58,20 @@ function testInlineListenerToolSchema() returns error? {
 
 @test:Config {dependsOn: [testInlineListenerToolDiscovery]}
 function testInlineListenerCallTool() returns error? {
-    mcp:CallToolResult result = check mcpClient->callTool({name: "getGreeting", arguments: {"name": "World"}});
+    mcpv2:CallToolResult result = check mcpClient->callTool({name: "getGreeting", arguments: {"name": "World"}});
 
     test:assertFalse(result.isError ?: false);
-    mcp:TextContent textContent = check result.content[0].ensureType();
+    mcpv2:TextContent textContent = check result.content[0].ensureType();
     test:assertEquals(textContent.text, "Hello, World!");
 }
 
-listener mcp:StreamableHttpListener ln = check new (8766);
+listener mcpv2:StreamableHttpListener ln = check new (8766);
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "inline-listener-test-server-2", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpService /mcp on ln {
+isolated service mcpv2:StreamableHttpService /mcp on ln {
 
     # Returns a greeting for the given name.
     # 
@@ -82,13 +82,13 @@ isolated service mcp:StreamableHttpService /mcp on ln {
     }
 }
 
-final mcp:StreamableHttpClient mcpClient2 = check new ("http://localhost:8766/mcp");
-final mcp:Implementation clientInfo2 = {name: "test-client-2", version: "1.0.0"};
+final mcpv2:StreamableHttpClient mcpClient2 = check new ("http://localhost:8766/mcp");
+final mcpv2:Implementation clientInfo2 = {name: "test-client-2", version: "1.0.0"};
 
 @test:Config
 function testListenerDeclToolDiscovery() returns error? {
     _ = check mcpClient2->connect(clientInfo2);
-    mcp:ListToolsResult result = check mcpClient2->listTools();
+    mcpv2:ListToolsResult result = check mcpClient2->listTools();
 
     test:assertEquals(result.tools.length(), 1,
         msg = "Expected 1 tool — compiler plugin must have processed the declared-listener service");

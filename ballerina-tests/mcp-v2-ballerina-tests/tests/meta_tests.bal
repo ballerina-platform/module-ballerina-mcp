@@ -14,16 +14,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
-listener mcp:StreamableHttpListener metaListener = check new (8767);
+listener mcpv2:StreamableHttpListener metaListener = check new (8767);
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "meta-test-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpService /mcp on metaListener {
+isolated service mcpv2:StreamableHttpService /mcp on metaListener {
 
     # Greets the caller, echoing the request's trace id when client metadata is supplied.
     #
@@ -31,8 +31,8 @@ isolated service mcp:StreamableHttpService /mcp on metaListener {
     # + meta - Optional request metadata injected by the framework
     # + greeting - Greeting to prepend to the name
     # + return - A greeting message that reflects whether metadata was received
-    isolated remote function greetWithMeta(string name, mcp:RequestMeta? meta, string greeting) returns string {
-        if meta is mcp:RequestMeta {
+    isolated remote function greetWithMeta(string name, mcpv2:RequestMeta? meta, string greeting) returns string {
+        if meta is mcpv2:RequestMeta {
             anydata traceId = meta["traceId"];
             return string `${greeting}, ${name}! trace=${traceId.toString()}`;
         }
@@ -40,13 +40,13 @@ isolated service mcp:StreamableHttpService /mcp on metaListener {
     }
 }
 
-final mcp:StreamableHttpClient metaClient = check new ("http://localhost:8767/mcp");
-final mcp:Implementation metaClientInfo = {name: "meta-test-client", version: "1.0.0"};
+final mcpv2:StreamableHttpClient metaClient = check new ("http://localhost:8767/mcp");
+final mcpv2:Implementation metaClientInfo = {name: "meta-test-client", version: "1.0.0"};
 
 @test:Config
 function testMetaToolSchemaExcludesMetaParam() returns error? {
     _ = check metaClient->connect(metaClientInfo);
-    mcp:ListToolsResult result = check metaClient->listTools();
+    mcpv2:ListToolsResult result = check metaClient->listTools();
 
     test:assertEquals(result.tools.length(), 1);
     test:assertEquals(result.tools[0].name, "greetWithMeta");
@@ -56,27 +56,27 @@ function testMetaToolSchemaExcludesMetaParam() returns error? {
     test:assertTrue(properties.hasKey("name"),
         msg = "Schema must include the 'name' data parameter");
     test:assertTrue(properties.hasKey("greeting"),
-        msg = "Schema must include data parameters declared after mcp:RequestMeta");
+        msg = "Schema must include data parameters declared after mcpv2:RequestMeta");
     test:assertFalse(properties.hasKey("meta"),
-        msg = "The injected mcp:RequestMeta parameter must not appear in the tool input schema");
+        msg = "The injected mcpv2:RequestMeta parameter must not appear in the tool input schema");
 }
 
 @test:Config {dependsOn: [testMetaToolSchemaExcludesMetaParam]}
 function testMetaReceivedOnServer() returns error? {
-    mcp:CallToolResult result = check metaClient->callTool({
+    mcpv2:CallToolResult result = check metaClient->callTool({
         name: "greetWithMeta",
         arguments: {"name": "World", "greeting": "Hello"},
         _meta: {"traceId": "trace-xyz"}
     });
 
-    // The server-side tool reads the injected client _meta via the mcp:RequestMeta parameter
+    // The server-side tool reads the injected client _meta via the mcpv2:RequestMeta parameter
     // and reflects it in the result text.
-    mcp:TextContent textContent = check result.content[0].ensureType();
+    mcpv2:TextContent textContent = check result.content[0].ensureType();
     test:assertEquals(textContent.text, "Hello, World! trace=trace-xyz",
-        msg = "Server must access the client-supplied _meta via the mcp:RequestMeta parameter");
+        msg = "Server must access the client-supplied _meta via the mcpv2:RequestMeta parameter");
 
     // The request _meta is not echoed. Modern responses expose only the server identity added by the transport.
-    mcp:ResultMeta resultMeta = check result._meta.ensureType();
+    mcpv2:ResultMeta resultMeta = check result._meta.ensureType();
     test:assertEquals(resultMeta.serverInfo?.name, "meta-test-server");
     test:assertFalse(resultMeta.hasKey("traceId"),
         msg = "Request _meta must not be echoed back onto the response");
@@ -84,12 +84,12 @@ function testMetaReceivedOnServer() returns error? {
 
 @test:Config {dependsOn: [testMetaToolSchemaExcludesMetaParam]}
 function testMetaIsNilWhenClientOmitsIt() returns error? {
-    mcp:CallToolResult result = check metaClient->callTool({
+    mcpv2:CallToolResult result = check metaClient->callTool({
         name: "greetWithMeta",
         arguments: {"name": "World", "greeting": "Hello"}
     });
 
-    mcp:TextContent textContent = check result.content[0].ensureType();
+    mcpv2:TextContent textContent = check result.content[0].ensureType();
     test:assertEquals(textContent.text, "Hello, World! no-meta",
         msg = "Tool must observe nil request metadata when the client sends no _meta");
 }

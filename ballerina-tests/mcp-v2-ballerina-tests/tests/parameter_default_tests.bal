@@ -15,7 +15,7 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
 const int CONFIGURED_LIMIT = 7;
@@ -33,56 +33,56 @@ isolated function nextCallCount() returns int {
     }
 }
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "parameter-default-server", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpService /mcp on new mcp:StreamableHttpListener(8784) {
+isolated service mcpv2:StreamableHttpService /mcp on new mcpv2:StreamableHttpListener(8784) {
 
-    @mcp:Tool {description: "Echoes a city and a defaultable unit"}
+    @mcpv2:Tool {description: "Echoes a city and a defaultable unit"}
     isolated remote function withDefaultableString(string city, string unit = "celsius") returns string {
         return string `city=${city} unit=${unit}`;
     }
 
-    @mcp:Tool {description: "Echoes a defaultable int"}
+    @mcpv2:Tool {description: "Echoes a defaultable int"}
     isolated remote function withDefaultableInt(int maxCount = 10) returns string {
         return string `maxCount=${maxCount}`;
     }
 
-    @mcp:Tool {description: "Echoes a nilable defaultable int"}
+    @mcpv2:Tool {description: "Echoes a nilable defaultable int"}
     isolated remote function withNilableDefaultable(int? maxCount = 6) returns string {
         return maxCount is () ? "maxCount=()" : string `maxCount=${maxCount}`;
     }
 
-    @mcp:Tool {description: "Echoes defaultable structured values"}
+    @mcpv2:Tool {description: "Echoes defaultable structured values"}
     isolated remote function withStructuredDefaults(Opts opts = {verbose: true}, string[] tags = ["a"])
             returns string {
         return string `verbose=${opts.verbose} tags=${tags.toString()}`;
     }
 
-    @mcp:Tool {description: "Defaults from a module-level constant"}
+    @mcpv2:Tool {description: "Defaults from a module-level constant"}
     isolated remote function withConstDefault(int maxCount = CONFIGURED_LIMIT) returns string {
         return string `maxCount=${maxCount}`;
     }
 
-    @mcp:Tool {description: "Default derived from a preceding argument"}
+    @mcpv2:Tool {description: "Default derived from a preceding argument"}
     isolated remote function withDerivedDefault(int a, int b = a + 1) returns string {
         return string `a=${a} b=${b}`;
     }
 
-    @mcp:Tool {description: "Chained defaults derived from preceding arguments"}
+    @mcpv2:Tool {description: "Chained defaults derived from preceding arguments"}
     isolated remote function withChainedDefaults(int a, int b = a * 2, int c = a + b) returns string {
         return string `a=${a} b=${b} c=${c}`;
     }
 
-    @mcp:Tool {description: "Default is evaluated by calling a function"}
+    @mcpv2:Tool {description: "Default is evaluated by calling a function"}
     isolated remote function withCalledDefault(int n = nextCallCount()) returns string {
         return string `n=${n}`;
     }
 
-    @mcp:Tool {description: "Defaultable parameter followed by an injected meta"}
+    @mcpv2:Tool {description: "Defaultable parameter followed by an injected meta"}
     isolated remote function withDefaultBeforeMeta(string city, string unit = "celsius",
-            mcp:RequestMeta? meta = ()) returns string {
+            mcpv2:RequestMeta? meta = ()) returns string {
         return string `city=${city} unit=${unit} meta=${meta is () ? "()" : "present"}`;
     }
 }

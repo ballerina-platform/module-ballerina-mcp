@@ -644,8 +644,8 @@ public type ServiceConfiguration record {|
 # Annotation to provide configuration to MCP services.
 #
 # # Deprecated
-# Transport-agnostic services are replaced by the v2 module. Use `@mcp.v2:StreamableHttpServiceConfig`
-# (`import ballerina/mcp.v2 as mcp;`) instead.
+# Transport-agnostic services are replaced by the v2 module. Use `@mcpv2:StreamableHttpServiceConfig`
+# (`import ballerina/mcp.v2 as mcpv2;`) instead.
 @deprecated
 public annotation ServiceConfiguration ServiceConfig on service;
 
@@ -671,8 +671,8 @@ public annotation StreamableHttpServiceConfiguration StreamableHttpServiceConfig
 # manual control over tool listing and invocation.
 #
 # # Deprecated
-# Transport-agnostic services are replaced by the v2 module. Use `mcp.v2:StreamableHttpAdvancedService`
-# on an `mcp.v2:StreamableHttpListener` (`import ballerina/mcp.v2 as mcp;`) instead.
+# Transport-agnostic services are replaced by the v2 module. Use `mcpv2:StreamableHttpAdvancedService`
+# on an `mcpv2:StreamableHttpListener` (`import ballerina/mcp.v2 as mcpv2;`) instead.
 @deprecated
 public type AdvancedService distinct service object {
     remote isolated function onListTools() returns ListToolsResult|ServerError;
@@ -683,8 +683,8 @@ public type AdvancedService distinct service object {
 # functions and cannot access transport-specific request information.
 #
 # # Deprecated
-# Transport-agnostic services are replaced by the v2 module. Use `mcp.v2:StreamableHttpService`
-# on an `mcp.v2:StreamableHttpListener` (`import ballerina/mcp.v2 as mcp;`) instead.
+# Transport-agnostic services are replaced by the v2 module. Use `mcpv2:StreamableHttpService`
+# on an `mcpv2:StreamableHttpListener` (`import ballerina/mcp.v2 as mcpv2;`) instead.
 @deprecated
 public type Service distinct service object {
 

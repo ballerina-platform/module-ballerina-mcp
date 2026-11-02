@@ -24,7 +24,7 @@
 // MUST stay in the same document as the mcp service for this test to be meaningful.
 
 import ballerina/http;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
 // A plain http:Service -- not an mcp service at all.
@@ -40,11 +40,11 @@ service /plain on new http:Listener(8776) {
 }
 
 // The mcp tool-bearing service that causes this document to be rewritten.
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {name: "mixed-doc", version: "1.0.0"},
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-isolated service mcp:StreamableHttpService /mixedMcp on new mcp:StreamableHttpListener(8777) {
+isolated service mcpv2:StreamableHttpService /mixedMcp on new mcpv2:StreamableHttpListener(8777) {
     isolated remote function greet(string name) returns string => "hello " + name;
 }
 

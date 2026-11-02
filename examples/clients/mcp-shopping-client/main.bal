@@ -16,9 +16,9 @@
 
 import ballerina/io;
 import ballerina/log;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 
-public function main() returns mcp:ClientError? {
+public function main() returns mcpv2:ClientError? {
     log:printInfo("=== MCP Shopping Cart Demo - Two Sessions ===");
     log:printInfo("This demo shows how different clients maintain separate shopping sessions");
 
@@ -28,18 +28,18 @@ public function main() returns mcp:ClientError? {
     log:printInfo("=== Demo Completed: Both sessions maintained separate carts ===");
 }
 
-function demonstrateTwoSessions() returns mcp:ClientError? {
+function demonstrateTwoSessions() returns mcpv2:ClientError? {
     log:printInfo("\n--- Starting Two Independent Shopping Sessions in Parallel ---");
 
     // Run both sessions in parallel using workers
-    worker AliceWorker returns mcp:ClientError? {
+    worker AliceWorker returns mcpv2:ClientError? {
         return runClientSession("Alice", [
             {name: "Laptop", price: 999.99},
             {name: "Mouse", price: 25.50}
         ]);
     }
 
-    worker BobWorker returns mcp:ClientError? {
+    worker BobWorker returns mcpv2:ClientError? {
         return runClientSession("Bob", [
             {name: "Keyboard", price: 75.00},
             {name: "Monitor", price: 299.99},
@@ -48,25 +48,25 @@ function demonstrateTwoSessions() returns mcp:ClientError? {
     }
 
     // Wait for both workers to complete
-    mcp:ClientError? aliceResult = wait AliceWorker;
-    mcp:ClientError? bobResult = wait BobWorker;
+    mcpv2:ClientError? aliceResult = wait AliceWorker;
+    mcpv2:ClientError? bobResult = wait BobWorker;
 
     // Check results
-    if aliceResult is mcp:ClientError {
+    if aliceResult is mcpv2:ClientError {
         log:printError(string `Alice's session failed: ${aliceResult.message()}`);
     }
-    if bobResult is mcp:ClientError {
+    if bobResult is mcpv2:ClientError {
         log:printError(string `Bob's session failed: ${bobResult.message()}`);
     }
 
     log:printInfo("\n--- Both parallel sessions completed ---");
 }
 
-function runClientSession(string customerName, record {|string name; decimal price;|}[] items) returns mcp:ClientError? {
+function runClientSession(string customerName, record {|string name; decimal price;|}[] items) returns mcpv2:ClientError? {
     log:printInfo(string `\n=== ${customerName}'s Shopping Session ===`);
 
     // Create a new client (each client gets its own session)
-    mcp:StreamableHttpClientConfig config = {
+    mcpv2:StreamableHttpClientConfig config = {
         httpConfig: {
             auth: {
                 username: "ballerina",
@@ -83,7 +83,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
             }
         }
     };
-    mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9092/mcp", config);
+    mcpv2:StreamableHttpClient mcpClient = check new ("http://localhost:9092/mcp", config);
 
     // Initialize client
     _ = check mcpClient->connect({
@@ -95,7 +95,7 @@ function runClientSession(string customerName, record {|string name; decimal pri
 
     // Add items to cart
     foreach var item in items {
-        mcp:CallToolResult result = check mcpClient->callTool({
+        mcpv2:CallToolResult result = check mcpClient->callTool({
             name: "addToCart",
             arguments: {
                 "productName": item.name,
@@ -107,13 +107,13 @@ function runClientSession(string customerName, record {|string name; decimal pri
     }
 
     // View cart
-    mcp:CallToolResult cartResult = check mcpClient->callTool({
+    mcpv2:CallToolResult cartResult = check mcpClient->callTool({
         name: "viewCart",
         arguments: {}
     });
 
-    if cartResult.content.length() > 0 && cartResult.content[0] is mcp:TextContent {
-        mcp:TextContent textContent = <mcp:TextContent>cartResult.content[0];
+    if cartResult.content.length() > 0 && cartResult.content[0] is mcpv2:TextContent {
+        mcpv2:TextContent textContent = <mcpv2:TextContent>cartResult.content[0];
         io:println(string `${customerName}'s Cart: ${textContent.text}`);
     }
 
@@ -124,9 +124,9 @@ function runClientSession(string customerName, record {|string name; decimal pri
     return;
 }
 
-function getTextContent(mcp:CallToolResult result) returns string {
-    if result.content.length() > 0 && result.content[0] is mcp:TextContent {
-        mcp:TextContent textContent = <mcp:TextContent>result.content[0];
+function getTextContent(mcpv2:CallToolResult result) returns string {
+    if result.content.length() > 0 && result.content[0] is mcpv2:TextContent {
+        mcpv2:TextContent textContent = <mcpv2:TextContent>result.content[0];
         return textContent.text;
     }
     return "No text content available";

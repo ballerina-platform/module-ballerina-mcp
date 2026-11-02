@@ -16,12 +16,12 @@
 
 import ballerina/io;
 import ballerina/log;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/uuid;
 
-final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9091/mcp");
+final mcpv2:StreamableHttpClient mcpClient = check new ("http://localhost:9091/mcp");
 
-public function main() returns mcp:ClientError? {
+public function main() returns mcpv2:ClientError? {
     log:printInfo("Starting MCP Crypto Client Demo");
 
     // Initialize the client with client information
@@ -44,12 +44,12 @@ public function main() returns mcp:ClientError? {
     log:printInfo("MCP client connection closed");
 }
 
-function listTools() returns mcp:ClientError? {
+function listTools() returns mcpv2:ClientError? {
     log:printInfo("=== Listing Available Tools ===");
 
-    mcp:ListToolsResult toolsResult = check mcpClient->listTools();
+    mcpv2:ListToolsResult toolsResult = check mcpClient->listTools();
 
-    foreach mcp:ToolDefinition tool in toolsResult.tools {
+    foreach mcpv2:ToolDefinition tool in toolsResult.tools {
         io:println(string `Tool: ${tool.name}`);
         io:println(string `Description: ${tool.description ?: "No description available"}`);
         io:println("---");
@@ -58,7 +58,7 @@ function listTools() returns mcp:ClientError? {
     io:println(string `Total tools available: ${toolsResult.tools.length()}`);
 }
 
-function demonstrateHashText() returns mcp:ClientError? {
+function demonstrateHashText() returns mcpv2:ClientError? {
     log:printInfo("=== Demonstrating Hash Text Tool ===");
 
     // Test with different hash algorithms
@@ -69,7 +69,7 @@ function demonstrateHashText() returns mcp:ClientError? {
         // Generate a trace ID to track this request
         string traceId = uuid:createType1AsString();
 
-        mcp:CallToolResult result = check mcpClient->callTool({
+        mcpv2:CallToolResult result = check mcpClient->callTool({
             name: "hashText",
             arguments: {
                 "text": testText,
@@ -94,7 +94,7 @@ function demonstrateHashText() returns mcp:ClientError? {
     }
 
     // Test with default algorithm (sha256)
-    mcp:CallToolResult defaultResult = check mcpClient->callTool({
+    mcpv2:CallToolResult defaultResult = check mcpClient->callTool({
         name: "hashText",
         arguments: {
             "text": "Testing default algorithm"
@@ -114,14 +114,14 @@ function demonstrateHashText() returns mcp:ClientError? {
     io:println("---");
 }
 
-function demonstrateBase64Operations() returns mcp:ClientError? {
+function demonstrateBase64Operations() returns mcpv2:ClientError? {
     log:printInfo("=== Demonstrating Base64 Operations Tool ===");
 
     string originalText = "Ballerina MCP is awesome!";
 
     // Encode to Base64
     string traceId1 = uuid:createType1AsString();
-    mcp:CallToolResult encodeResult = check mcpClient->callTool({
+    mcpv2:CallToolResult encodeResult = check mcpClient->callTool({
         name: "encodeBase64",
         arguments: {
             "text": originalText,
@@ -146,7 +146,7 @@ function demonstrateBase64Operations() returns mcp:ClientError? {
     io:println("---");
 
     // Test with default operation (encode)
-    mcp:CallToolResult defaultEncodeResult = check mcpClient->callTool({
+    mcpv2:CallToolResult defaultEncodeResult = check mcpClient->callTool({
         name: "encodeBase64",
         arguments: {
             "text": "Default encode operation"
@@ -169,7 +169,7 @@ function demonstrateBase64Operations() returns mcp:ClientError? {
     string base64Text = "QmFsbGVyaW5hIE1DUCBpcyBhd2Vzb21lIQ==";
     string traceId2 = uuid:createType1AsString();
 
-    mcp:CallToolResult decodeResult = check mcpClient->callTool({
+    mcpv2:CallToolResult decodeResult = check mcpClient->callTool({
         name: "encodeBase64",
         arguments: {
             "text": base64Text,

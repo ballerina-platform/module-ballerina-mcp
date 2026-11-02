@@ -17,7 +17,7 @@
 import ballerina/http;
 import ballerina/io;
 import ballerina/jwt;
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 
 configurable int port = 9093;
 # Secret of the demo's HS256 access tokens, shared with the calendar server.
@@ -35,21 +35,21 @@ final http:Client browser = check new (serverUrl);
 isolated int urlPrompts = 0;
 
 public function main() returns error? {
-    mcp:StreamableHttpClient calendar = check new (serverUrl + "/mcp",
+    mcpv2:StreamableHttpClient calendar = check new (serverUrl + "/mcp",
         httpConfig = {auth: {token: aliceToken}},
         elicitationHandler = handleElicitation
     );
     _ = check calendar->connect({name: "Calendar demo client", version: "1.0.0"});
     // callTool answers each elicitation through the handler and continues until the tool completes.
-    mcp:CallToolResult result = check calendar->callTool({name: "listEvents"});
+    mcpv2:CallToolResult result = check calendar->callTool({name: "listEvents"});
     io:println("Events: ", result.content);
     check calendar->close();
 }
 
 // Plays Alice. A real client shows the URL, asks for consent and opens it in a browser.
-isolated function handleElicitation(mcp:ElicitRequest request) returns mcp:ElicitResult|mcp:ClientError {
-    mcp:FormElicitationParams|mcp:UrlElicitationParams params = request.params;
-    if params is mcp:FormElicitationParams {
+isolated function handleElicitation(mcpv2:ElicitRequest request) returns mcpv2:ElicitResult|mcpv2:ClientError {
+    mcpv2:FormElicitationParams|mcpv2:UrlElicitationParams params = request.params;
+    if params is mcpv2:FormElicitationParams {
         return {action: "decline"};
     }
     io:println(params.message, ": ", params.url);

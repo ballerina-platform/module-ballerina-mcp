@@ -14,34 +14,34 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/mcp.v2 as mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/test;
 
-isolated function nextVisit(mcp:HttpSession session) returns int {
-    mcp:HttpSessionEntry previous = session.hasKey("visits") ? session.get("visits") : 0;
+isolated function nextVisit(mcpv2:HttpSession session) returns int {
+    mcpv2:HttpSessionEntry previous = session.hasKey("visits") ? session.get("visits") : 0;
     int visits = (previous is int ? previous : 0) + 1;
     session.set("visits", visits);
     return visits;
 }
 
-@mcp:StreamableHttpServiceConfig {info: {name: "session-position", version: "1.0.0"}}
-service mcp:StreamableHttpService /sessionPosition on structuredListener {
-    remote isolated function sessionInMiddle(string label, mcp:HttpSession session, int step) returns string =>
+@mcpv2:StreamableHttpServiceConfig {info: {name: "session-position", version: "1.0.0"}}
+service mcpv2:StreamableHttpService /sessionPosition on structuredListener {
+    remote isolated function sessionInMiddle(string label, mcpv2:HttpSession session, int step) returns string =>
         string `${label}:${nextVisit(session)}:${step}`;
 
-    remote isolated function sessionLast(string label, mcp:HttpSession? session) returns string =>
+    remote isolated function sessionLast(string label, mcpv2:HttpSession? session) returns string =>
         string `${label}:${session is () ? "none" : nextVisit(session).toString()}`;
 }
 
 @test:Config {}
 function testSessionParameterAtMiddleAndLastPositions() returns error? {
-    mcp:StreamableHttpClient legacyClient = check new ("http://localhost:8789/sessionPosition",
+    mcpv2:StreamableHttpClient legacyClient = check new ("http://localhost:8789/sessionPosition",
             protocolMode = "legacy");
     _ = check legacyClient->connect();
 
-    mcp:ListToolsResult listedTools = check legacyClient->listTools();
+    mcpv2:ListToolsResult listedTools = check legacyClient->listTools();
     map<string[]> expectedProperties = {"sessionInMiddle": ["label", "step"], "sessionLast": ["label"]};
-    foreach mcp:ToolDefinition toolInfo in listedTools.tools {
+    foreach mcpv2:ToolDefinition toolInfo in listedTools.tools {
         map<json> properties = check toolInfo.inputSchema.properties.ensureType();
         test:assertEquals(properties.keys().sort(), expectedProperties[toolInfo.name]);
     }
@@ -52,9 +52,9 @@ function testSessionParameterAtMiddleAndLastPositions() returns error? {
     check legacyClient->close();
 }
 
-function callSessionTool(mcp:StreamableHttpClient sessionClient, string toolName, record {} arguments)
+function callSessionTool(mcpv2:StreamableHttpClient sessionClient, string toolName, record {} arguments)
         returns string|error {
-    mcp:CallToolResult result = check sessionClient->callTool({name: toolName, arguments});
-    mcp:TextContent textContent = check result.content[0].ensureType();
+    mcpv2:CallToolResult result = check sessionClient->callTool({name: toolName, arguments});
+    mcpv2:TextContent textContent = check result.content[0].ensureType();
     return textContent.text;
 }
