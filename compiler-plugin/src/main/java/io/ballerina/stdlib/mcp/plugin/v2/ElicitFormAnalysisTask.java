@@ -80,7 +80,7 @@ public class ElicitFormAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisCo
         ExpressionNode argument = schemaArgument.get();
         Optional<TypeDefinitionSymbol> recordType = getRecordTypeDefinition(semanticModel, argument);
         if (recordType.isEmpty()) {
-            context.reportDiagnostic(CompilationDiagnostic.getDiagnostic(FORM_SCHEMA_TYPE_NOT_STATIC,
+            context.reportDiagnostic(CompilationDiagnostic.getDiagnostic(FORM_SCHEMA_TYPE_NOT_STATIC, context,
                     argument.location()));
             return;
         }
@@ -91,7 +91,7 @@ public class ElicitFormAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisCo
             modifierContextMap.computeIfAbsent(context.documentId(), document -> new ModifierContext())
                     .addFormSchema(argument, formSchema);
         } catch (UnsupportedFormFieldException e) {
-            context.reportDiagnostic(CompilationDiagnostic.getDiagnostic(UNSUPPORTED_FORM_FIELD,
+            context.reportDiagnostic(CompilationDiagnostic.getDiagnostic(UNSUPPORTED_FORM_FIELD, context,
                     argument.location(), typeName, e.fieldName()));
         }
     }

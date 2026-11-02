@@ -152,6 +152,29 @@ public class CompilerPluginTest {
     }
 
     @Test
+    public void testMessagesUseAliasPrefix() {
+        assertMessagesUsePrefix("aliased_prefix_messages", "mcpv2");
+    }
+
+    @Test
+    public void testMessagesUseDefaultPrefix() {
+        assertMessagesUsePrefix("default_prefix_messages", "v2");
+    }
+
+    private void assertMessagesUsePrefix(String path, String prefix) {
+        DiagnosticResult diagnosticResult = compile(path);
+        List<String> messages = diagnosticResult.errors().stream().map(Diagnostic::message).toList();
+        Assert.assertEquals(messages.size(), 3, messages.toString());
+        for (String expected : List.of("type '" + prefix + ":HttpSession'", "(e.g., '" + prefix + ":RequestMeta?')",
+                "in an '" + prefix + ":StreamableHttpAdvancedService' must return '" + prefix + ":CallToolResult|"
+                        + prefix + ":InputRequiredResult|" + prefix + ":ServerError'")) {
+            Assert.assertTrue(messages.stream().anyMatch(message -> message.contains(expected)),
+                    "expected a message containing '" + expected + "' but found: " + messages);
+        }
+        Assert.assertTrue(messages.stream().noneMatch(message -> message.contains("'mcp:")), messages.toString());
+    }
+
+    @Test
     public void testDuplicateHttpRequestParams() {
         DiagnosticResult diagnosticResult = compile("sample_package_10");
         Assert.assertEquals(errorCount(diagnosticResult), 1);

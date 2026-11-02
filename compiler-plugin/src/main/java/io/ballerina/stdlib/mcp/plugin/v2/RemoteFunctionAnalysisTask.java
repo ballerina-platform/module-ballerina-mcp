@@ -147,7 +147,8 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                 && functionSymbol.typeDescriptor().params()
                         .map(params -> params.stream().anyMatch(Utils::hasMcpArgumentAnnotation)).orElse(false)) {
             reportDiagnostic(CompilationDiagnostic.getDiagnostic(
-                    CompilationDiagnostic.MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA, functionNodeLocation, functionName));
+                    CompilationDiagnostic.MCP_ARGUMENT_WITH_EXPLICIT_SCHEMA, context, functionNodeLocation,
+                    functionName));
         }
         boolean hasSpread = fields.stream().anyMatch(field -> field.kind() == SyntaxKind.SPREAD_FIELD);
         boolean hasShorthand = fields.stream().anyMatch(field -> field instanceof SpecificFieldNode specific
@@ -193,12 +194,12 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         String functionName = function.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function");
         if (policy.known() && Boolean.FALSE.equals(policy.value()) && schema.known() && schema.value() != null) {
             reportDiagnostic(CompilationDiagnostic.getDiagnostic(
-                    CompilationDiagnostic.UNSTRUCTURED_OUTPUT_WITH_OUTPUT_SCHEMA, location, functionName));
+                    CompilationDiagnostic.UNSTRUCTURED_OUTPUT_WITH_OUTPUT_SCHEMA, context, location, functionName));
         }
         if (policy.known() && Boolean.TRUE.equals(policy.value()) && schema.known() && schema.value() == null
                 && NIL_EXPRESSION.equals(generatedOutput)) {
             reportDiagnostic(CompilationDiagnostic.getDiagnostic(
-                    UNABLE_TO_GENERATE_OUTPUT_SCHEMA, location, functionName));
+                    UNABLE_TO_GENERATE_OUTPUT_SCHEMA, context, location, functionName));
         }
     }
 
@@ -252,7 +253,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
         try {
             return SchemaUtils.getParameterSchema(functionSymbol, this.context);
         } catch (SchemaGenerationException e) {
-            Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION,
+            Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(UNABLE_TO_GENERATE_SCHEMA_FOR_FUNCTION, context,
                     functionSymbol.getLocation().orElse(alternativeFunctionLocation),
                     functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function"));
             reportDiagnostic(diagnostic);

@@ -69,7 +69,7 @@ public class ProtocolSessionAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
                     diagnostic = nullable ? CompilationDiagnostic.OPTIONAL_SESSION_IN_AUTO_MODE
                             : CompilationDiagnostic.REQUIRED_SESSION_IN_AUTO_MODE;
                 }
-                context.reportDiagnostic(CompilationDiagnostic.getDiagnostic(diagnostic,
+                context.reportDiagnostic(CompilationDiagnostic.getDiagnostic(diagnostic, context,
                         parameter.getLocation().orElse(functionNode.location()),
                         parameter.getName().orElse("session")));
             }));

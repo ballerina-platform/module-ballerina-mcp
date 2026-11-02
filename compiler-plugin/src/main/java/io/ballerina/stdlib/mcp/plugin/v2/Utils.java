@@ -65,6 +65,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import static io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic.modulePrefix;
+
 /**
  * Util class for the compiler plugin.
  */
@@ -74,8 +76,6 @@ public class Utils {
     public static final String TOOL_ANNOTATION_NAME = "Tool";
     public static final String ARGUMENT_ANNOTATION_NAME = "Argument";
     public static final String ARGUMENT_HEADER_NAME_FIELD = "headerName";
-    // Prefix used for v2 types in diagnostic messages, which match the v2 docs' `mcp:` prefix.
-    public static final String MCP_PACKAGE_NAME = "mcp";
     public static final String STREAMABLE_HTTP_BASIC_SERVICE_NAME = "StreamableHttpService";
     public static final String STREAMABLE_HTTP_ADVANCED_SERVICE_NAME = "StreamableHttpAdvancedService";
     public static final String SESSION_TYPE_NAME = "HttpSession";
@@ -95,19 +95,6 @@ public class Utils {
     public static final String STREAMABLE_HTTP_SERVICE_CONFIG_ANNOTATION_NAME = "StreamableHttpServiceConfig";
     public static final String SESSION_MODE_FIELD = "sessionMode";
     private static final Pattern MCP_HEADER_NAME = Pattern.compile("[!#$%&'*+.^_`|~0-9A-Za-z-]+");
-
-    // Human-readable lists of supported parameter types, used in the INVALID_PARAMETER_TYPE diagnostic.
-    public static final String BASIC_TOOL_SUPPORTED_PARAM_TYPES =
-            "'anydata' tool parameters, an 'mcp:HttpSession' parameter, an optional "
-                    + "'mcp:RequestMeta' parameter, an 'mcp:AuthContext' parameter, "
-                    + "an 'mcp:Context' parameter, an 'http:Headers' parameter, an 'http:Request' parameter, "
-                    + "or '@http:Header' parameters";
-    public static final String ADVANCED_SUPPORTED_PARAM_TYPES =
-            "'mcp:CallToolParams', 'mcp:HttpSession', 'mcp:AuthContext', 'http:Headers', 'http:Request', "
-                    + "or an '@http:Header' parameter";
-    // 'onListTools' does not accept 'mcp:CallToolParams' or 'mcp:HttpSession'.
-    public static final String ADVANCED_LIST_TOOLS_SUPPORTED_PARAM_TYPES =
-            "'mcp:Cursor?', 'mcp:AuthContext', 'http:Headers', 'http:Request', or an '@http:Header' parameter";
 
     public enum HttpSessionMode {
         STATEFUL("stateful"),
@@ -138,6 +125,25 @@ public class Utils {
     }
 
     private Utils() {
+    }
+
+    // Human-readable lists of supported parameter types, used in the INVALID_PARAMETER_TYPE diagnostic.
+    public static String basicToolSupportedParamTypes(String prefix) {
+        return "'anydata' tool parameters, an '" + prefix + ":HttpSession' parameter, an optional '"
+                + prefix + ":RequestMeta' parameter, an '" + prefix + ":AuthContext' parameter, an '"
+                + prefix + ":Context' parameter, an 'http:Headers' parameter, an 'http:Request' parameter, "
+                + "or '@http:Header' parameters";
+    }
+
+    public static String advancedSupportedParamTypes(String prefix) {
+        return "'" + prefix + ":CallToolParams', '" + prefix + ":HttpSession', '" + prefix + ":AuthContext', "
+                + "'http:Headers', 'http:Request', or an '@http:Header' parameter";
+    }
+
+    // 'onListTools' does not accept 'CallToolParams' or 'HttpSession'.
+    public static String advancedListToolsSupportedParamTypes(String prefix) {
+        return "'" + prefix + ":Cursor?', '" + prefix + ":AuthContext', 'http:Headers', 'http:Request', "
+                + "or an '@http:Header' parameter";
     }
 
     public static boolean isMcpToolAnnotation(AnnotationSymbol annotationSymbol) {
@@ -273,7 +279,7 @@ public class Utils {
                         || isHttpHeadersType(parameterType) || isHttpRequestType(parameterType)
                         || !isValidMcpHeaderArgumentType(parameterType, context)) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.INVALID_MCP_ARGUMENT_TYPE,
+                            CompilationDiagnostic.INVALID_MCP_ARGUMENT_TYPE, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation), functionName, parameterName);
                     context.reportDiagnostic(diagnostic);
                     return false;
@@ -281,7 +287,7 @@ public class Utils {
                 String headerName = getMcpArgumentHeaderName(parameterSymbol).orElse("");
                 if (!MCP_HEADER_NAME.matcher(headerName).matches()) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.INVALID_MCP_ARGUMENT_HEADER_NAME,
+                            CompilationDiagnostic.INVALID_MCP_ARGUMENT_HEADER_NAME, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
                             functionName, parameterName, headerName);
                     context.reportDiagnostic(diagnostic);
@@ -289,7 +295,7 @@ public class Utils {
                 }
                 if (!argumentHeaderNames.add(headerName.toLowerCase(Locale.ROOT))) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.DUPLICATE_MCP_ARGUMENT_HEADER_NAME,
+                            CompilationDiagnostic.DUPLICATE_MCP_ARGUMENT_HEADER_NAME, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
                             functionName, parameterName, headerName);
                     context.reportDiagnostic(diagnostic);
@@ -300,7 +306,7 @@ public class Utils {
             if (hasHttpHeaderAnnotation(parameterSymbol)) {
                 if (!isValidHeaderParamType(parameterType, context)) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.INVALID_HEADER_PARAMETER_TYPE,
+                            CompilationDiagnostic.INVALID_HEADER_PARAMETER_TYPE, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
                             functionName, parameterName);
                     context.reportDiagnostic(diagnostic);
@@ -312,7 +318,7 @@ public class Utils {
             if (isHttpHeadersType(parameterType)) {
                 if (hasHeadersParam) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.DUPLICATE_PARAMETER,
+                            CompilationDiagnostic.DUPLICATE_PARAMETER, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
                             functionName, parameterName, HTTP_PACKAGE_NAME + ":" + HEADERS_TYPE_NAME);
                     context.reportDiagnostic(diagnostic);
@@ -322,7 +328,7 @@ public class Utils {
             } else if (isHttpRequestType(parameterType)) {
                 if (hasRequestParam) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.DUPLICATE_PARAMETER,
+                            CompilationDiagnostic.DUPLICATE_PARAMETER, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
                             functionName, parameterName, HTTP_PACKAGE_NAME + ":" + REQUEST_TYPE_NAME);
                     context.reportDiagnostic(diagnostic);
@@ -332,9 +338,9 @@ public class Utils {
             } else if (isAuthContextParam) {
                 if (hasAuthContextParam) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.DUPLICATE_PARAMETER,
+                            CompilationDiagnostic.DUPLICATE_PARAMETER, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
-                            functionName, parameterName, MCP_PACKAGE_NAME + ":" + AUTH_CONTEXT_TYPE_NAME);
+                            functionName, parameterName, modulePrefix(context) + ":" + AUTH_CONTEXT_TYPE_NAME);
                     context.reportDiagnostic(diagnostic);
                     return false;
                 }
@@ -342,9 +348,9 @@ public class Utils {
             } else if (isContextParam) {
                 if (hasContextParam) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.DUPLICATE_PARAMETER,
+                            CompilationDiagnostic.DUPLICATE_PARAMETER, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
-                            functionName, parameterName, MCP_PACKAGE_NAME + ":" + CONTEXT_TYPE_NAME);
+                            functionName, parameterName, modulePrefix(context) + ":" + CONTEXT_TYPE_NAME);
                     context.reportDiagnostic(diagnostic);
                     return false;
                 }
@@ -352,16 +358,16 @@ public class Utils {
             } else if (isSessionType) {
                 if (hasSessionParam) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.DUPLICATE_PARAMETER,
+                            CompilationDiagnostic.DUPLICATE_PARAMETER, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
-                            functionName, parameterName, MCP_PACKAGE_NAME + ":" + SESSION_TYPE_NAME);
+                            functionName, parameterName, modulePrefix(context) + ":" + SESSION_TYPE_NAME);
                     context.reportDiagnostic(diagnostic);
                     return false;
                 }
 
                 if (sessionMode == HttpSessionMode.STATELESS && !isOptionalType(parameterType)) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE,
+                            CompilationDiagnostic.SESSION_PARAM_NOT_ALLOWED_IN_STATELESS_MODE, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
                             functionName, parameterName);
                     context.reportDiagnostic(diagnostic);
@@ -372,9 +378,9 @@ public class Utils {
             } else if (isMetaParam) {
                 if (hasMetaParam) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.DUPLICATE_PARAMETER,
+                            CompilationDiagnostic.DUPLICATE_PARAMETER, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
-                            functionName, parameterName, MCP_PACKAGE_NAME + ":" + META_TYPE_NAME);
+                            functionName, parameterName, modulePrefix(context) + ":" + META_TYPE_NAME);
                     context.reportDiagnostic(diagnostic);
                     return false;
                 }
@@ -382,7 +388,7 @@ public class Utils {
                 // Check if Meta parameter is optional
                 if (!isOptionalType(parameterType)) {
                     Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                            CompilationDiagnostic.META_PARAM_MUST_BE_OPTIONAL,
+                            CompilationDiagnostic.META_PARAM_MUST_BE_OPTIONAL, context,
                             parameterSymbol.getLocation().orElse(alternativeLocation),
                             functionName, parameterName);
                     context.reportDiagnostic(diagnostic);
@@ -392,9 +398,10 @@ public class Utils {
                 hasMetaParam = true;
             } else if (!isAnydataType(parameterType, context)) {
                 Diagnostic diagnostic = CompilationDiagnostic.getDiagnostic(
-                        CompilationDiagnostic.INVALID_PARAMETER_TYPE,
+                        CompilationDiagnostic.INVALID_PARAMETER_TYPE, context,
                         parameterSymbol.getLocation().orElse(alternativeLocation),
-                        functionName, parameterName, BASIC_TOOL_SUPPORTED_PARAM_TYPES);
+                        functionName, parameterName,
+                        basicToolSupportedParamTypes(modulePrefix(context)));
                 context.reportDiagnostic(diagnostic);
                 return false;
             }

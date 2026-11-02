@@ -18,6 +18,8 @@
 
 package io.ballerina.stdlib.mcp.plugin.v2.diagnostics;
 
+import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
+import io.ballerina.stdlib.mcp.plugin.McpModule;
 import io.ballerina.tools.diagnostics.Diagnostic;
 import io.ballerina.tools.diagnostics.DiagnosticFactory;
 import io.ballerina.tools.diagnostics.DiagnosticInfo;
@@ -54,6 +56,8 @@ public enum CompilationDiagnostic {
     OPTIONAL_SESSION_IN_MODERN_MODE(DiagnosticMessage.WARNING_103, DiagnosticCode.MCP_WARNING_203, WARNING),
     OPTIONAL_SESSION_IN_AUTO_MODE(DiagnosticMessage.WARNING_104, DiagnosticCode.MCP_WARNING_204, WARNING);
 
+    private static final String DEFAULT_PREFIX = "mcp";
+
     private final String diagnostic;
     private final String diagnosticCode;
     private final DiagnosticSeverity diagnosticSeverity;
@@ -65,13 +69,37 @@ public enum CompilationDiagnostic {
         this.diagnosticSeverity = diagnosticSeverity;
     }
 
-    public static Diagnostic getDiagnostic(CompilationDiagnostic compilationDiagnostic, Location location,
-                                           Object... args) {
+    /**
+     * Creates the diagnostic. Its message gets the prefix that the analysed document binds to the v2 module as
+     * argument {@code {0}}, followed by the given arguments, so that it names v2 types as the user's code does.
+     *
+     * @param compilationDiagnostic the diagnostic to create
+     * @param context               the analysis context of the document that reports it
+     * @param location              the location of the diagnostic
+     * @param args                  the message arguments {@code {1}} onwards
+     * @return the diagnostic
+     */
+    public static Diagnostic getDiagnostic(CompilationDiagnostic compilationDiagnostic,
+                                           SyntaxNodeAnalysisContext context, Location location, Object... args) {
+        Object[] formatArgs = new Object[args.length + 1];
+        formatArgs[0] = modulePrefix(context);
+        System.arraycopy(args, 0, formatArgs, 1, args.length);
         DiagnosticInfo diagnosticInfo = new DiagnosticInfo(
                 compilationDiagnostic.getDiagnosticCode(),
                 compilationDiagnostic.getDiagnostic(),
                 compilationDiagnostic.getDiagnosticSeverity());
-        return DiagnosticFactory.createDiagnostic(diagnosticInfo, location, args);
+        return DiagnosticFactory.createDiagnostic(diagnosticInfo, location, formatArgs);
+    }
+
+    /**
+     * Returns the prefix that the analysed document binds to the v2 module, for naming v2 types in messages.
+     *
+     * @param context the analysis context of the document
+     * @return the prefix, or {@code mcp} if the document cannot reference the module
+     */
+    public static String modulePrefix(SyntaxNodeAnalysisContext context) {
+        return McpModule.V2.prefixIn(context.semanticModel(), context.syntaxTree().rootNode())
+                .orElse(DEFAULT_PREFIX);
     }
 
     public String getDiagnostic() {

@@ -54,14 +54,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
     private static final String ON_LIST_TOOLS = "onListTools";
     private static final String HTTP_HEADERS_DISPLAY = "http:Headers";
     private static final String HTTP_REQUEST_DISPLAY = "http:Request";
-    private static final String SESSION_DISPLAY = "mcp:HttpSession";
-    private static final String AUTH_CONTEXT_DISPLAY = "mcp:AuthContext";
-    private static final String CURSOR_DISPLAY = "mcp:Cursor";
-    private static final String CALL_TOOL_PARAMS_DISPLAY = "mcp:CallToolParams";
-    private static final String CALL_TOOL_RESULT_DISPLAY =
-            "mcp:CallToolResult|mcp:InputRequiredResult|mcp:ServerError";
-    private static final String LIST_TOOLS_RESULT_DISPLAY =
-            "mcp:ListToolsResult|mcp:ServerError";
 
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
@@ -127,6 +119,7 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
         }
         FunctionTypeSymbol functionType = functionSymbol.typeDescriptor();
         Location location = functionNode.location();
+        String prefix = CompilationDiagnostic.modulePrefix(context);
         boolean isCallTool = ON_CALL_TOOL.equals(methodName);
         boolean isListTools = ON_LIST_TOOLS.equals(methodName);
 
@@ -162,7 +155,7 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
             } else if (Utils.isAuthContextType(type)) {
                 if (hasAuthContext) {
                     report(context, CompilationDiagnostic.DUPLICATE_PARAMETER, paramLocation,
-                            methodName, paramName, AUTH_CONTEXT_DISPLAY);
+                            methodName, paramName, prefix + ":" + Utils.AUTH_CONTEXT_TYPE_NAME);
                 }
                 hasAuthContext = true;
             } else if (isCallTool && Utils.isCallToolParamsType(type)) {
@@ -170,18 +163,18 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
             } else if (isCallTool && isSessionParam(type)) {
                 if (hasSession) {
                     report(context, CompilationDiagnostic.DUPLICATE_PARAMETER, paramLocation,
-                            methodName, paramName, SESSION_DISPLAY);
+                            methodName, paramName, prefix + ":" + Utils.SESSION_TYPE_NAME);
                 }
                 hasSession = true;
             } else if (isListTools && Utils.isOptionalCursorType(type)) {
                 if (hasCursor) {
                     report(context, CompilationDiagnostic.DUPLICATE_PARAMETER, paramLocation,
-                            methodName, paramName, CURSOR_DISPLAY);
+                            methodName, paramName, prefix + ":" + Utils.CURSOR_TYPE_NAME);
                 }
                 hasCursor = true;
             } else {
-                String supportedTypes = isCallTool ? Utils.ADVANCED_SUPPORTED_PARAM_TYPES
-                        : Utils.ADVANCED_LIST_TOOLS_SUPPORTED_PARAM_TYPES;
+                String supportedTypes = isCallTool ? Utils.advancedSupportedParamTypes(prefix)
+                        : Utils.advancedListToolsSupportedParamTypes(prefix);
                 report(context, CompilationDiagnostic.INVALID_PARAMETER_TYPE, paramLocation,
                         methodName, paramName, supportedTypes);
             }
@@ -189,10 +182,12 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
 
         if (isCallTool && primaryParamCount != 1) {
             report(context, CompilationDiagnostic.ADVANCED_METHOD_PARAMS, location, methodName,
-                    CALL_TOOL_PARAMS_DISPLAY);
+                    prefix + ":" + Utils.CALL_TOOL_PARAMS_TYPE_NAME);
         }
 
-        String expectedDisplay = isCallTool ? CALL_TOOL_RESULT_DISPLAY : LIST_TOOLS_RESULT_DISPLAY;
+        String expectedDisplay = isCallTool
+                ? prefix + ":CallToolResult|" + prefix + ":InputRequiredResult|" + prefix + ":ServerError"
+                : prefix + ":ListToolsResult|" + prefix + ":ServerError";
         boolean validResult = isCallTool
                 ? returnTypeContainsAny(functionType, Utils.CALL_TOOL_RESULT_TYPE_NAME,
                     Utils.INPUT_REQUIRED_RESULT_TYPE_NAME)
@@ -242,6 +237,6 @@ public class AdvancedServiceAnalysisTask implements AnalysisTask<SyntaxNodeAnaly
 
     private void report(SyntaxNodeAnalysisContext context, CompilationDiagnostic diagnostic, Location location,
                         Object... args) {
-        context.reportDiagnostic(CompilationDiagnostic.getDiagnostic(diagnostic, location, args));
+        context.reportDiagnostic(CompilationDiagnostic.getDiagnostic(diagnostic, context, location, args));
     }
 }

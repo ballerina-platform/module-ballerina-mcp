@@ -851,7 +851,7 @@ it, so build an unlocked project online once, or pass `--offline` when the packa
 ### Compiler diagnostic codes
 
 The v2 module's compiler diagnostics have their own codes, so that they never mix with the 1.x codes. Their messages
-are unchanged.
+name v2 types with the prefix the file imports the v2 module as.
 
 | 1.x code | v2 module code | Diagnostic |
 | --- | --- | --- |
