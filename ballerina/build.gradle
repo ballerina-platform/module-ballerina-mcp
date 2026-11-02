@@ -57,6 +57,8 @@ ballerina {
     module = packageName
     langVersion = ballerinaLangVersion
     platform = "java25"
+    // The default `ballerina.mcp.*` misses the v2 module, whose classes are under `ballerina.mcp&0046v2`.
+    testCoverageParam = "--code-coverage --coverage-format=xml --includes=io.ballerina.stdlib.mcp.*:ballerina.mcp*"
 }
 
 task updateTomlFiles {
