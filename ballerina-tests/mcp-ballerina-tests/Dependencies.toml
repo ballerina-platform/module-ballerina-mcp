@@ -246,16 +246,25 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "1.4.0"
+version = "1.5.0"
 scope = "testOnly"
 dependencies = [
+	{org = "ballerina", name = "crypto"},
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},
+	{org = "ballerina", name = "jwt"},
+	{org = "ballerina", name = "lang.array"},
+	{org = "ballerina", name = "lang.regexp"},
+	{org = "ballerina", name = "lang.runtime"},
 	{org = "ballerina", name = "log"},
+	{org = "ballerina", name = "oauth2"},
+	{org = "ballerina", name = "time"},
+	{org = "ballerina", name = "url"},
 	{org = "ballerina", name = "uuid"}
 ]
 modules = [
-	{org = "ballerina", packageName = "mcp", moduleName = "mcp"}
+	{org = "ballerina", packageName = "mcp", moduleName = "mcp"},
+	{org = "ballerina", packageName = "mcp", moduleName = "mcp.v2"}
 ]
 
 [[package]]
