@@ -977,7 +977,7 @@
             "target": "$streamableHttpService.tool.returns",
             "metadata": {
               "label": "Return Type",
-              "description": "The return type of the MCP tool"
+              "description": "What the tool returns to the client."
             },
             "source": {
               "construct": {
