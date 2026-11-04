@@ -1193,6 +1193,17 @@
     "icon": {
       "lightPath": "icons/light.svg",
       "darkPath": "icons/dark.svg"
+    },
+    "identifier": {
+      "separator": " - ",
+      "resolvers": [
+        {
+          "via": "annotationField",
+          "fields": [
+            "info.name"
+          ]
+        }
+      ]
     }
   },
   "importPrefix": "mcpv2"
