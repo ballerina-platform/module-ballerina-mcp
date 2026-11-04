@@ -130,7 +130,7 @@ isolated function protocolMessageResult(WireMessage messageValue, RequestId requ
     if modernResponse && resultType !is string {
         return error ResponseParsingError("Modern result is missing required resultType");
     }
-    if resultType != () && resultType != "complete" && resultType != "input_required" {
+    if resultType != () && resultType != RESULT_TYPE_COMPLETE && resultType != RESULT_TYPE_INPUT_REQUIRED {
         return error ResponseParsingError("Unsupported resultType");
     }
     return resultValue;

@@ -176,7 +176,7 @@ isolated function applyClientAuthentication(ClientAuth? clientAuth, string clien
         string encodedId = check encodeValue(clientId);
         string encodedSecret = check encodeValue(clientAuth.clientSecret);
         string credentials = (encodedId + ":" + encodedSecret).toBytes().toBase64();
-        headers["Authorization"] = "Basic " + credentials;
+        headers[AUTHORIZATION_HEADER] = "Basic " + credentials;
         return;
     }
     if clientAuth is PrivateKeyJwtConfig {

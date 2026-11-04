@@ -306,7 +306,7 @@ public distinct isolated client class StreamableHttpClient {
             return wireResponse;
         }
         Result wireResult = wireResponse;
-        if wireResult["resultType"] != "complete" || !wireResult.hasKey("ttlMs") ||
+        if wireResult["resultType"] != RESULT_TYPE_COMPLETE || !wireResult.hasKey("ttlMs") ||
                 !wireResult.hasKey("cacheScope") {
             return error ListToolsError("Invalid modern tools/list result");
         }
@@ -501,14 +501,14 @@ public distinct isolated client class StreamableHttpClient {
             return responseValue;
         }
         Result wireResult = responseValue;
-        if wireResult["resultType"] == "input_required" {
+        if wireResult["resultType"] == RESULT_TYPE_INPUT_REQUIRED {
             InputRequiredResult|error inputResult = wireResult.cloneWithType();
             if inputResult is error || (inputResult.inputRequests is () && inputResult.requestState is ()) {
                 return error ToolCallError("Invalid input-required result");
             }
             return inputResult;
         }
-        if wireResult["resultType"] != "complete" {
+        if wireResult["resultType"] != RESULT_TYPE_COMPLETE {
             return error ToolCallError("Invalid tool result");
         }
         CallToolResult|error callResult = applicationResult(wireResult).cloneWithType();
@@ -561,9 +561,9 @@ public distinct isolated client class StreamableHttpClient {
     private isolated function discoverModern(map<string|string[]> headers) returns DiscoverResult|ClientError {
         // A discovery result that omits resultType, ttlMs or cacheScope still comes from a modern server, so
         // they default to complete, 0 and private rather than failing the probe into a legacy fallback.
-        Result wireResult = check self.sendModernRequest("server/discover", {}, headers, requireResultType = false);
+        Result wireResult = check self.sendModernRequest(REQUEST_DISCOVER, {}, headers, requireResultType = false);
         DiscoverResult|error discovery = applicationResult(wireResult, preserveCacheHints = true).cloneWithType();
-        if discovery is error || (wireResult["resultType"] ?: "complete") != "complete" {
+        if discovery is error || (wireResult["resultType"] ?: RESULT_TYPE_COMPLETE) != RESULT_TYPE_COMPLETE {
             return error ResponseParsingError("Invalid discovery result");
         }
         return discovery;

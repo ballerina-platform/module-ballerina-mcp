@@ -62,7 +62,7 @@ isolated function modernCapabilities(StreamableHttpServiceConfiguration serviceC
 isolated function modernResult(Result resultValue, Implementation serverInfo, RequestId requestId,
         CacheHint? cacheHint = ()) returns http:Ok {
     Result wireResult = {...resultValue};
-    wireResult["resultType"] = wireResult["resultType"] ?: "complete";
+    wireResult["resultType"] = wireResult["resultType"] ?: RESULT_TYPE_COMPLETE;
     ResultMeta resultMeta = {...(wireResult._meta ?: {})};
     Implementation effectiveServerInfo = resultMeta.serverInfo ?: serverInfo;
     _ = resultMeta.removeIfHasKey("serverInfo");
@@ -102,7 +102,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if methodHeader is error || methodHeader != requestMessage.method {
         return modernError(HEADER_MISMATCH, "Mcp-Method must match the request method", requestMessage.id);
     }
-    if requestMessage.method == "server/discover" {
+    if requestMessage.method == REQUEST_DISCOVER {
         CacheHint discoverHint = serviceConfig.cacheHints.discover ?: {};
         DiscoverResult discoverResult = {
             supportedVersions: advertisedProtocolVersions(serviceConfig),

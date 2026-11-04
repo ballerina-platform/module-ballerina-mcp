@@ -28,7 +28,9 @@ public enum RequestMethod {
     # Request to list all available tools from the server
     REQUEST_LIST_TOOLS = "tools/list",
     # Request to execute a specific tool with given parameters
-    REQUEST_CALL_TOOL = "tools/call"
+    REQUEST_CALL_TOOL = "tools/call",
+    # Request to discover the server's supported versions and capabilities
+    REQUEST_DISCOVER = "server/discover"
 };
 
 # Selects protocol behavior independently of legacy HTTP session management.
@@ -99,8 +101,13 @@ type ResultFields record {
     ResultMeta _meta?;
 };
 
-# Result discriminator. Known core results narrow this to a string singleton.
+# Result discriminator. Open so extensions can add values; known core results narrow it to a singleton.
 public type ResultType string;
+
+# A result that completes the request.
+public const RESULT_TYPE_COMPLETE = "complete";
+# An interim result that needs more input before the request can complete.
+public const RESULT_TYPE_INPUT_REQUIRED = "input_required";
 
 # Base result type with common fields.
 public type Result record {
@@ -410,7 +417,7 @@ public type ContentBlock TextContent|ImageContent|AudioContent|ResourceLink|Embe
 public type CallToolResult record {
     *ResultFields;
     # Identifies a completed modern result when disambiguating it from InputRequiredResult.
-    "complete" resultType?;
+    RESULT_TYPE_COMPLETE resultType?;
     # A list of content objects that represent the unstructured result of the tool call.
     ContentBlock[] content;
     # An optional JSON value that represents the structured result of the tool call.
@@ -927,7 +934,7 @@ public type TitledOption record {|
 public type InputRequiredResult record {
     *ResultFields;
     # Identifies an interim result requiring a continuation.
-    "input_required" resultType = "input_required";
+    RESULT_TYPE_INPUT_REQUIRED resultType = RESULT_TYPE_INPUT_REQUIRED;
     # Input requests keyed by server-assigned identifiers.
     map<InputRequest> inputRequests?;
     # Opaque server state that clients must echo without modification.
