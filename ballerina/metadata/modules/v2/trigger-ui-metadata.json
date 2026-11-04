@@ -1022,6 +1022,15 @@
           },
           "layout": [
             {
+              "id": "toolSettings",
+              "label": "Tool Settings",
+              "description": "How the tool shapes its output and who may call it.",
+              "advanced": true,
+              "fields": [
+                "toolConfig"
+              ]
+            },
+            {
               "id": "mcpContext",
               "label": "MCP Context",
               "description": "Values the MCP runtime injects. Not part of the tool input schema.",
@@ -1045,7 +1054,122 @@
               ]
             }
           ],
-          "properties": {}
+          "properties": {
+            "toolConfig": {
+              "key": "toolConfig",
+              "metadata": {
+                "label": "Tool Settings",
+                "description": "Settings of the tool annotation."
+              },
+              "state": {
+                "enabled": true,
+                "editable": true,
+                "optional": true,
+                "advanced": true
+              },
+              "source": {
+                "construct": {
+                  "kind": "COMPLEX_FUNCTION_ANNOTATION"
+                },
+                "argument": {
+                  "originalName": "Tool"
+                },
+                "module": {
+                  "name": "mcp.v2"
+                }
+              },
+              "properties": {
+                "structuredOutput": {
+                  "key": "structuredOutput",
+                  "metadata": {
+                    "label": "Structured Output",
+                    "description": "Auto adds an output schema when the return type supports one. Required fails the build if it cannot; Off sends unstructured output only."
+                  },
+                  "widget": {
+                    "widgetKind": "SINGLE_SELECT",
+                    "selected": true,
+                    "ballerinaType": "boolean",
+                    "options": [
+                      {
+                        "label": "Required",
+                        "value": "true"
+                      },
+                      {
+                        "label": "Off",
+                        "value": "false"
+                      }
+                    ]
+                  },
+                  "state": {
+                    "enabled": false,
+                    "editable": true,
+                    "optional": true,
+                    "advanced": false
+                  },
+                  "source": {
+                    "construct": {
+                      "kind": "MAPPING_FIELD"
+                    },
+                    "field": "structuredOutput",
+                    "optional": true
+                  },
+                  "placeholder": "Auto"
+                },
+                "outputSchema": {
+                  "key": "outputSchema",
+                  "metadata": {
+                    "label": "Output Schema",
+                    "description": "A JSON schema for the return value, replacing the generated one."
+                  },
+                  "widget": {
+                    "widgetKind": "EXPRESSION",
+                    "selected": true,
+                    "ballerinaType": "mcpv2:OutputSchema"
+                  },
+                  "state": {
+                    "enabled": false,
+                    "editable": true,
+                    "optional": true,
+                    "advanced": false
+                  },
+                  "source": {
+                    "construct": {
+                      "kind": "MAPPING_FIELD"
+                    },
+                    "field": "outputSchema",
+                    "optional": true
+                  },
+                  "placeholder": "{\"type\": \"object\"}"
+                },
+                "scopes": {
+                  "key": "scopes",
+                  "metadata": {
+                    "label": "Required Scopes",
+                    "description": "Scopes the caller access token must grant to call this tool. The service needs OAuth protection, or it fails to start."
+                  },
+                  "widget": {
+                    "widgetKind": "EXPRESSION",
+                    "selected": true,
+                    "ballerinaType": "string[]"
+                  },
+                  "state": {
+                    "enabled": false,
+                    "editable": true,
+                    "optional": true,
+                    "advanced": false
+                  },
+                  "source": {
+                    "construct": {
+                      "kind": "MAPPING_FIELD"
+                    },
+                    "field": "scopes",
+                    "optional": true
+                  },
+                  "placeholder": "[\"tools:read\"]"
+                }
+              }
+            }
+          }
         }
       ],
       "source": {
