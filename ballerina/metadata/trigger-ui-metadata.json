@@ -920,6 +920,9 @@
         {
           "via": "annotationField",
           "fields": ["info.name"]
+        },
+        {
+          "via": "servicePath"
         }
       ]
     }
