@@ -390,7 +390,7 @@
           "target": "$streamableHttpService.tool",
           "metadata": {
             "label": "Tool",
-            "description": "Define a tool function that MCP clients can discover and call.",
+            "description": "A tool that MCP clients, such as AI agents, can list and call.",
             "addLabel": "Add Tool"
           },
           "parameters": [
