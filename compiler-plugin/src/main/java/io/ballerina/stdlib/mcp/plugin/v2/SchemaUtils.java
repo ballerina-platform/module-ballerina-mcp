@@ -109,13 +109,15 @@ public class SchemaUtils {
                     continue;
                 }
 
-                String parameterName = parameterSymbol.getName().orElseThrow();
+                // Doc comments key parameters by their source name, arguments by the unescaped one.
+                String sourceName = parameterSymbol.getName().orElseThrow();
+                String parameterName = unescapeIdentifier(sourceName);
                 if (parameterSymbol.paramKind() != ParameterKind.DEFAULTABLE) {
                     requiredParams.add(parameterName);
                 }
                 @SuppressWarnings("rawtypes")
                 Schema schema = typeMapper.getSchema(parameterSymbol.typeDescriptor());
-                String parameterDescription = Utils.getParameterDescription(functionSymbol, parameterName);
+                String parameterDescription = Utils.getParameterDescription(functionSymbol, sourceName);
                 schema.setDescription(parameterDescription);
                 String jsonSchema = SchemaUtils.getJsonSchema(schema);
                 Optional<String> headerName = getMcpArgumentHeaderName(parameterSymbol);
