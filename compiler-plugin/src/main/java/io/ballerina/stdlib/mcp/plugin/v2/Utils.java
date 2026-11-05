@@ -179,8 +179,9 @@ public class Utils {
         return documentable.documentation().get().description().get();
     }
 
-    public static String escapeDoubleQuotes(String input) {
-        return input.replace("\"", "\\\"");
+    // Backslashes first, so the ones added for quotes are not escaped again.
+    public static String escapeStringLiteral(String input) {
+        return input.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     public static String addDoubleQuotes(String input) {

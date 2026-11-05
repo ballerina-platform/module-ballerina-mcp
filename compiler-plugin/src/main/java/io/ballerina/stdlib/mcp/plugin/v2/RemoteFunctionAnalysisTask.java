@@ -126,7 +126,7 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                                                         NodeLocation functionNodeLocation,
                                                         AnnotationNode annotationNode) {
         String functionName = functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function");
-        String description = Utils.addDoubleQuotes(Utils.escapeDoubleQuotes(
+        String description = Utils.addDoubleQuotes(Utils.escapeStringLiteral(
                 Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
         if (annotationNode == null) {
             return new ToolAnnotationConfig(description, getParameterSchema(functionSymbol, functionNodeLocation),

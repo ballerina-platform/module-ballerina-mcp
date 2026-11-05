@@ -491,6 +491,24 @@ public class CompilerPluginTest {
         assertError(result, 2, "must be a form schema value or a named record type", "MCP_220");
     }
 
+    @Test
+    public void testDocCommentDescriptionWithBackslashes() {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve("sample_package_36"),
+                OFFLINE);
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+        DiagnosticResult compilation = project.currentPackage().getCompilation().diagnosticResult();
+        Assert.assertEquals(compilation.errorCount(), 0, compilation.errors().toString());
+
+        Module module = project.currentPackage().getDefaultModule();
+        String source = module.documentIds().stream()
+                .map(documentId -> module.document(documentId).syntaxTree().toSourceCode())
+                .collect(Collectors.joining());
+        Assert.assertTrue(source.contains("description:\"Uses \\\"quotes\\\" and \\\\ slashes, and matches ^\\\\w+$"),
+                source);
+        Assert.assertTrue(source.contains("description:\"Reads C:\\\\temp\\\\items and matches ^\\\\d+$"), source);
+    }
+
     private static String elicitFormSchemaArgument(BuildProject project) {
         Module module = project.currentPackage().getDefaultModule();
         List<String> arguments = new ArrayList<>();
