@@ -430,12 +430,12 @@ function issuedCacheTokens() returns int {
     }
 }
 
-function stubCacheOAuthNetwork() {
+// Tests stub the mocks in their own bodies: GraalVM builds register `call` targets for
+// reflection only when the call sits directly in a test function.
+function resetCacheOAuthTokens() {
     lock {
         cacheTokensIssued = 0;
     }
-    test:when(fetchJsonMock).call("cacheOAuthFetchJson");
-    test:when(postTokenRequestMock).call("cacheOAuthPostTokenRequest");
 }
 
 function restoreCacheOAuthNetwork() {
@@ -452,8 +452,10 @@ function connectedOAuthCacheClient(string testId) returns StreamableHttpClient|e
     return oauthClient;
 }
 
-@test:Config {before: stubCacheOAuthNetwork, after: restoreCacheOAuthNetwork}
+@test:Config {before: resetCacheOAuthTokens, after: restoreCacheOAuthNetwork}
 function testStepUpTokenInvalidatesCachedList() returns error? {
+    test:when(fetchJsonMock).call("cacheOAuthFetchJson");
+    test:when(postTokenRequestMock).call("cacheOAuthPostTokenRequest");
     StreamableHttpClient stepUpClient = check connectedOAuthCacheClient("stepUp");
     _ = check stepUpClient->listTools();
     _ = check stepUpClient->listTools();
@@ -465,8 +467,10 @@ function testStepUpTokenInvalidatesCachedList() returns error? {
     test:assertEquals(cacheMockHitCount("oauth", "stepUp"), 2, "a step-up token may list other tools");
 }
 
-@test:Config {before: stubCacheOAuthNetwork, after: restoreCacheOAuthNetwork}
+@test:Config {before: resetCacheOAuthTokens, after: restoreCacheOAuthNetwork}
 function testExpiryRefreshKeepsCachedList() returns error? {
+    test:when(fetchJsonMock).call("cacheOAuthFetchJson");
+    test:when(postTokenRequestMock).call("cacheOAuthPostTokenRequest");
     lock {
         // Expires a second after issue, after the clock-skew margin.
         cacheTokenLifetime = 2;

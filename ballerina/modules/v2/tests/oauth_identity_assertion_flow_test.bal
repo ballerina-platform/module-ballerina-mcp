@@ -128,15 +128,15 @@ isolated function emptyAssertionProvider(IdentityAssertionContext context) retur
 isolated function unscopedAssertionProvider(IdentityAssertionContext context) returns string|error =>
     unsignedJwt({"sub": "user"});
 
-function stubIdentityAssertionNetwork() {
+// Tests stub the mocks in their own bodies: GraalVM builds register `call` targets for
+// reflection only when the call sits directly in a test function.
+function resetIdentityAssertionRecords() {
     lock {
         recordedAssertionContexts = [];
     }
     lock {
         recordedTokenRequests = [];
     }
-    test:when(fetchJsonMock).call("mockFetchJson");
-    test:when(postTokenRequestMock).call("mockPostTokenRequest");
 }
 
 function restoreIdentityAssertionNetwork() {
@@ -157,10 +157,12 @@ function tokenRequests() returns RecordedTokenRequest[] {
 }
 
 @test:Config {
-    before: stubIdentityAssertionNetwork,
+    before: resetIdentityAssertionRecords,
     after: restoreIdentityAssertionNetwork
 }
 function testIdentityAssertionAcquisitionAndStepUp() returns error? {
+    test:when(fetchJsonMock).call("mockFetchJson");
+    test:when(postTokenRequestMock).call("mockPostTokenRequest");
     ClientOAuthProvider provider = check new (FLOW_SERVER_URL, {
         grant: {
             clientConfig: {clientId: "reporting-agent", issuer: ISSUER, clientAuth: {clientSecret: "secret"}},
@@ -216,10 +218,12 @@ function testIdentityAssertionAcquisitionAndStepUp() returns error? {
 }
 
 @test:Config {
-    before: stubIdentityAssertionNetwork,
+    before: resetIdentityAssertionRecords,
     after: restoreIdentityAssertionNetwork
 }
 function testIdentityAssertionWithPublicCimdClientFlow() returns error? {
+    test:when(fetchJsonMock).call("mockFetchJson");
+    test:when(postTokenRequestMock).call("mockPostTokenRequest");
     ClientOAuthProvider provider = check new (FLOW_SERVER_URL, {
         grant: {
             clientConfig: {clientMetadataUrl: FLOW_CIMD_URL},
@@ -245,10 +249,12 @@ function testIdentityAssertionWithPublicCimdClientFlow() returns error? {
 }
 
 @test:Config {
-    before: stubIdentityAssertionNetwork,
+    before: resetIdentityAssertionRecords,
     after: restoreIdentityAssertionNetwork
 }
 function testIdentityAssertionProviderFailures() returns error? {
+    test:when(fetchJsonMock).call("mockFetchJson");
+    test:when(postTokenRequestMock).call("mockPostTokenRequest");
     ClientOAuthProvider failing = check new (FLOW_SERVER_URL, {
         grant: {
             clientConfig: {clientId: "reporting-agent", issuer: ISSUER, clientAuth: {clientSecret: "secret"}},
@@ -274,10 +280,12 @@ function testIdentityAssertionProviderFailures() returns error? {
 }
 
 @test:Config {
-    before: stubIdentityAssertionNetwork,
+    before: resetIdentityAssertionRecords,
     after: restoreIdentityAssertionNetwork
 }
 function testExchangeIdTokenForIdJag() returns error? {
+    test:when(fetchJsonMock).call("mockFetchJson");
+    test:when(postTokenRequestMock).call("mockPostTokenRequest");
     IdentityAssertionContext context = {
         audience: ISSUER,
         'resource: FLOW_SERVER_URL,
@@ -314,10 +322,12 @@ function testExchangeIdTokenForIdJag() returns error? {
 }
 
 @test:Config {
-    before: stubIdentityAssertionNetwork,
+    before: resetIdentityAssertionRecords,
     after: restoreIdentityAssertionNetwork
 }
 function testIdentityAssertionWithoutScopeClaim() returns error? {
+    test:when(fetchJsonMock).call("mockFetchJson");
+    test:when(postTokenRequestMock).call("mockPostTokenRequest");
     ClientOAuthProvider provider = check new (FLOW_SERVER_URL, {
         grant: {
             clientConfig: {clientId: "reporting-agent", issuer: ISSUER, clientAuth: {clientSecret: "secret"}},

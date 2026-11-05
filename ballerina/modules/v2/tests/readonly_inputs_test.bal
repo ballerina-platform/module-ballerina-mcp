@@ -29,8 +29,10 @@ function testCallToolCopiesReadOnlyParams() returns error? {
     check modernClient->close();
 }
 
-@test:Config {before: stubCacheOAuthNetwork, after: restoreCacheOAuthNetwork}
+@test:Config {before: resetCacheOAuthTokens, after: restoreCacheOAuthNetwork}
 function testAuthorizedRequestCopiesReadOnlyHeaders() returns error? {
+    test:when(fetchJsonMock).call("cacheOAuthFetchJson");
+    test:when(postTokenRequestMock).call("cacheOAuthPostTokenRequest");
     StreamableHttpClient oauthClient = check connectedOAuthCacheClient("readOnlyHeaders");
     map<string|string[]> & readonly headers = {"x-trace": "1"};
     _ = check oauthClient->listTools(headers);
