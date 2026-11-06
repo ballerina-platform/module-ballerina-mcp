@@ -171,8 +171,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 return self.processJsonRpcRequest(request, httpRequest, headers, authContext);
             }
 
+            // No client notification, such as notifications/cancelled, changes server state, so all are accepted.
             if request is JsonRpcNotification {
-                return self.processJsonRpcNotification(request);
+                return http:ACCEPTED;
             }
 
             return <http:BadRequest>{
@@ -211,22 +212,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             }
         }
 
-        private isolated function processJsonRpcNotification(JsonRpcNotification notification)
-            returns http:Accepted|http:BadRequest {
-            if notification.method == NOTIFICATION_INITIALIZED {
-                return http:ACCEPTED;
-            }
-
-            return <http:BadRequest>{
-                body: {
-                    jsonrpc: JSONRPC_VERSION,
-                    'error: {
-                        code: METHOD_NOT_FOUND,
-                        message: "Unknown notification method"
-                    }
-                }
-            };
-        }
 
         private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers,
                 readonly & AuthContext? authContext)

@@ -149,13 +149,15 @@ function testLegacyDispatcherRequiresAcceptAndContentType() returns error? {
 
 @test:Config {}
 function testLegacyDispatcherRejectsUnsupportedMessages() returns error? {
-    http:Response unknownNotification = check legacyPost("/stateless", {
-        "jsonrpc": JSONRPC_VERSION,
-        "method": "notifications/unknown"
-    });
-    test:assertEquals(unknownNotification.statusCode, 400);
-    WireError notificationError = check (check unknownNotification.getJsonPayload()).cloneWithType();
-    test:assertEquals(notificationError.'error.message, "Unknown notification method");
+    // Notifications are accepted whatever their method.
+    foreach string notificationMethod in [NOTIFICATION_INITIALIZED, "notifications/cancelled", "notifications/unknown"] {
+        http:Response notificationResponse = check legacyPost("/stateless", {
+            "jsonrpc": JSONRPC_VERSION,
+            "method": notificationMethod,
+            "params": {"requestId": 1}
+        });
+        test:assertEquals(notificationResponse.statusCode, 202, notificationMethod);
+    }
 
     // A response message is a valid JSON-RPC message but not something a server accepts.
     http:Response responseMessage = check legacyPost("/stateless", {
