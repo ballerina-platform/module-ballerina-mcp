@@ -48,7 +48,8 @@ public final class ProtocolHeaders {
 
     public static BString encodeProtocolHeader(BString value) {
         String text = value.getValue();
-        if (!safe(text) || sentinel(text)) {
+        // Anything that starts like an encoded value is encoded, so it can never be decoded by mistake.
+        if (!safe(text) || text.startsWith(PREFIX)) {
             return fromString(PREFIX + Base64.getEncoder()
                     .encodeToString(text.getBytes(StandardCharsets.UTF_8)) + "?=");
         }
@@ -65,6 +66,10 @@ public final class ProtocolHeaders {
                 return value;
             }
             String encoded = text.substring(PREFIX.length(), text.length() - 2);
+            // The encoder sends an empty value as is.
+            if (encoded.isEmpty()) {
+                throw new IllegalArgumentException("Non-canonical MCP header encoding");
+            }
             byte[] decoded = Base64.getDecoder().decode(encoded);
             if (!Base64.getEncoder().encodeToString(decoded).equals(encoded)) {
                 throw new IllegalArgumentException("Non-canonical MCP header encoding");
@@ -77,7 +82,8 @@ public final class ProtocolHeaders {
     }
 
     private static boolean sentinel(String value) {
-        return value.startsWith(PREFIX) && value.endsWith("?=");
+        // The prefix ends with '?', so without the length check "=?base64?=" would overlap the suffix.
+        return value.length() >= PREFIX.length() + 2 && value.startsWith(PREFIX) && value.endsWith("?=");
     }
 
     private static boolean safe(String value) {

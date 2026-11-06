@@ -290,6 +290,17 @@ function testModernHeaderValidationAndUnknownMethod() returns error? {
 }
 
 @test:Config {}
+function testMalformedEncodedNameHeaderIsAMismatch() returns error? {
+    foreach string nameHeader in ["=?base64?=", "=?base64??="] {
+        http:Response mismatchResponse = check modernPost(REQUEST_CALL_TOOL, {"name": "scalar"},
+                {[NAME_HEADER]: nameHeader});
+        test:assertEquals(mismatchResponse.statusCode, 400, nameHeader);
+        JsonRpcError mismatchError = check (check mismatchResponse.getJsonPayload()).cloneWithType();
+        test:assertEquals(mismatchError.'error.code, HEADER_MISMATCH, nameHeader);
+    }
+}
+
+@test:Config {}
 function testModernClientWideResultAndContinuation() returns error? {
     StreamableHttpClient modernClient = check new ("http://localhost:3205/mcp");
     _ = check modernClient->connect();
@@ -326,11 +337,15 @@ function testModernClientWideResultAndContinuation() returns error? {
 
 @test:Config {}
 function testProtocolHeaderEncoding() returns error? {
-    foreach string headerValue in ["north", "世界", " padded ", "line\nbreak", "=?base64?literal?="] {
+    foreach string headerValue in ["north", "世界", " padded ", "line\nbreak", "=?base64?literal?=", "=?base64?=", ""] {
         test:assertEquals(check decodeProtocolHeader(encodeProtocolHeader(headerValue)), headerValue);
     }
     test:assertTrue(decodeProtocolHeader("bad\nvalue") is Error);
     test:assertTrue(decodeProtocolHeader("=?base64?SGVsbG8?=") is Error);
+    // The prefix and suffix overlap here, so this is not an encoded value.
+    test:assertEquals(check decodeProtocolHeader("=?base64?="), "=?base64?=");
+    // An empty value is never encoded, so its encoding is not canonical.
+    test:assertTrue(decodeProtocolHeader("=?base64??=") is Error);
     test:assertTrue(toolParameterHeaders({
                                              'type: "object",
                                              properties: {
