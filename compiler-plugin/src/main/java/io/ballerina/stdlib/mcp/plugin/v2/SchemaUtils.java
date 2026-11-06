@@ -18,7 +18,6 @@
 
 package io.ballerina.stdlib.mcp.plugin.v2;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -51,7 +50,6 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
-import static io.ballerina.stdlib.mcp.plugin.v2.RemoteFunctionAnalysisTask.EMPTY_STRING;
 import static io.ballerina.stdlib.mcp.plugin.endpointyaml.generator.EndpointYamlGenerator.unescapeIdentifier;
 import static io.ballerina.stdlib.mcp.plugin.v2.Utils.hasHttpHeaderAnnotation;
 import static io.ballerina.stdlib.mcp.plugin.v2.Utils.getMcpArgumentHeaderName;
@@ -82,6 +80,7 @@ public class SchemaUtils {
     private static final String DESCRIPTION = "description";
     private static final String PROPERTIES = "properties";
     private static final String REQUIRED = "required";
+    private static final String MCP_HEADER = "x-mcp-header";
 
     private SchemaUtils() {
     }
@@ -119,12 +118,9 @@ public class SchemaUtils {
                 Schema schema = typeMapper.getSchema(parameterSymbol.typeDescriptor());
                 String parameterDescription = Utils.getParameterDescription(functionSymbol, sourceName);
                 schema.setDescription(parameterDescription);
-                String jsonSchema = SchemaUtils.getJsonSchema(schema);
-                Optional<String> headerName = getMcpArgumentHeaderName(parameterSymbol);
-                if (headerName.isPresent()) {
-                    jsonSchema = addMcpHeader(jsonSchema, headerName.get());
-                }
-                individualParamSchema.put(parameterName, jsonSchema);
+                ObjectNode jsonSchema = getJsonSchema(schema);
+                getMcpArgumentHeaderName(parameterSymbol).ifPresent(header -> jsonSchema.put(MCP_HEADER, header));
+                individualParamSchema.put(parameterName, toBallerinaSource(jsonSchema));
             } catch (RuntimeException e) {
                 throw new SchemaGenerationException(e);
             }
@@ -138,11 +134,6 @@ public class SchemaUtils {
                 .collect(Collectors.joining(", ", "[", "]"));
         return String.format("{\"type\":\"object\",\"required\":%s,\"properties\":%s}",
                 required, properties);
-    }
-
-    private static String addMcpHeader(String jsonSchema, String headerName) {
-        return jsonSchema.substring(0, jsonSchema.length() - 1)
-                + ",\"x-mcp-header\":\"" + headerName + "\"}";
     }
 
     public static String getReturnSchema(FunctionSymbol functionSymbol, SyntaxNodeAnalysisContext context)
@@ -188,7 +179,7 @@ public class SchemaUtils {
         try {
             @SuppressWarnings("rawtypes")
             Schema schema = typeMapper.getSchema(returnType);
-            return List.of(getJsonSchema(schema));
+            return List.of(toBallerinaSource(getJsonSchema(schema)));
         } catch (RuntimeException e) {
             throw new SchemaGenerationException(e);
         }
@@ -232,9 +223,8 @@ public class SchemaUtils {
 
     private static Optional<ObjectNode> getFormField(TypeMapper typeMapper, TypeSymbol fieldType) {
         try {
-            return Optional.ofNullable(toFormField(Json.mapper().readTree(
-                    getJsonSchema(typeMapper.getSchema(fieldType)))));
-        } catch (RuntimeException | JsonProcessingException e) {
+            return Optional.ofNullable(toFormField(getJsonSchema(typeMapper.getSchema(fieldType))));
+        } catch (RuntimeException e) {
             return Optional.empty();
         }
     }
@@ -340,15 +330,11 @@ public class SchemaUtils {
     }
 
     @SuppressWarnings("rawtypes")
-    private static String getJsonSchema(Schema schema) {
+    private static ObjectNode getJsonSchema(Schema schema) {
         modifySchema(schema);
         OpenAPISchema2JsonSchema openAPISchema2JsonSchema = new OpenAPISchema2JsonSchema();
         openAPISchema2JsonSchema.process(schema);
-        String newLineRegex = "\\R";
-        String jsonCompressionRegex = "\\s*([{}\\[\\]:,])\\s*";
-        return Json.pretty(schema.getJsonSchema())
-                .replaceAll(newLineRegex, EMPTY_STRING)
-                .replaceAll(jsonCompressionRegex, "$1");
+        return Json.mapper().valueToTree(schema.getJsonSchema());
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

@@ -40,6 +40,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -580,6 +581,18 @@ public class CompilerPluginTest {
             Assert.assertTrue(index > previous, parameter + " is out of order: " + properties);
             previous = index;
         }
+    }
+
+    @Test
+    public void testSchemaStringValuesAreKept() {
+        String annotations = compiledSource("schema_string_values").lines()
+                .filter(line -> line.startsWith("@mcp:Tool")).collect(Collectors.joining("\n"));
+        // Each value appears in one input schema and one output schema.
+        for (String value : List.of("\"New York, NY\"", "\"Los Angeles: CA\"", "\"ring\\u{7}\"", "\"page\\u{C}\"",
+                "\"back\\u{8}\"")) {
+            Assert.assertEquals(annotations.split(Pattern.quote(value), -1).length - 1, 2, value + ": " + annotations);
+        }
+        Assert.assertTrue(annotations.contains("\"The city, as \\\"Name, ST\\\" or {Name: ST}\""), annotations);
     }
 
     // Runs the plugin, checks that the modified package compiles cleanly, and returns its source.
