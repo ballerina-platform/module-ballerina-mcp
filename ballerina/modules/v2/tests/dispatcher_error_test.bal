@@ -309,6 +309,20 @@ function testToolLookupStopsAfterAPageLimit() returns error? {
 }
 
 @test:Config {}
+function testMismatchedNameHeaderIsRejectedBeforeListing() returns error? {
+    int listingsBefore;
+    lock {
+        listingsBefore = endlessListings;
+    }
+    http:Response response = check dispatcherPost("/endlessPages", REQUEST_CALL_TOOL, {"name": "missing"},
+            {[NAME_HEADER]: "other"});
+    check assertJsonRpcError(response, 400, HEADER_MISMATCH, "Mcp-Name must match the tool name");
+    lock {
+        test:assertEquals(endlessListings, listingsBefore);
+    }
+}
+
+@test:Config {}
 function testDispatcherReportsToolListingFailures() returns error? {
     http:Response serverErrorResponse = check dispatcherPost("/failList", REQUEST_LIST_TOOLS);
     check assertJsonRpcError(serverErrorResponse, 200, INTERNAL_ERROR, "tool listing is unavailable");

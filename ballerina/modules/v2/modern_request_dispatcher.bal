@@ -119,19 +119,20 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     if requestMessage.method != REQUEST_LIST_TOOLS && requestMessage.method != REQUEST_CALL_TOOL {
         return <http:NotFound>{body: createJsonRpcError(METHOD_NOT_FOUND, "Method not found", requestMessage.id)};
     }
-    Cursor?|http:Ok cursor = requestMessage.method == REQUEST_LIST_TOOLS ? requestCursor(requestMessage) : ();
-    if cursor is http:Ok {
-        return cursor;
-    }
-    ListToolsResult|error toolList = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
-            serviceConfig, authContext, cursor);
-    if toolList is error {
-        return listingFailureResponse(toolList, authenticator, requestMessage.id);
-    }
     if requestMessage.method == REQUEST_LIST_TOOLS {
+        Cursor?|http:Ok cursor = requestCursor(requestMessage);
+        if cursor is http:Ok {
+            return cursor;
+        }
+        ListToolsResult|error toolList = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
+                serviceConfig, authContext, cursor);
+        if toolList is error {
+            return listingFailureResponse(toolList, authenticator, requestMessage.id);
+        }
         toolList.tools = toolList.tools.sort(key = isolated function(ToolDefinition toolInfo) returns string => toolInfo.name);
         return modernResult(toolList, serviceConfig.info, requestMessage.id, serviceConfig.cacheHints.listTools ?: {});
     }
+    // The call is checked before any tool listing, so a malformed request costs no onListTools call.
     CallToolParams|error callParams = requestMessage.params.cloneWithType();
     if callParams is error {
         return createJsonRpcErrorResponse(INVALID_PARAMS, "Invalid tool call parameters", requestMessage.id);
@@ -143,6 +144,11 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
     string|Error decodedName = decodeProtocolHeader(nameHeader);
     if decodedName is Error || decodedName != callParams.name {
         return modernError(HEADER_MISMATCH, "Mcp-Name must match the tool name", requestMessage.id);
+    }
+    ListToolsResult|error toolList = listValidatedToolPage(mcpService, httpRequest, requestHeaders,
+            serviceConfig, authContext, ());
+    if toolList is error {
+        return listingFailureResponse(toolList, authenticator, requestMessage.id);
     }
     // A paginating service may list the tool on a later page.
     ToolDefinition? selectedTool = findTool(toolList, callParams.name);
