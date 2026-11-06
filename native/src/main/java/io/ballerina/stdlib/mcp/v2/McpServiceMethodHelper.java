@@ -19,6 +19,7 @@
 package io.ballerina.stdlib.mcp.v2;
 
 import io.ballerina.runtime.api.Environment;
+import io.ballerina.runtime.api.creators.ErrorCreator;
 import io.ballerina.runtime.api.creators.TypeCreator;
 import io.ballerina.runtime.api.creators.ValueCreator;
 import io.ballerina.runtime.api.flags.SymbolFlags;
@@ -77,6 +78,7 @@ public final class McpServiceMethodHelper {
     private static final String ANNOTATION_MCP_TOOL = "Tool";
     private static final String IS_ERROR_FIELD_NAME = "isError";
     private static final String PARAMETER_BINDING_ERROR = "ParameterBindingError";
+    private static final String SESSION_REQUIRED_ERROR = "SessionRequiredError";
     private static final String MESSAGE_FIELD_NAME = "message";
 
     // Conversion failures read "'<source>' value cannot be converted to '<target>': <reasons>".
@@ -420,6 +422,9 @@ public final class McpServiceMethodHelper {
             if (isCallToolParamsParameter(param)) {
                 args[i] = methodParams;
             } else if (isSessionParameter(param)) {
+                if (session == null && !param.type.isNilable()) {
+                    return createSessionRequiredError();
+                }
                 args[i] = session;
             } else if (isAuthContextParameter(param)) {
                 args[i] = authContext;
@@ -491,6 +496,9 @@ public final class McpServiceMethodHelper {
             BMap<?, ?> headerAnnotation = getHeaderAnnotation(method, param.name);
 
             if (isSessionParameter(param)) {
+                if (session == null && !param.type.isNilable()) {
+                    return createSessionRequiredError();
+                }
                 args[i] = session;
             } else if (isAuthContextParameter(param)) {
                 args[i] = authContext;
@@ -889,7 +897,15 @@ public final class McpServiceMethodHelper {
     }
 
     private static boolean isParameterBindingError(BError error) {
-        return PARAMETER_BINDING_ERROR.equals(error.getType().getName());
+        String errorType = error.getType().getName();
+        return PARAMETER_BINDING_ERROR.equals(errorType) || SESSION_REQUIRED_ERROR.equals(errorType);
+    }
+
+    // In AUTO mode a request without a session header carries no session, which a tool
+    // declaring a non-nilable session parameter cannot run without.
+    private static BError createSessionRequiredError() {
+        return ErrorCreator.createError(ModuleUtils.getModule(), SESSION_REQUIRED_ERROR,
+                fromString("Missing session ID header"), null, null);
     }
 
     private static Object createCallToolError(BTypedesc typed, String message) {

@@ -63,6 +63,27 @@ service StreamableHttpAdvancedService /stateless on legacyDispatcherListener {
     };
 }
 
+// AUTO mode serves a request without a session header statelessly, with no session to bind.
+@StreamableHttpServiceConfig {info: {name: "auto-session", version: "1"}}
+service StreamableHttpService /autoSession on legacyDispatcherListener {
+    @Tool {description: "Requires a session", schema: {'type: "object"}}
+    remote isolated function remember(HttpSession session) returns string => session.getSessionId();
+
+    @Tool {description: "Accepts a missing session", schema: {'type: "object"}}
+    remote isolated function peek(HttpSession? session) returns boolean => session is HttpSession;
+}
+
+@StreamableHttpServiceConfig {info: {name: "auto-session-advanced", version: "1"}}
+service StreamableHttpAdvancedService /autoSessionAdvanced on legacyDispatcherListener {
+    remote isolated function onListTools() returns ListToolsResult => {
+        tools: [{name: "remember", inputSchema: {'type: "object"}}]
+    };
+
+    remote isolated function onCallTool(CallToolParams callParams, HttpSession session) returns CallToolResult => {
+        content: [{'type: "text", text: session.getSessionId()}]
+    };
+}
+
 // Attached without a @StreamableHttpServiceConfig annotation so the dispatcher falls back to defaults.
 isolated function newUnconfiguredService() returns StreamableHttpAdvancedService =>
     service object {
@@ -283,4 +304,36 @@ function testSessionDeletionValidatesTheProtocolVersionHeader() returns error? {
     test:assertEquals(statelessDelete.statusCode, 400);
     WireError statelessError = check (check statelessDelete.getJsonPayload()).cloneWithType();
     test:assertEquals(statelessError.'error.message, "Session deletion not supported in stateless mode");
+}
+
+@test:Config {}
+function testToolRequiringSessionRejectsSessionlessAutoRequests() returns error? {
+    foreach string servicePath in ["/autoSession", "/autoSessionAdvanced"] {
+        http:Response sessionless = check legacyPost(servicePath,
+                legacyRequest(REQUEST_CALL_TOOL, {"name": "remember"}));
+        test:assertEquals(sessionless.statusCode, 400, servicePath);
+        JsonRpcError sessionError = check (check sessionless.getJsonPayload()).cloneWithType();
+        test:assertEquals(sessionError.'error.code, INVALID_REQUEST, servicePath);
+        test:assertEquals(sessionError.'error.message, "Missing session ID header", servicePath);
+    }
+
+    // A tool declaring a nilable session still runs without one.
+    http:Response optional = check legacyPost("/autoSession", legacyRequest(REQUEST_CALL_TOOL, {"name": "peek"}));
+    JsonRpcResponse optionalBody = check (check optional.getJsonPayload()).cloneWithType();
+    CallToolResult optionalResult = check optionalBody.result.ensureType();
+    TextContent optionalText = check optionalResult.content[0].ensureType();
+    test:assertEquals(optionalText.text, "false");
+
+    http:Response initResponse = check legacyPost("/autoSession", legacyRequest(REQUEST_INITIALIZE, {
+        "protocolVersion": LATEST_LEGACY_PROTOCOL_VERSION,
+        "capabilities": {},
+        "clientInfo": {"name": "legacy-test", "version": "1"}
+    }));
+    string sessionId = check initResponse.getHeader(SESSION_ID_HEADER);
+    http:Response withSession = check legacyPost("/autoSession",
+            legacyRequest(REQUEST_CALL_TOOL, {"name": "remember"}), {[SESSION_ID_HEADER]: sessionId});
+    JsonRpcResponse sessionBody = check (check withSession.getJsonPayload()).cloneWithType();
+    CallToolResult sessionResult = check sessionBody.result.ensureType();
+    TextContent sessionText = check sessionResult.content[0].ensureType();
+    test:assertEquals(sessionText.text, sessionId);
 }

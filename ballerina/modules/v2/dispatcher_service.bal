@@ -412,6 +412,11 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if callToolResult is InsufficientScopeError {
                 return insufficientScopeFor(self.authenticator, callToolResult);
             }
+            if callToolResult is SessionRequiredError {
+                return <http:BadRequest>{
+                    body: createJsonRpcError(INVALID_REQUEST, callToolResult.message(), request.id)
+                };
+            }
             if callToolResult is InvalidParamsError {
                 return createJsonRpcErrorResponse(INVALID_PARAMS, callToolResult.message(), request.id);
             }

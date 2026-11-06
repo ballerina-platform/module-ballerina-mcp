@@ -91,6 +91,9 @@ public type InvalidParamsError distinct ServerError;
 # such as missing or invalid header values.
 type ParameterBindingError distinct InvalidParamsError;
 
+# Error for a request without a session to a tool that requires one.
+type SessionRequiredError distinct ParameterBindingError;
+
 # Details of an `InsufficientScopeError`.
 #
 # + scopes - Scopes the operation needs, in addition to the scopes every request requires
