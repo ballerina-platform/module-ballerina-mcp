@@ -101,6 +101,17 @@ public isolated class HttpSession {
         'class: "io.ballerina.stdlib.mcp.v2.Session"
     } external;
 
+    // Called by the native `getWithType`.
+    private isolated function getEntry(string key) returns HttpSessionEntry|Error {
+        lock {
+            if !self.entries.hasKey(key) {
+                return error Error(string `no member found for key: ${key}`);
+            }
+            HttpSessionEntry value = self.entries.get(key);
+            return value is Cloneable ? value.clone() : value;
+        }
+    }
+
     # Removes the entry associated with the given key. Panics if the key does not exist.
     #
     # + key - The key identifying the entry to remove

@@ -18,9 +18,8 @@
 
 package io.ballerina.stdlib.mcp.v2;
 
-import io.ballerina.runtime.api.utils.StringUtils;
+import io.ballerina.runtime.api.Environment;
 import io.ballerina.runtime.api.values.BError;
-import io.ballerina.runtime.api.values.BMap;
 import io.ballerina.runtime.api.values.BObject;
 import io.ballerina.runtime.api.values.BString;
 import io.ballerina.runtime.api.values.BTypedesc;
@@ -30,7 +29,8 @@ import org.ballerinalang.langlib.value.EnsureType;
  * Utility class for Session operations in Ballerina via Java interop.
  */
 public final class Session {
-    private static final BString SESSION_ENTRIES = StringUtils.fromString("entries");
+    // Reads the entry under the session's lock and clones it, as 'get' does.
+    private static final String GET_ENTRY_METHOD = "getEntry";
 
     private Session() {
     }
@@ -38,22 +38,21 @@ public final class Session {
     /**
      * Retrieves and casts a value from the session to the specified type.
      *
+     * @param env        The Ballerina runtime environment
      * @param sessionObj The Ballerina session object
      * @param key        The key identifying the entry
      * @param targetType The expected type of the entry
      * @return The cast value or an error if the entry is missing or of the wrong type
      */
-    public static Object getWithType(BObject sessionObj, BString key, BTypedesc targetType) {
-        BMap<BString, Object> members = sessionObj.getMapValue(SESSION_ENTRIES);
-        try {
-            Object value = members.getOrThrow(key);
-            Object convertedType = EnsureType.ensureType(value, targetType);
-            if (convertedType instanceof BError) {
-                return ModuleUtils.createModuleError("type conversion failed for value of key: " + key.getValue());
-            }
-            return convertedType;
-        } catch (RuntimeException e) {
-            return ModuleUtils.createModuleError("no member found for key: " + key.getValue());
+    public static Object getWithType(Environment env, BObject sessionObj, BString key, BTypedesc targetType) {
+        Object value = env.getRuntime().callMethod(sessionObj, GET_ENTRY_METHOD, null, key);
+        if (value instanceof BError) {
+            return value;
         }
+        Object convertedType = EnsureType.ensureType(value, targetType);
+        if (convertedType instanceof BError) {
+            return ModuleUtils.createModuleError("type conversion failed for value of key: " + key.getValue());
+        }
+        return convertedType;
     }
 }

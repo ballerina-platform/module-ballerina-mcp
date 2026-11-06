@@ -137,6 +137,18 @@ function testSessionGetWithType() {
         test:assertTrue(wrongType.message().includes("type conversion failed"));
     }
 
+    if profileValue is SessionProfile {
+        // The value is a copy, so mutating it leaves the stored entry unchanged.
+        profileValue.visits = 99;
+        SessionProfile|Error reRead = session.getWithType("profile");
+        test:assertEquals(reRead, <SessionProfile>{name: "bob", visits: 3});
+    }
+
+    SessionCounter counter = new;
+    session.set("counter", counter);
+    SessionCounter|Error sharedCounter = session.getWithType("counter");
+    test:assertTrue(sharedCounter === counter);
+
     int|Error absentValue = session.getWithType("absent");
     test:assertTrue(absentValue is Error);
     if absentValue is Error {
