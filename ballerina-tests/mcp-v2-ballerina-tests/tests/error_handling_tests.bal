@@ -385,11 +385,9 @@ function testUnknownSessionReturnsNotFound() returns error? {
 }
 
 @test:Config
-function testDeleteOnStatelessServiceReturnsBadRequest() returns error? {
+function testDeleteOnStatelessServiceReturnsMethodNotAllowed() returns error? {
     http:Response response = check errorHandlingClient->delete("/mcp", new http:Request());
-    test:assertEquals(response.statusCode, http:STATUS_BAD_REQUEST);
-    json payload = check response.getJsonPayload();
-    test:assertEquals(check payload.'error.code, mcpv2:INVALID_REQUEST);
+    test:assertEquals(response.statusCode, http:STATUS_METHOD_NOT_ALLOWED);
 }
 
 @test:Config

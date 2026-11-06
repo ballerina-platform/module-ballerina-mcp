@@ -69,9 +69,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             HttpSessionMode sessionMode = config.sessionMode;
 
             if sessionMode == STATELESS {
-                return <http:BadRequest>{
-                    body: createJsonRpcError(INVALID_REQUEST, "Session deletion not supported in stateless mode")
-                };
+                return http:METHOD_NOT_ALLOWED;
             }
 
             string? sessionId = getSessionIdFromHeaders(headers);
@@ -84,15 +82,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             if !self.sessions.remove(sessionId, authContext) {
                 return createSessionNotFoundResponse(sessionId);
             }
-
-            return <http:Ok>{
-                body: {
-                    jsonrpc: JSONRPC_VERSION,
-                    result: {
-                        message: string `Session ${sessionId} deleted successfully`
-                    }
-                }
-            };
+            return http:OK;
         }
 
         isolated resource function post .(http:Request httpRequest, http:Headers headers)

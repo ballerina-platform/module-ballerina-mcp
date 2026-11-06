@@ -231,6 +231,11 @@ function testStatefulSessionLifecycle() returns error? {
     http:Response deleteResponse = check legacyDispatcherClient->delete("/stateful",
             headers = legacyHeaders({[SESSION_ID_HEADER]: sessionId}));
     test:assertEquals(deleteResponse.statusCode, 200);
+    test:assertTrue(deleteResponse.getTextPayload() is http:NoContentError);
+
+    http:Response deletedSession = check legacyPost("/stateful", legacyRequest(REQUEST_LIST_TOOLS),
+            {[SESSION_ID_HEADER]: sessionId});
+    test:assertEquals(deletedSession.statusCode, 404);
 }
 
 @test:Config {}
@@ -306,9 +311,7 @@ function testSessionDeletionValidatesTheProtocolVersionHeader() returns error? {
     test:assertTrue(versionError.'error.message.includes("Unsupported MCP-Protocol-Version header"));
 
     http:Response statelessDelete = check legacyDispatcherClient->delete("/stateless", headers = legacyHeaders());
-    test:assertEquals(statelessDelete.statusCode, 400);
-    WireError statelessError = check (check statelessDelete.getJsonPayload()).cloneWithType();
-    test:assertEquals(statelessError.'error.message, "Session deletion not supported in stateless mode");
+    test:assertEquals(statelessDelete.statusCode, 405);
 }
 
 @test:Config {}
