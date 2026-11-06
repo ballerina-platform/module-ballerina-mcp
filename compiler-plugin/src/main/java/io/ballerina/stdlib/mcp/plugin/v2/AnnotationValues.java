@@ -30,6 +30,7 @@ import io.ballerina.compiler.syntax.tree.MappingFieldNode;
 import io.ballerina.compiler.syntax.tree.Node;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
 import io.ballerina.compiler.syntax.tree.SpreadFieldNode;
+import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.compiler.syntax.tree.UnaryExpressionNode;
 import io.ballerina.projects.Document;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
@@ -37,10 +38,14 @@ import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /** Reads known annotation values without guessing the values of runtime expressions. */
 final class AnnotationValues {
     private static final Value UNKNOWN = new Value(false, null);
+    // A shorthand field passes its name token rather than an expression.
+    private static final Set<SyntaxKind> REFERENCE_KINDS = Set.of(SyntaxKind.SIMPLE_NAME_REFERENCE,
+            SyntaxKind.QUALIFIED_NAME_REFERENCE, SyntaxKind.IDENTIFIER_TOKEN);
 
     private AnnotationValues() {
     }
@@ -124,6 +129,10 @@ final class AnnotationValues {
                         ? new Value(true, first || second) : UNKNOWN;
                 default -> UNKNOWN;
             };
+        }
+        // The position lookup below finds the first token's symbol, which is only the value of a plain reference.
+        if (!REFERENCE_KINDS.contains(expression.kind())) {
+            return UNKNOWN;
         }
         Optional<Symbol> symbol = expression instanceof ExpressionNode
                 ? context.semanticModel().symbol(expression) : Optional.empty();

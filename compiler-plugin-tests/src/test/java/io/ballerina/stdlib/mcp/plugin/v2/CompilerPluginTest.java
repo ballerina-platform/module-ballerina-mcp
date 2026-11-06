@@ -393,6 +393,12 @@ public class CompilerPluginTest {
     }
 
     @Test
+    public void testCompoundStructuredOutputIsNotGuessed() {
+        String source = compiledSource("conditional_structured_output");
+        Assert.assertTrue(source.contains("structuredOutput: LEGACY ? false : true"), source);
+    }
+
+    @Test
     public void testRequiredStructuredOutputRejectsNilOnlyResult() {
         DiagnosticResult result = compile("nil_required_structured_output");
         Assert.assertEquals(errorCount(result), 1L, result.diagnostics().toString());
