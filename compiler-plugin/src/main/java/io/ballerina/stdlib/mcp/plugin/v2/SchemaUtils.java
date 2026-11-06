@@ -126,12 +126,12 @@ public class SchemaUtils {
             }
         }
         String properties = individualParamSchema.entrySet().stream()
-                .map(entry -> String.format("\"%s\": %s", entry.getKey(), entry.getValue()))
-                .collect(Collectors.joining(", ", "{", "}"));
+                .map(entry -> toBallerinaString(entry.getKey()) + ":" + entry.getValue())
+                .collect(Collectors.joining(",", "{", "}"));
 
         String required = requiredParams.stream()
-                .map(paramName -> String.format("\"%s\"", paramName))
-                .collect(Collectors.joining(", ", "[", "]"));
+                .map(SchemaUtils::toBallerinaString)
+                .collect(Collectors.joining(",", "[", "]"));
         return String.format("{\"type\":\"object\",\"required\":%s,\"properties\":%s}",
                 required, properties);
     }

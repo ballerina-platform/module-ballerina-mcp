@@ -595,6 +595,14 @@ public class CompilerPluginTest {
         Assert.assertTrue(annotations.contains("\"The city, as \\\"Name, ST\\\" or {Name: ST}\""), annotations);
     }
 
+    @Test
+    public void testEscapedParameterNameInInputSchema() {
+        String source = compiledSource("escaped_parameter_name");
+        Assert.assertTrue(source.contains("\"required\":[\"a\\\"b\",\"c\\\\d\"]"), source);
+        Assert.assertTrue(source.contains("\"a\\\"b\":{\"type\":\"string\"}"), source);
+        Assert.assertTrue(source.contains("\"c\\\\d\":{\"type\":\"string\"}"), source);
+    }
+
     // Runs the plugin, checks that the modified package compiles cleanly, and returns its source.
     private String compiledSource(String path) {
         BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve(path), OFFLINE);
