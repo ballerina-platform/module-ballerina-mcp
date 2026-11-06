@@ -194,15 +194,6 @@ public class Utils {
         return documentable.documentation().get().description().get();
     }
 
-    // Backslashes first, so the ones added for quotes are not escaped again.
-    public static String escapeStringLiteral(String input) {
-        return input.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
-
-    public static String addDoubleQuotes(String input) {
-        return "\"" + input + "\"";
-    }
-
     public static Optional<AnnotationNode> getToolAnnotationNode(SemanticModel semanticModel,
                                                                  FunctionDefinitionNode functionDefinitionNode) {
         Optional<MetadataNode> metadataNode = functionDefinitionNode.metadata();

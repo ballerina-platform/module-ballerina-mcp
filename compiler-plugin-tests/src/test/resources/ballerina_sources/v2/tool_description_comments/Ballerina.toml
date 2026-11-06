@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "tool_description_comments"
+version = "0.1.0"

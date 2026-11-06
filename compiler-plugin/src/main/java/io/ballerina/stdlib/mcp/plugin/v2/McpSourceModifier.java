@@ -153,20 +153,16 @@ public class McpSourceModifier {
                     + output + " is " + modulePrefix + ":OutputSchema ? {outputSchema:" + output + "} : {}, "
                     + "record {| string[] scopes?; |} " + scopeFields + " = "
                     + scopes + " is string[] ? {scopes:" + scopes + "} : {} in {"
-                    + "description:" + supplied + ".description ?: " + singleLine(config.description()) + ","
+                    + "description:" + supplied + ".description ?: " + config.description() + ","
                     + "..." + inputFields + ",..." + outputFields + ",structuredOutput:" + supplied
                     + ".structuredOutput,..." + scopeFields + "})}";
-        }
-
-        private static String singleLine(String description) {
-            return description.replaceAll("\\R", " ");
         }
 
         private String generateConfigMappingConstructor(ToolAnnotationConfig config, String openBraceSource,
                                                         String closeBraceSource) {
             StringBuilder sb = new StringBuilder();
             sb.append(openBraceSource);
-            sb.append("description:").append(singleLine(config.description())).append(",");
+            sb.append("description:").append(config.description()).append(",");
             sb.append("schema:").append(config.schema()).append(",");
             sb.append("outputSchema:").append(config.outputSchema()).append(",");
             sb.append("structuredOutput:").append(config.structuredOutput());

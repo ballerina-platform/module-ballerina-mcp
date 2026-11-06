@@ -129,8 +129,9 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                                                         NodeLocation functionNodeLocation,
                                                         AnnotationNode annotationNode) {
         String functionName = functionSymbol.getName().orElse(Utils.UNKNOWN_SYMBOL + "Function");
-        String description = Utils.addDoubleQuotes(Utils.escapeStringLiteral(
-                Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName)));
+        // Doc-comment lines are joined with spaces, as in the 1.x API.
+        String description = SchemaUtils.toBallerinaString(
+                Objects.requireNonNullElse(Utils.getDescription(functionSymbol), functionName).replaceAll("\\R", " "));
         if (annotationNode == null) {
             return new ToolAnnotationConfig(description, getParameterSchema(functionSymbol, functionNodeLocation),
                     getReturnSchema(functionSymbol), NIL_EXPRESSION, null, null);
@@ -172,7 +173,8 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                     annotationNode.annotValue().orElseThrow().toSourceCode());
         }
         if (fieldValues.containsKey(DESCRIPTION_FIELD_NAME)) {
-            description = fieldValues.get(DESCRIPTION_FIELD_NAME).toSourceCode();
+            // Ends any trailing comment, which would otherwise swallow the rest of the generated mapping.
+            description = fieldValues.get(DESCRIPTION_FIELD_NAME).toSourceCode() + "\n";
         }
         String parameters = fieldValues.containsKey(SCHEMA_FIELD_NAME)
                 ? fieldValues.get(SCHEMA_FIELD_NAME).toSourceCode()

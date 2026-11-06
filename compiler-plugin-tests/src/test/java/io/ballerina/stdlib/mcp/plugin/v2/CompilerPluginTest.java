@@ -548,6 +548,14 @@ public class CompilerPluginTest {
         Assert.assertFalse(source.contains("description:\"Generated description\""), source);
     }
 
+    @Test
+    public void testToolDescriptionWithTrailingComments() {
+        String source = compiledSource("tool_description_comments");
+        Assert.assertTrue(source.contains("description:\"Lists the items\" // trailing note\n"), source);
+        Assert.assertTrue(source.contains("scopes:[\"read\"]"), source);
+        Assert.assertTrue(source.contains("description:\"First line Second line\""), source);
+    }
+
     // Runs the plugin, checks that the modified package compiles cleanly, and returns its source.
     private String compiledSource(String path) {
         BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve(path), OFFLINE);

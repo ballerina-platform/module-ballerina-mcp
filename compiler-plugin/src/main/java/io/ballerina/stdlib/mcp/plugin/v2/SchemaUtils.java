@@ -318,7 +318,7 @@ public class SchemaUtils {
         return node.isTextual() ? toBallerinaString(node.asText()) : node.toString();
     }
 
-    private static String toBallerinaString(String value) {
+    static String toBallerinaString(String value) {
         StringBuilder literal = new StringBuilder("\"");
         value.codePoints().forEach(codePoint -> {
             switch (codePoint) {
