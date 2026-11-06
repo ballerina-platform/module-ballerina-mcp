@@ -40,7 +40,6 @@ import io.ballerina.compiler.api.values.ConstantValue;
 import io.ballerina.compiler.syntax.tree.AnnotationNode;
 import io.ballerina.compiler.syntax.tree.BasicLiteralNode;
 import io.ballerina.compiler.syntax.tree.FunctionDefinitionNode;
-import io.ballerina.compiler.syntax.tree.IdentifierToken;
 import io.ballerina.compiler.syntax.tree.MappingFieldNode;
 import io.ballerina.compiler.syntax.tree.MetadataNode;
 import io.ballerina.compiler.syntax.tree.Node;
@@ -722,9 +721,7 @@ public class Utils {
         for (MappingFieldNode field : fields) {
             if (field.kind() == SyntaxKind.SPECIFIC_FIELD) {
                 SpecificFieldNode specificField = (SpecificFieldNode) field;
-                String fieldName = ((IdentifierToken) specificField.fieldName()).text();
-
-                if (SESSION_MODE_FIELD.equals(fieldName) && specificField.valueExpr().isPresent()) {
+                if (SESSION_MODE_FIELD.equals(fieldKey(specificField)) && specificField.valueExpr().isPresent()) {
                     return resolveSessionModeValue(specificField.valueExpr().get(), semanticModel);
                 }
             }

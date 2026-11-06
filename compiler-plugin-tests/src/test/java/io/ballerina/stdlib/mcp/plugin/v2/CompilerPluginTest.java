@@ -138,6 +138,14 @@ public class CompilerPluginTest {
     }
 
     @Test
+    public void testSessionModeWithQuotedKeys() {
+        DiagnosticResult diagnosticResult = compile("quoted_session_mode_key");
+        Assert.assertEquals(errorCount(diagnosticResult), 2, diagnosticResult.errors().toString());
+        assertError(diagnosticResult, 0, "is not allowed when sessionMode is 'STATELESS'", MCP_204);
+        assertError(diagnosticResult, 1, "is not allowed when sessionMode is 'STATELESS'", MCP_204);
+    }
+
+    @Test
     public void testSessionParamAtAnyPosition() {
         DiagnosticResult diagnosticResult = compile("session_param_any_position");
         Assert.assertEquals(errorCount(diagnosticResult), 0, diagnosticResult.errors().toString());

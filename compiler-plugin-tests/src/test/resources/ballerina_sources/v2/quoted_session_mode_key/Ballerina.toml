@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "quoted_session_mode_key"
+version = "0.1.0"
