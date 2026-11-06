@@ -570,6 +570,18 @@ public class CompilerPluginTest {
         Assert.assertTrue(source.contains("description:\"First line Second line\""), source);
     }
 
+    @Test
+    public void testInputSchemaPropertiesFollowParameterOrder() {
+        String source = compiledSource("parameter_order");
+        String properties = source.substring(source.indexOf("\"properties\""));
+        int previous = -1;
+        for (String parameter : List.of("street", "city", "country", "zip")) {
+            int index = properties.indexOf("\"" + parameter + "\":");
+            Assert.assertTrue(index > previous, parameter + " is out of order: " + properties);
+            previous = index;
+        }
+    }
+
     // Runs the plugin, checks that the modified package compiles cleanly, and returns its source.
     private String compiledSource(String path) {
         BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve(path), OFFLINE);

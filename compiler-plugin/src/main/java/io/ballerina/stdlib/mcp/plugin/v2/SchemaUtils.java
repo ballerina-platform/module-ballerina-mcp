@@ -44,7 +44,7 @@ import io.swagger.v3.oas.models.media.Schema;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -92,7 +92,7 @@ public class SchemaUtils {
         List<ParameterSymbol> parameterSymbolList =
                 functionTypeSymbol.params().orElse(Collections.emptyList());
 
-        Map<String, String> individualParamSchema = new HashMap<>();
+        Map<String, String> individualParamSchema = new LinkedHashMap<>();
         List<String> requiredParams = new ArrayList<>();
         TypeMapper typeMapper = new TypeMapperImpl(context);
         for (ParameterSymbol parameterSymbol : parameterSymbolList) {
