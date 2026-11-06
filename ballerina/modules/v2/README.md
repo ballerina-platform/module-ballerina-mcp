@@ -4,7 +4,7 @@ The `ballerina/mcp.v2` module of the `ballerina/mcp` package builds MCP clients 
 supports MCP `2026-07-28` and can still communicate with servers and clients using the initialize-based protocol through
 `2025-11-25`.
 
-Import it with the `mcp` prefix, which the rest of this documentation uses:
+Import it with the `mcpv2` prefix, which the rest of this documentation uses:
 
 ```ballerina
 import ballerina/mcp.v2 as mcpv2;
