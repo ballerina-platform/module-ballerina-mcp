@@ -16,16 +16,16 @@
 
 import ballerina/io;
 import ballerina/log;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/uuid;
 
-final mcp:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp");
+final mcpv2:StreamableHttpClient mcpClient = check new ("http://localhost:9090/mcp");
 
-public function main() returns mcp:ClientError? {
+public function main() returns mcpv2:ClientError? {
     log:printInfo("Starting MCP Weather Client Demo");
 
     // Initialize the client with client information
-    check mcpClient->initialize({
+    _ = check mcpClient->connect({
         name: "MCP Weather Client Demo",
         version: "1.0.0"
     });
@@ -44,12 +44,12 @@ public function main() returns mcp:ClientError? {
     log:printInfo("MCP client connection closed");
 }
 
-function listTools() returns mcp:ClientError? {
+function listTools() returns mcpv2:ClientError? {
     log:printInfo("=== Listing Available Tools ===");
 
-    mcp:ListToolsResult toolsResult = check mcpClient->listTools();
+    mcpv2:ListToolsResult toolsResult = check mcpClient->listTools();
 
-    foreach mcp:ToolDefinition tool in toolsResult.tools {
+    foreach mcpv2:ToolDefinition tool in toolsResult.tools {
         io:println(string `Tool: ${tool.name}`);
         io:println(string `Description: ${tool.description ?: "No description available"}`);
         io:println("---");
@@ -58,7 +58,7 @@ function listTools() returns mcp:ClientError? {
     io:println(string `Total tools available: ${toolsResult.tools.length()}`);
 }
 
-function demonstrateCurrentWeather() returns mcp:ClientError? {
+function demonstrateCurrentWeather() returns mcpv2:ClientError? {
     log:printInfo("=== Demonstrating Current Weather Tool ===");
 
     // Test with different cities
@@ -68,12 +68,12 @@ function demonstrateCurrentWeather() returns mcp:ClientError? {
         // Generate a request ID to track this request
         string requestId = uuid:createType1AsString();
 
-        mcp:CallToolResult result = check mcpClient->callTool({
+        mcpv2:CallToolResult result = check mcpClient->callTool({
             name: "getCurrentWeather",
             arguments: {
                 "city": city
             },
-            // Attach request metadata; the server tool reads it via its mcp:Meta parameter (see server logs)
+            // Attach request metadata; the server tool reads it via its mcpv2:RequestMeta parameter (see server logs)
             _meta: {
                 "requestId": requestId
             }
@@ -86,7 +86,7 @@ function demonstrateCurrentWeather() returns mcp:ClientError? {
     }
 }
 
-function demonstrateWeatherForecast() returns mcp:ClientError? {
+function demonstrateWeatherForecast() returns mcpv2:ClientError? {
     log:printInfo("=== Demonstrating Weather Forecast Tool ===");
 
     // Test with different forecast periods
@@ -99,13 +99,13 @@ function demonstrateWeatherForecast() returns mcp:ClientError? {
     foreach var testCase in testCases {
         string requestId = uuid:createType1AsString();
 
-        mcp:CallToolResult result = check mcpClient->callTool({
+        mcpv2:CallToolResult result = check mcpClient->callTool({
             name: "getWeatherForecast",
             arguments: {
                 "location": testCase.location,
                 "days": testCase.days
             },
-            // Attach request metadata; the server tool reads it via its mcp:Meta parameter (see server logs)
+            // Attach request metadata; the server tool reads it via its mcpv2:RequestMeta parameter (see server logs)
             _meta: {
                 "requestId": requestId,
                 "forecastDays": testCase.days

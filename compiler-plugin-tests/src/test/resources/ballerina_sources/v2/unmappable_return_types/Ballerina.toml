@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "unmappable_return_types"
+version = "0.1.0"

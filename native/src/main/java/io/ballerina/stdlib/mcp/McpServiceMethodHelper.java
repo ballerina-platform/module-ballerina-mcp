@@ -208,7 +208,7 @@ public final class McpServiceMethodHelper {
 
         for (RemoteMethodType remoteMethod : getRemoteMethods(mcpService)) {
             remoteMethod.getAnnotations().entrySet().stream()
-                    .filter(e -> e.getKey().getValue().contains(ANNOTATION_MCP_TOOL))
+                    .filter(e -> ModuleUtils.isModuleAnnotation(e.getKey().getValue(), ANNOTATION_MCP_TOOL))
                     .findFirst()
                     .ifPresent(annotation -> tools.append(
                             createToolRecord(toolsArrayType, remoteMethod, (BMap<?, ?>) annotation.getValue())

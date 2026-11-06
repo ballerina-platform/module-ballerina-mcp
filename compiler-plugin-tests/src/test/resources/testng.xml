@@ -22,6 +22,9 @@
         <classes>
             <class name="io.ballerina.stdlib.mcp.plugin.CompilerPluginTest"/>
             <class name="io.ballerina.stdlib.mcp.plugin.EndpointExportTest"/>
+            <class name="io.ballerina.stdlib.mcp.plugin.ModuleIsolationTest"/>
+            <class name="io.ballerina.stdlib.mcp.plugin.v2.CompilerPluginTest"/>
+            <class name="io.ballerina.stdlib.mcp.plugin.v2.EndpointExportTest"/>
         </classes>
     </test>
 </suite>

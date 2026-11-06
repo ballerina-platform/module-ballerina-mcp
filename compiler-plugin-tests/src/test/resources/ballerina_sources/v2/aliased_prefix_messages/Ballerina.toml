@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "aliased_prefix_messages"
+version = "0.1.0"

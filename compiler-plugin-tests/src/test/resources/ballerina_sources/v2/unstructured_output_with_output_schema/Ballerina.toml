@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "unstructured_output_with_output_schema"
+version = "0.1.0"

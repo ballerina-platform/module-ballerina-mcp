@@ -10,6 +10,10 @@ license = ["Apache-2.0"]
 distribution = "2201.14.0"
 include = ["metadata/**"]
 
+[[package.modules]]
+name = "mcp.v2"
+export = true
+
 [platform.java25]
 graalvmCompatible = true
 

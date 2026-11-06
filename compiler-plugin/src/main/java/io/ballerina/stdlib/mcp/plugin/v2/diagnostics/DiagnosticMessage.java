@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package io.ballerina.stdlib.mcp.plugin.v2.diagnostics;
+
+/**
+ * Compilation error messages used in Ballerina mcp package compiler plugin. Argument {@code {0}} is the prefix
+ * that the reporting document binds to the v2 module.
+ */
+public enum DiagnosticMessage {
+    ERROR_101("Failed to generate the input schema for the function ''{1}''. " +
+            "Supply it with the ''schema'' field of ''@{0}:Tool''."),
+    ERROR_102("Parameter ''{2}'' in function ''{1}'' has an unsupported type. Supported types are {3}."),
+    ERROR_104("Required HttpSession parameter ''{2}'' in function ''{1}'' is not allowed when sessionMode is " +
+            "''STATELESS''."),
+    ERROR_106("Request metadata parameter ''{2}'' in function ''{1}'' must be optional " +
+            "(e.g., ''{0}:RequestMeta?'')."),
+    ERROR_107("Duplicate parameter ''{2}'' in function ''{1}''. " +
+            "Only one parameter of type ''{3}'' is allowed."),
+    ERROR_108("Invalid type of header param ''{2}'' in function ''{1}'': expected one of the ''string'', ''int'', " +
+            "''float'', ''decimal'', ''boolean'' types, an array of the above types, or a record which consists of " +
+            "the above types."),
+    ERROR_110("A service of type ''{0}:StreamableHttpAdvancedService'' must define a remote method ''{1}''."),
+    ERROR_111("Remote method ''{1}'' in an ''{0}:StreamableHttpAdvancedService'' must declare exactly one " +
+            "parameter of type ''{2}''."),
+    ERROR_112("Remote method ''{1}'' in an ''{0}:StreamableHttpAdvancedService'' must return ''{2}''."),
+    ERROR_113("Remote method ''{1}'' is not supported in an ''{0}:StreamableHttpAdvancedService''. " +
+            "Only ''onListTools'' and ''onCallTool'' are allowed."),
+    ERROR_114("Required HttpSession parameter ''{1}'' is not supported in modern protocol mode. " +
+            "Use explicit application state or select legacy protocol mode."),
+    ERROR_115("Parameter ''{2}'' in function ''{1}'' cannot use ''@{0}:Argument'': expected a non-nilable " +
+            "''string'', ''int'', or ''boolean'' tool argument."),
+    ERROR_116("Invalid MCP argument header name ''{3}'' on parameter ''{2}'' in function ''{1}''."),
+    ERROR_117("Duplicate MCP argument header name ''{3}'' on parameter ''{2}'' in function ''{1}''."),
+    ERROR_118("Function ''{1}'' cannot combine ''@{0}:Argument'' with an explicitly supplied " +
+            "''@{0}:Tool.schema''."),
+    ERROR_119("Field ''{2}'' of record type ''{1}'' cannot be a form field. Form fields must be a string, int, " +
+            "float, decimal or boolean, a union of string constants, or an array of a union of string constants."),
+    ERROR_120("The schema passed to `{0}:elicitForm` must be a form schema value or a named record type."),
+    ERROR_121("Function ''{1}'' cannot combine ''structuredOutput: false'' with an explicit ''outputSchema''."),
+    ERROR_122("Failed to generate the output schema for the function ''{1}'', which sets " +
+            "''structuredOutput: true''. Use a return type that supports schema generation, " +
+            "supply an ''outputSchema'', " +
+            "or set ''structuredOutput'' to false."),
+    WARNING_102("Required HttpSession parameter ''{1}'' restricts this service to legacy MCP in auto protocol mode."),
+    WARNING_103("HttpSession parameter ''{1}'' is always nil for modern MCP requests. " +
+            "Remove it or migrate session-dependent behavior to explicit application state."),
+    WARNING_104("HttpSession parameter ''{1}'' may be nil for modern MCP requests in auto protocol mode. " +
+            "Handle nil explicitly or select legacy protocol mode if this service requires sessions.");
+
+    private final String message;
+
+    DiagnosticMessage(String message) {
+        this.message = message;
+    }
+
+    public String getMessage() {
+        return this.message;
+    }
+}

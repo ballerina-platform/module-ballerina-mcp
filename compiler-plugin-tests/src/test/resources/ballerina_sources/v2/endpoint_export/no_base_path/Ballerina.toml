@@ -1,0 +1,7 @@
+[package]
+org = "ballerina"
+name = "no_base_path"
+version = "0.1.0"
+
+[build-options]
+observabilityIncluded = true

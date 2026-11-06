@@ -1,0 +1,4 @@
+[package]
+org = "mcp_examples"
+name = "shopping_handles"
+version = "0.1.0"

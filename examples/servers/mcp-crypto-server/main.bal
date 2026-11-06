@@ -17,21 +17,21 @@
 import ballerina/crypto;
 import ballerina/lang.array;
 import ballerina/log;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/time;
 
-listener mcp:StreamableHttpListener mcpListener = check new (9091);
+listener mcpv2:StreamableHttpListener mcpListener = check new (9091);
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {
         name: "MCP Crypto Server",
         version: "1.0.0"
     },
-    sessionMode: mcp:STATELESS
+    sessionMode: mcpv2:STATELESS
 }
-service mcp:AdvancedService /mcp on mcpListener {
+service mcpv2:StreamableHttpAdvancedService /mcp on mcpListener {
 
-    remote isolated function onListTools() returns mcp:ListToolsResult|mcp:ServerError {
+    remote isolated function onListTools() returns mcpv2:ListToolsResult|mcpv2:ServerError {
         return {
             tools: [
                 {
@@ -78,7 +78,7 @@ service mcp:AdvancedService /mcp on mcpListener {
         };
     }
 
-    remote isolated function onCallTool(mcp:CallToolParams params, mcp:Session? session) returns mcp:CallToolResult|mcp:ServerError {
+    remote isolated function onCallTool(mcpv2:CallToolParams params, mcpv2:HttpSession? session) returns mcpv2:CallToolResult|mcpv2:ServerError {
         record {} arguments = params.arguments ?: {};
 
         // Extract metadata from client request if present
@@ -96,24 +96,24 @@ service mcp:AdvancedService /mcp on mcpListener {
                 return self.handleBase64(arguments, clientMeta);
             }
             _ => {
-                return error mcp:ServerError(string `Unknown tool: ${params.name}`);
+                return error mcpv2:ServerError(string `Unknown tool: ${params.name}`);
             }
         }
     }
 
-    private isolated function handleHashText(record {} arguments, record {} clientMeta) returns mcp:CallToolResult|mcp:ServerError {
+    private isolated function handleHashText(record {} arguments, record {} clientMeta) returns mcpv2:CallToolResult|mcpv2:ServerError {
         time:Utc startTime = time:utcNow();
 
         string|error text = (arguments["text"]).cloneWithType();
         if text is error {
-            return error mcp:ServerError("Invalid 'text' parameter");
+            return error mcpv2:ServerError("Invalid 'text' parameter");
         }
 
         string algorithm = "sha256"; // default
         if arguments.hasKey("algorithm") {
             string|error alg = (arguments["algorithm"]).cloneWithType();
             if alg is error {
-                return error mcp:ServerError("Invalid 'algorithm' parameter");
+                return error mcpv2:ServerError("Invalid 'algorithm' parameter");
             }
             algorithm = alg;
         }
@@ -141,7 +141,7 @@ service mcp:AdvancedService /mcp on mcpListener {
                 hashedValue = hashedBytes.toBase16();
             }
             _ => {
-                return error mcp:ServerError("Unsupported hash algorithm: " + algorithm);
+                return error mcpv2:ServerError("Unsupported hash algorithm: " + algorithm);
             }
         }
 
@@ -156,7 +156,7 @@ service mcp:AdvancedService /mcp on mcpListener {
             originalText: text
         };
 
-        record {} responseMeta = {
+        mcpv2:ResultMeta responseMeta = {
             "executionTimeMs": executionTime,
             "inputLength": text.length(),
             "outputLength": hashedValue.length()
@@ -176,19 +176,19 @@ service mcp:AdvancedService /mcp on mcpListener {
         };
     }
 
-    private isolated function handleBase64(record {} arguments, record {} clientMeta) returns mcp:CallToolResult|mcp:ServerError {
+    private isolated function handleBase64(record {} arguments, record {} clientMeta) returns mcpv2:CallToolResult|mcpv2:ServerError {
         time:Utc startTime = time:utcNow();
 
         string|error text = (arguments["text"]).cloneWithType();
         if text is error {
-            return error mcp:ServerError("Invalid 'text' parameter");
+            return error mcpv2:ServerError("Invalid 'text' parameter");
         }
 
         string operation = "encode"; // default
         if arguments.hasKey("operation") {
             string|error op = (arguments["operation"]).cloneWithType();
             if op is error {
-                return error mcp:ServerError("Invalid 'operation' parameter");
+                return error mcpv2:ServerError("Invalid 'operation' parameter");
             }
             operation = op;
         }
@@ -199,15 +199,15 @@ service mcp:AdvancedService /mcp on mcpListener {
         } else if operation == "decode" {
             byte[]|error decodedBytes = array:fromBase64(text);
             if decodedBytes is error {
-                return error mcp:ServerError("Invalid Base64 input for decoding");
+                return error mcpv2:ServerError("Invalid Base64 input for decoding");
             }
             string|error decodedString = string:fromBytes(decodedBytes);
             if decodedString is error {
-                return error mcp:ServerError("Failed to convert decoded bytes to string");
+                return error mcpv2:ServerError("Failed to convert decoded bytes to string");
             }
             resultValue = decodedString;
         } else {
-            return error mcp:ServerError("Invalid operation. Use 'encode' or 'decode'");
+            return error mcpv2:ServerError("Invalid operation. Use 'encode' or 'decode'");
         }
 
         time:Utc endTime = time:utcNow();
@@ -221,7 +221,7 @@ service mcp:AdvancedService /mcp on mcpListener {
             originalInput: text
         };
 
-        record {} responseMeta = {
+        mcpv2:ResultMeta responseMeta = {
             "executionTimeMs": executionTime,
             "inputLength": text.length(),
             "outputLength": resultValue.length()

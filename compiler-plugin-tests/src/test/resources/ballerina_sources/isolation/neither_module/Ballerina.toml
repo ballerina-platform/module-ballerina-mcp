@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "neither_module"
+version = "0.1.0"

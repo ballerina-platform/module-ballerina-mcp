@@ -1,0 +1,147 @@
+// Copyright (c) 2025 WSO2 LLC (http://www.wso2.com).
+//
+// WSO2 LLC. licenses this file to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+# Defines the common base error type for this module.
+public type Error distinct error;
+
+# Error for failures during streaming operations.
+public type StreamError distinct Error & ClientError;
+
+# Error for failures during transport operations.
+public type TransportError distinct Error & ClientError;
+
+# Error for protocol negotiation, validation, or server response failures.
+public type ProtocolError distinct Error & ClientError;
+
+# Error for invalid or unexpected responses from the server.
+type ServerResponseError distinct ProtocolError;
+
+# Error for failures occurring within client operations.
+public type ClientError distinct Error;
+
+# Error for failures while processing SSE event streams.
+type SseEventStreamError distinct StreamError;
+
+# Error for JSON-RPC message transformation failures during streaming.
+type JsonRpcMessageTransformationError distinct StreamError;
+
+# Error for failures converting JSON to JsonRpcMessage.
+type TypeConversionError distinct JsonRpcMessageTransformationError;
+
+# Error when an invalid message type is received from the server.
+type InvalidMessageTypeError distinct ServerResponseError;
+
+# Error when the server response is malformed or unexpected.
+type MalformedResponseError distinct ServerResponseError;
+
+# Error for failures during HTTP transport operations.
+type StreamableHttpTransportError distinct TransportError;
+
+# Error for failures during HTTP client operations.
+type HttpClientError distinct StreamableHttpTransportError;
+
+# Error for unsupported content types in HTTP responses.
+type UnsupportedContentTypeError distinct StreamableHttpTransportError;
+
+# Error for failures during session operations.
+type SessionOperationError distinct StreamableHttpTransportError;
+
+# Error for failures while parsing HTTP response content.
+type ResponseParsingError distinct StreamableHttpTransportError & ProtocolError;
+
+# Error for operations attempted before transport initialization.
+type UninitializedTransportError distinct ClientError;
+
+# Error for failures during client initialization.
+type ClientInitializationError distinct ClientError;
+
+# Error for protocol version negotiation failures.
+type ProtocolVersionError distinct ClientInitializationError & ProtocolError;
+
+# Error for failures during tool listing operations.
+type ListToolsError distinct ClientError;
+
+# Error for failures during tool execution operations.
+public type ToolCallError distinct ClientError;
+
+# Errors for failures occurring during server operations.
+public type ServerError distinct Error;
+
+# Custom error type for dispatcher service operations.
+type DispatcherError distinct ServerError;
+
+# Error an advanced service method returns to reject the request's parameters, such as an
+# unknown cursor. The server answers with a JSON-RPC `INVALID_PARAMS` error carrying its message.
+public type InvalidParamsError distinct ServerError;
+
+# Error for failures while binding tool parameters from the incoming request,
+# such as missing or invalid header values.
+type ParameterBindingError distinct InvalidParamsError;
+
+# Error for a request without a session to a tool that requires one.
+type SessionRequiredError distinct ParameterBindingError;
+
+# Details of an `InsufficientScopeError`.
+#
+# + scopes - Scopes the operation needs, in addition to the scopes every request requires
+public type InsufficientScopeErrorDetail record {|
+    string[] scopes;
+|};
+
+# Error a tool or an advanced service handler returns when the caller's access token does not
+# grant the scopes an operation needs. The server answers the request with a `403` challenge
+# carrying `error="insufficient_scope"` and the needed scopes, so that the client can obtain a
+# token with them and retry.
+public type InsufficientScopeError distinct ServerError & error<InsufficientScopeErrorDetail>;
+
+# Error for failures while obtaining authorization for a request.
+public type AuthorizationError distinct StreamableHttpTransportError;
+
+# Error when OAuth configuration is invalid or cannot be used with the selected authorization server.
+type OAuthConfigError distinct Error;
+
+# Error while discovering protected resource or authorization server metadata.
+type OAuthDiscoveryError distinct Error;
+
+# Error while constructing or validating an authorization code exchange.
+type OAuthAuthorizationError distinct Error;
+
+# Details of a failed token endpoint request. The OAuth fields are present when the endpoint
+# returned an error response (RFC 6749 section 5.2).
+#
+# + code - OAuth `error` code, such as `invalid_grant`, `invalid_scope`, or
+# `insufficient_user_authentication`
+# + description - Human-readable `error_description`
+# + errorUri - `error_uri` identifying a page with information about the error
+# + statusCode - HTTP status code of the token endpoint response
+# + maxAge - `max_age` returned with `insufficient_user_authentication`: the maximum time, in
+# seconds, since the user last authenticated that the Identity Provider accepts
+public type OAuthTokenErrorDetail record {|
+    string? code?;
+    string? description?;
+    string? errorUri?;
+    int? statusCode?;
+    int? maxAge?;
+|};
+
+# Error while requesting or refreshing a token at the token endpoint, including the ID-JAG
+# token exchange. It is reported as the cause of an `AuthorizationError`, and its `detail()`
+# carries the endpoint's error response.
+public type OAuthTokenError distinct Error & error<OAuthTokenErrorDetail>;
+
+# Error when the token endpoint rejects the grant, such as an expired authorization code or
+# a revoked refresh token.
+type OAuthInvalidGrantError distinct OAuthTokenError;

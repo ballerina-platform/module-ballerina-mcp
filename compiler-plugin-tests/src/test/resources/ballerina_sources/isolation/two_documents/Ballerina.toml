@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "two_documents"
+version = "0.1.0"

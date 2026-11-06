@@ -114,14 +114,14 @@ A comprehensive example demonstrating STATEFUL session mode with persistent shop
 **Features:**
 - Session-based shopping cart management
 - Persistent state across multiple requests within a session
-- Demonstrates proper session parameter usage as first parameter
+- Demonstrates session parameter usage
 - Basic Service pattern with automatic tool discovery
 - Thread-safe session storage
 
 **Available Tools:**
-- `addToCart(session: mcp:Session, productName: string, price: decimal)` - Add item to cart
-- `viewCart(session: mcp:Session)` - View current cart contents
-- `clearCart(session: mcp:Session)` - Clear all items from cart
+- `addToCart(session: mcp:HttpSession, productName: string, price: decimal)` - Add item to cart
+- `viewCart(session: mcp:HttpSession)` - View current cart contents
+- `clearCart(session: mcp:HttpSession)` - Clear all items from cart
 
 **How to run:**
 ```bash
@@ -203,3 +203,44 @@ cd clients/mcp-shopping-client-demo && bal run
 # Build and publish to local central
 ./gradlew clean build -x test -x check -PpublishToLocalCentral=true
 ```
+
+### Shopping with explicit cart handles (modern and legacy)
+
+**Location:** `servers/mcp-shopping-server-modern/`
+
+This example carries cart identity in ordinary tool arguments, so it works with modern sessionless requests and legacy
+clients. Call `createCart`, then pass the returned `cartId` to `addItem`, `viewCart`, and `closeCart`. Handles expire after
+30 minutes, and the demonstration store is limited to 1,000 carts. The store is in memory; a multi-instance deployment
+should use shared application storage and bind cart access to its authorization context.
+
+```sh
+cd servers/mcp-shopping-server-modern
+bal run -- -CcartPort=9092
+```
+
+The MCP endpoint is `http://127.0.0.1:9092/mcp`. The original shopping server remains the example for legacy protocol sessions.
+
+### Connecting a calendar through URL elicitation
+
+**Location:** `servers/mcp-calendar-connect-server/` and `clients/mcp-calendar-connect-client/`
+
+The `listEvents` tool needs the user's calendar connected first. Until it is, the tool returns a URL elicitation
+pointing at a connect page served by the same program, and carries the pending link's id in the request state.
+Accepting the elicitation only means the user agreed to open the link, so the tool asks again on each continuation
+until the page has recorded the connection. The page completes a link only for the user it was issued to, which is
+the MCP phishing defence: the demo client shows Mallory opening Alice's link and being rejected.
+
+Both programs issue demonstration HS256 access tokens with a shared secret, standing in for an authorization server,
+and the connect page signs the user in with the same bearer token instead of a browser login.
+
+```sh
+cd servers/mcp-calendar-connect-server
+bal run -- -CtokenSecret=demo-secret-of-at-least-32-characters
+
+# In another terminal
+cd clients/mcp-calendar-connect-client
+bal run -- -CtokenSecret=demo-secret-of-at-least-32-characters
+```
+
+The MCP endpoint is `http://localhost:9093/mcp` and the connect page is `http://localhost:9093/connect`. Run
+`bal test` in the server directory to check the flow, including the rejection of another user.

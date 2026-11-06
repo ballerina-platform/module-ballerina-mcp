@@ -15,17 +15,17 @@
 // under the License.
 
 import ballerina/log;
-import ballerina/mcp;
+import ballerina/mcp.v2 as mcpv2;
 import ballerina/time;
 
-listener mcp:StreamableHttpListener mcpListener = check new (9092);
+listener mcpv2:StreamableHttpListener mcpListener = check new (9092);
 
-@mcp:StreamableHttpServiceConfig {
+@mcpv2:StreamableHttpServiceConfig {
     info: {
         name: "MCP Shopping Cart Server",
         version: "1.0.0"
     },
-    sessionMode: mcp:STATEFUL,
+    sessionMode: mcpv2:STATEFUL,
     httpConfig: {
         auth: [
             {
@@ -40,12 +40,12 @@ listener mcp:StreamableHttpListener mcpListener = check new (9092);
         ]
     }
 }
-service mcp:Service /mcp on mcpListener {
+service mcpv2:StreamableHttpService /mcp on mcpListener {
 
-    @mcp:Tool {
+    @mcpv2:Tool {
         description: "Add an item to the shopping cart"
     }
-    remote function addToCart(mcp:Session session, string productName, decimal price) returns string|error {
+    remote function addToCart(mcpv2:HttpSession session, string productName, decimal price) returns string|error {
         log:printInfo(string `Adding ${productName} (${price}) to cart for session ${session.getSessionId()}`);
 
         // Get current cart or create new one
@@ -68,10 +68,10 @@ service mcp:Service /mcp on mcpListener {
         return string `Added ${productName} to cart. Total items: ${currentCart.length()}`;
     }
 
-    @mcp:Tool {
+    @mcpv2:Tool {
         description: "View all items in the current shopping cart"
     }
-    remote function viewCart(mcp:Session session) returns CartView|error {
+    remote function viewCart(mcpv2:HttpSession session) returns CartView|error {
         log:printInfo(string `Viewing cart for session ${session.getSessionId()}`);
 
         CartItem[] cart = [];
@@ -92,10 +92,10 @@ service mcp:Service /mcp on mcpListener {
         };
     }
 
-    @mcp:Tool {
+    @mcpv2:Tool {
         description: "Clear all items from the shopping cart"
     }
-    remote function clearCart(mcp:Session session) returns string|error {
+    remote function clearCart(mcpv2:HttpSession session) returns string|error {
         log:printInfo(string `Clearing cart for session ${session.getSessionId()}`);
 
         session.set("cart", <CartItem[]>[]);

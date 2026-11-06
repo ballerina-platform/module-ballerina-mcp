@@ -23,7 +23,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "cache"
-version = "3.10.1"
+version = "3.10.2"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "constraint"},
@@ -35,7 +35,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "constraint"
-version = "1.7.1"
+version = "1.7.2"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"}
@@ -54,7 +54,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "data.jsondata"
-version = "1.1.5"
+version = "1.1.7"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
@@ -76,7 +76,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "http"
-version = "2.18.0"
+version = "2.18.1"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "auth"},
@@ -110,7 +110,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "io"
-version = "1.8.2"
+version = "1.8.3"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
@@ -234,7 +234,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "log"
-version = "2.17.1"
+version = "2.17.2"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "io"},
@@ -246,22 +246,31 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "mcp"
-version = "1.4.0"
+version = "1.5.0"
 scope = "testOnly"
 dependencies = [
+	{org = "ballerina", name = "crypto"},
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "jballerina.java"},
+	{org = "ballerina", name = "jwt"},
+	{org = "ballerina", name = "lang.array"},
+	{org = "ballerina", name = "lang.regexp"},
+	{org = "ballerina", name = "lang.runtime"},
 	{org = "ballerina", name = "log"},
+	{org = "ballerina", name = "oauth2"},
+	{org = "ballerina", name = "time"},
+	{org = "ballerina", name = "url"},
 	{org = "ballerina", name = "uuid"}
 ]
 modules = [
-	{org = "ballerina", packageName = "mcp", moduleName = "mcp"}
+	{org = "ballerina", packageName = "mcp", moduleName = "mcp"},
+	{org = "ballerina", packageName = "mcp", moduleName = "mcp.v2"}
 ]
 
 [[package]]
 org = "ballerina"
 name = "mime"
-version = "2.12.3"
+version = "2.12.4"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "io"},
@@ -296,7 +305,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "os"
-version = "1.10.2"
+version = "1.10.3"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "io"},
@@ -306,7 +315,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "task"
-version = "2.11.3"
+version = "2.11.4"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
@@ -331,7 +340,7 @@ modules = [
 [[package]]
 org = "ballerina"
 name = "time"
-version = "2.8.3"
+version = "2.8.4"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"}
@@ -340,7 +349,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "url"
-version = "2.6.4"
+version = "2.6.5"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "jballerina.java"}
@@ -349,7 +358,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "uuid"
-version = "1.10.1"
+version = "1.10.2"
 scope = "testOnly"
 dependencies = [
 	{org = "ballerina", name = "crypto"},
@@ -361,7 +370,7 @@ dependencies = [
 [[package]]
 org = "ballerinatests"
 name = "mcp_ballerina_tests"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "mcp"},

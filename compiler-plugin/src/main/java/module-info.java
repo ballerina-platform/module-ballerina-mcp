@@ -22,6 +22,7 @@ module io.ballerina.stdlib.ai.plugin {
     requires io.ballerina.tools.api;
     requires io.ballerina.openapi.service;
     requires io.swagger.v3.core;
+    requires com.fasterxml.jackson.databind;
     requires io.swagger.v3.oas.models;
     requires io.ballerina.runtime;
 }

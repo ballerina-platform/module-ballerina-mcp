@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "root_default"
+version = "0.1.0"

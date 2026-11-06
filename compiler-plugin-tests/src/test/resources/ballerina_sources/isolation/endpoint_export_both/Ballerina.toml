@@ -1,0 +1,7 @@
+[package]
+org = "ballerina"
+name = "endpoint_export_both"
+version = "0.1.0"
+
+[build-options]
+observabilityIncluded = true

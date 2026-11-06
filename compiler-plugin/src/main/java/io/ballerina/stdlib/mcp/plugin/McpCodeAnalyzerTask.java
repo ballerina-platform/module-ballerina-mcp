@@ -62,7 +62,9 @@ public class McpCodeAnalyzerTask implements AnalysisTask<SyntaxNodeAnalysisConte
      */
     @Override
     public void perform(SyntaxNodeAnalysisContext context) {
-        if (hasCompilationErrors(context) || isInTestSource(context) || !isMcpService(context)) {
+        // Services of both modules are exported as `mcp` endpoints.
+        if (hasCompilationErrors(context) || isInTestSource(context)
+                || !(isMcpService(context) || io.ballerina.stdlib.mcp.plugin.v2.Utils.isMcpService(context))) {
             return;
         }
         Package currentPackage = context.currentPackage();

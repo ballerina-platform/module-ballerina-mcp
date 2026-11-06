@@ -121,7 +121,8 @@ public isolated class StreamableHttpListener {
 # A server listener for handling MCP service requests.
 #
 # # Deprecated
-# This listener is renamed to make the transport explicit. Use `mcp:StreamableHttpListener` instead.
+# This listener is renamed to make the transport explicit. Use `mcp:StreamableHttpListener` instead,
+# or `mcpv2:StreamableHttpListener` (`import ballerina/mcp.v2 as mcpv2;`) for the v2 module.
 @deprecated
 public isolated class Listener {
     private final StreamableHttpListener inner;
