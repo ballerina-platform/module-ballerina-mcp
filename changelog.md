@@ -31,7 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Deprecated
 - The `mcp:StreamableHttpClient` client, in favour of `mcpv2:StreamableHttpClient`.
-- The transport-agnostic `mcp:Service` and `mcp:AdvancedService` service types and the `@mcp:ServiceConfig` annotation, in favour of `mcpv2:StreamableHttpService`, `mcpv2:StreamableHttpAdvancedService` and `@mcpv2:StreamableHttpServiceConfig`.
+- The transport-agnostic `mcp:Service` and `mcp:AdvancedService` service types and the `@mcp:ServiceConfig` annotation, in favour of `mcp:StreamableHttpService`, `mcp:StreamableHttpAdvancedService` and `@mcp:StreamableHttpServiceConfig`, or their `mcpv2` counterparts.
 
 ## [1.4.0] - 2026-10-13
 
