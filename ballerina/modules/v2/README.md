@@ -331,9 +331,23 @@ service mcpv2:StreamableHttpService /mcp on mcpListener {
 
 Prefer explicit application-level handles for state that modern clients must access.
 
-A session expires after 30 minutes without a request; the service then answers its ID with `404`, and the client
-initializes again. A service holds at most 100 sessions for each authenticated caller and 10,000 sessions without an
-owner, and answers `initialize` with `503` beyond that.
+Sessions are held in memory and bounded by the `sessionLimits` field of `@mcpv2:StreamableHttpServiceConfig`:
+
+```ballerina
+@mcpv2:StreamableHttpServiceConfig {
+    info: {name: "cart", version: "2.0.0"},
+    sessionLimits: {idleTimeout: 900, maxPerOwner: 20, maxAnonymous: 2000}
+}
+```
+
+- `idleTimeout` is how long, in seconds, a session may go without a request (default 1800).
+- `maxPerOwner` bounds the sessions of each authenticated caller (default 100).
+- `maxAnonymous` bounds the sessions of all callers that cannot be told apart, together (default 10,000).
+
+The service answers the ID of an expired session with `404`, and the client initializes again. When a limit is
+reached, `initialize` evicts the least recently used session of the same caller, or of the anonymous pool, so callers
+that keep their sessions alive cannot shut new ones out. Eviction bounds memory but not load: rate-limit `initialize`
+in front of the service, for example at a gateway, so that one client cannot keep evicting the sessions of others.
 
 ## Advanced server
 
@@ -580,8 +594,9 @@ service mcpv2:StreamableHttpService /files on mcpListener {
 
 `httpConfig.auth` still accepts `http:ListenerAuthConfig[]`, HTTP listener authentication without discovery, exactly
 as in 1.x. Failures are answered with `401` or `403` without a challenge, and tool scopes and `mcpv2:AuthContext` are
-not available. Legacy sessions are not bound to the caller, so any authenticated client that knows a session ID can use
-it.
+not available. A legacy session belongs to the caller that created it: the user name of Basic credentials, or the
+issuer, client and subject of a JWT. Callers with an opaque bearer token cannot be told apart, so their sessions are
+shared by all of them and counted against `maxAnonymous`.
 
 ## Client
 

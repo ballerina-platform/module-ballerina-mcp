@@ -631,6 +631,8 @@ public type StreamableHttpServiceConfiguration record {|
     CacheHints cacheHints = {};
     # Signing of the request state returned in input-required results
     RequestStateConfig requestState = {};
+    # Limits on the legacy sessions the service keeps in memory
+    SessionLimits sessionLimits = {};
 |};
 
 # How the request state of input-required results is signed. Request state is signed, not
@@ -642,6 +644,17 @@ public type RequestStateConfig record {|
     string[] keys = [];
     # Seconds a request state stays valid, renewed on every round. Must be positive.
     decimal ttl = 600;
+|};
+
+# Limits on the legacy sessions a service keeps in memory. When a limit is reached, `initialize` evicts the
+# least recently used session it counts against; a client using an evicted session gets `404` and initializes again.
+public type SessionLimits record {|
+    # Seconds a session may stay unused before it is evicted. Must be positive.
+    decimal idleTimeout = 1800;
+    # Sessions one authenticated caller may hold. Must be positive.
+    int maxPerOwner = 100;
+    # Sessions callers that cannot be told apart may hold together. Must be positive.
+    int maxAnonymous = 10000;
 |};
 
 # HTTP settings of the service that serves an MCP endpoint. These are the settings of

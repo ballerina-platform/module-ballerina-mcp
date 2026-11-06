@@ -79,7 +79,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 };
             }
 
-            if !self.sessions.remove(sessionId, authContext) {
+            if !self.sessions.remove(sessionId, sessionCallerOf(config, headers, authContext)) {
                 return createSessionNotFoundResponse(sessionId);
             }
             return http:OK;
@@ -158,7 +158,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             }
 
             if request is JsonRpcRequest {
-                return self.processJsonRpcRequest(request, httpRequest, headers, authContext);
+                return self.processJsonRpcRequest(request, httpRequest, headers, authContext,
+                        sessionCallerOf(routeConfig, headers, authContext));
             }
 
             // No client notification, such as notifications/cancelled, changes server state, so all are accepted.
@@ -183,18 +184,17 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         }
 
         private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Request httpRequest,
-                http:Headers headers, readonly & AuthContext? authContext)
-            returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError|
-                    http:ServiceUnavailable {
+                http:Headers headers, readonly & AuthContext? authContext, string? caller)
+            returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
             match request.method {
                 REQUEST_INITIALIZE => {
-                    return self.handleInitializeRequest(request, headers, authContext);
+                    return self.handleInitializeRequest(request, headers, authContext, caller);
                 }
                 REQUEST_LIST_TOOLS => {
-                    return self.handleListToolsRequest(request, httpRequest, headers, authContext);
+                    return self.handleListToolsRequest(request, httpRequest, headers, authContext, caller);
                 }
                 REQUEST_CALL_TOOL => {
-                    return self.handleCallToolRequest(request, httpRequest, headers, authContext);
+                    return self.handleCallToolRequest(request, httpRequest, headers, authContext, caller);
                 }
                 _ => {
                     return createJsonRpcErrorResponse(METHOD_NOT_FOUND, "Method not found", request.id);
@@ -204,8 +204,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 
 
         private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers,
-                readonly & AuthContext? authContext)
-            returns http:Ok|http:ServiceUnavailable {
+                readonly & AuthContext? authContext, string? caller) returns http:Ok {
             JsonRpcRequest {jsonrpc: _, id, ...request} = jsonRpcRequest;
             InitializeRequest|error initRequest = request.cloneWithType();
             if initRequest is error {
@@ -234,8 +233,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 
             // A session must belong to the principal that creates it. A token naming neither a subject
             // nor a client cannot own one, so it gets a sessionless connection, or none if sessions are required.
-            string? sessionOwner = authContext is AuthContext ? principalOf(authContext) : ();
-            boolean unownable = authContext is AuthContext && sessionOwner is ();
+            boolean unownable = authContext is AuthContext && caller is ();
             boolean requiresSession = false;
             if unownable {
                 StreamableHttpService|StreamableHttpAdvancedService|Error mcpService =
@@ -268,12 +266,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             }
 
             // A session belongs to the principal that created it; others cannot use it.
-            HttpSession? session = self.sessions.create(sessionOwner);
-            if session is () {
-                return <http:ServiceUnavailable>{
-                    body: createJsonRpcError(INTERNAL_ERROR, "Too many active sessions; try again later", id)
-                };
-            }
+            HttpSession session = self.sessions.create(caller);
             return <http:Ok>{
                 headers: {[SESSION_ID_HEADER]: session.getSessionId()},
                 body: {
@@ -285,7 +278,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         }
 
         private isolated function handleListToolsRequest(JsonRpcRequest request, http:Request httpRequest,
-                http:Headers headers, readonly & AuthContext? authContext)
+                http:Headers headers, readonly & AuthContext? authContext, string? caller)
             returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
             StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
@@ -304,7 +297,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                     };
                 }
 
-                if self.sessions.access(sessionId, authContext) is () {
+                if self.sessions.access(sessionId, caller) is () {
                     return createSessionNotFoundResponse(sessionId, request.id);
                 }
             }
@@ -344,7 +337,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
         }
 
         private isolated function handleCallToolRequest(JsonRpcRequest request, http:Request httpRequest,
-                http:Headers headers, readonly & AuthContext? authContext)
+                http:Headers headers, readonly & AuthContext? authContext, string? caller)
             returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
             StreamableHttpServiceConfiguration|Error serviceConfig = self.getCachedServiceConfiguration();
             if serviceConfig is Error {
@@ -364,7 +357,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                     };
                 }
 
-                session = self.sessions.access(sessionId, authContext);
+                session = self.sessions.access(sessionId, caller);
                 if session is () {
                     return createSessionNotFoundResponse(sessionId, request.id);
                 }

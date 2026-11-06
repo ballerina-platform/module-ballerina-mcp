@@ -72,11 +72,15 @@ public isolated class StreamableHttpListener {
         if (cacheHints.discover?.ttlMs ?: 0) < 0 || (cacheHints.listTools?.ttlMs ?: 0) < 0 {
             return error DispatcherError("Cache hint ttlMs must be non-negative");
         }
+        SessionLimits sessionLimits = serviceConfig.sessionLimits;
+        if sessionLimits.idleTimeout <= 0d || sessionLimits.maxPerOwner <= 0 || sessionLimits.maxAnonymous <= 0 {
+            return error DispatcherError("Session limits must be positive");
+        }
         RequestStateSigner requestStateSigner = check new (serviceConfig.requestState);
         ServerAuthenticator? authenticator = check createServerAuthenticator(mcpService, serviceConfig);
         http:HttpServiceConfig httpServiceConfig = toHttpServiceConfig(serviceConfig, authenticator);
         final DispatcherService dispatcherService = getDispatcherService(httpServiceConfig, authenticator,
-                requestStateSigner);
+                requestStateSigner, new (sessionLimits));
         check addMcpServiceToDispatcher(dispatcherService, mcpService);
         lock {
             string? metadataHost = ();

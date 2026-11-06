@@ -172,9 +172,9 @@ isolated function advanceFakeSessionClock(decimal seconds) {
 
 @test:Config {}
 function testSessionStoreEvictsIdleSessions() {
-    SessionStore store = new ({idleTimeoutSeconds: 60}, fakeSessionClock);
-    string activeId = (<HttpSession>store.create(())).getSessionId();
-    string idleId = (<HttpSession>store.create(())).getSessionId();
+    SessionStore store = new ({idleTimeout: 60}, fakeSessionClock);
+    string activeId = store.create(()).getSessionId();
+    string idleId = store.create(()).getSessionId();
 
     advanceFakeSessionClock(59);
     // Using a session restarts its idle timer.
@@ -189,36 +189,57 @@ function testSessionStoreEvictsIdleSessions() {
 }
 
 @test:Config {}
-function testSessionStoreCapsSessionsPerOwner() {
-    SessionStore store = new ({idleTimeoutSeconds: 60, maxPerOwner: 2, maxAnonymous: 1}, fakeSessionClock);
-    test:assertTrue(store.create("alice") is HttpSession);
-    test:assertTrue(store.create("alice") is HttpSession);
-    test:assertTrue(store.create("alice") is ());
-    // Other principals and anonymous callers are not affected by one owner reaching its cap.
-    test:assertTrue(store.create("bob") is HttpSession);
-    test:assertTrue(store.create(()) is HttpSession);
-    test:assertTrue(store.create(()) is ());
+function testFullOwnerPoolEvictsItsLeastRecentlyUsedSession() {
+    SessionStore store = new ({idleTimeout: 60, maxPerOwner: 2}, fakeSessionClock);
+    string first = store.create("alice").getSessionId();
+    advanceFakeSessionClock(1);
+    string second = store.create("alice").getSessionId();
+    advanceFakeSessionClock(1);
+    string bobs = store.create("bob").getSessionId();
+    advanceFakeSessionClock(1);
+    // Using the older session makes the second one the least recently used.
+    test:assertTrue(store.access(first, "alice") is HttpSession);
+    advanceFakeSessionClock(1);
 
-    // Idle sessions are evicted on the next initialize, freeing room.
-    advanceFakeSessionClock(60);
-    test:assertTrue(store.create("alice") is HttpSession);
-    test:assertTrue(store.create(()) is HttpSession);
+    string third = store.create("alice").getSessionId();
+    test:assertTrue(store.contains(first));
+    test:assertFalse(store.contains(second));
+    test:assertTrue(store.contains(third));
+    // One owner's pool never evicts the sessions of another.
+    test:assertTrue(store.contains(bobs));
 }
 
 @test:Config {}
-function testSessionCapAndIdleEvictionOverHttp() returns error? {
+function testFullAnonymousPoolEvictsItsLeastRecentlyUsedSession() {
+    SessionStore store = new ({idleTimeout: 60, maxPerOwner: 1, maxAnonymous: 2}, fakeSessionClock);
+    string owned = store.create("alice").getSessionId();
+    string first = store.create(()).getSessionId();
+    advanceFakeSessionClock(1);
+    string second = store.create(()).getSessionId();
+    advanceFakeSessionClock(1);
+
+    // Callers that keep their sessions alive cannot keep a new caller out.
+    string third = store.create(()).getSessionId();
+    test:assertFalse(store.contains(first));
+    test:assertTrue(store.contains(second));
+    test:assertTrue(store.contains(third));
+    test:assertTrue(store.contains(owned));
+}
+
+@test:Config {}
+function testSessionEvictionOverHttp() returns error? {
     http:Listener httpListener = check new (3242);
     DispatcherService dispatcher = getDispatcherService({}, (), check new ({}),
-            new ({idleTimeoutSeconds: 60, maxAnonymous: 1}, fakeSessionClock));
+            new ({idleTimeout: 60, maxAnonymous: 1}, fakeSessionClock));
     check addMcpServiceToDispatcher(dispatcher, newUnconfiguredService());
     check httpListener.attach(dispatcher, "/capped");
     check httpListener.'start();
-    error? assertionResult = trap assertSessionCapAndIdleEviction();
+    error? assertionResult = trap assertSessionEviction();
     check httpListener.immediateStop();
     return assertionResult;
 }
 
-isolated function assertSessionCapAndIdleEviction() returns error? {
+isolated function assertSessionEviction() returns error? {
     http:Client cappedClient = check new ("http://localhost:3242");
     json initRequest = legacyRequest(REQUEST_INITIALIZE, {
         "protocolVersion": LATEST_LEGACY_PROTOCOL_VERSION,
@@ -227,18 +248,54 @@ isolated function assertSessionCapAndIdleEviction() returns error? {
     });
     http:Response first = check cappedClient->post("/capped", initRequest, headers = legacyHeaders());
     test:assertEquals(first.statusCode, 200);
-    string sessionId = check first.getHeader(SESSION_ID_HEADER);
+    string firstId = check first.getHeader(SESSION_ID_HEADER);
 
-    http:Response overCap = check cappedClient->post("/capped", initRequest, headers = legacyHeaders());
-    test:assertEquals(overCap.statusCode, 503);
-    JsonRpcError capError = check (check overCap.getJsonPayload()).cloneWithType();
-    test:assertEquals(capError.id, 1);
-
-    advanceFakeSessionClock(60);
+    // A full pool admits the new session and evicts the old one, whose client must initialize again.
+    http:Response second = check cappedClient->post("/capped", initRequest, headers = legacyHeaders());
+    test:assertEquals(second.statusCode, 200);
+    string secondId = check second.getHeader(SESSION_ID_HEADER);
     http:Response evicted = check cappedClient->post("/capped", legacyRequest(REQUEST_LIST_TOOLS),
-            headers = legacyHeaders({[SESSION_ID_HEADER]: sessionId}));
+            headers = legacyHeaders({[SESSION_ID_HEADER]: firstId}));
     test:assertEquals(evicted.statusCode, 404);
 
-    http:Response replacement = check cappedClient->post("/capped", initRequest, headers = legacyHeaders());
-    test:assertEquals(replacement.statusCode, 200);
+    advanceFakeSessionClock(60);
+    http:Response idle = check cappedClient->post("/capped", legacyRequest(REQUEST_LIST_TOOLS),
+            headers = legacyHeaders({[SESSION_ID_HEADER]: secondId}));
+    test:assertEquals(idle.statusCode, 404);
+}
+
+@test:Config {}
+function testInvalidSessionLimitsAreRejectedOnAttach() returns error? {
+    StreamableHttpListener unstartedListener = check new (3243);
+    StreamableHttpAdvancedService noIdleTimeout = @StreamableHttpServiceConfig {
+        info: {name: "limited", version: "1"},
+        sessionLimits: {idleTimeout: 0}
+    } isolated service object {
+        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+
+        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    };
+    StreamableHttpAdvancedService noOwnedSessions = @StreamableHttpServiceConfig {
+        info: {name: "limited", version: "1"},
+        sessionLimits: {maxPerOwner: 0}
+    } isolated service object {
+        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+
+        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    };
+    StreamableHttpAdvancedService noAnonymousSessions = @StreamableHttpServiceConfig {
+        info: {name: "limited", version: "1"},
+        sessionLimits: {maxAnonymous: -1}
+    } isolated service object {
+        remote isolated function onListTools() returns ListToolsResult => {tools: []};
+
+        remote isolated function onCallTool(CallToolParams callParams) returns CallToolResult => {content: []};
+    };
+    foreach StreamableHttpAdvancedService limitedService in [noIdleTimeout, noOwnedSessions, noAnonymousSessions] {
+        Error? attachResult = unstartedListener.attach(limitedService, "/limited");
+        if attachResult !is Error {
+            test:assertFail("expected the session limits to be rejected");
+        }
+        test:assertEquals(attachResult.message(), "Session limits must be positive");
+    }
 }

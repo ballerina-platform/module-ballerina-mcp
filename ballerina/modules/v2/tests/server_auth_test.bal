@@ -992,6 +992,86 @@ function testPlainHttpAuthBehavesAsBefore() returns error? {
     test:assertEquals(noMetadata.statusCode, 404);
 }
 
+// Legacy sessions of a service using HTTP listener authentication belong to the verified caller.
+@StreamableHttpServiceConfig {
+    info: {name: "plain-http-sessions", version: "1"},
+    sessionMode: STATEFUL,
+    sessionLimits: {maxPerOwner: 1},
+    httpConfig: {
+        auth: [{jwtValidatorConfig: {issuer: PROTECTED_ISSUER, audience: "plain", signatureConfig: {secret: SIGNING_KEY}}}]
+    }
+}
+service StreamableHttpService /plainSessions on serverAuthListener {
+    @Tool {description: "Echoes", schema: {'type: "object"}}
+    remote isolated function echo() returns string => "echo";
+}
+
+isolated function plainSessionPost(string token, json request, string? sessionId = ()) returns http:Response|error {
+    map<string|string[]> requestHeaders = {[AUTHORIZATION_HEADER]: "Bearer " + token};
+    if sessionId is string {
+        requestHeaders[SESSION_ID_HEADER] = sessionId;
+    }
+    return serverAuthClient->post("/plainSessions", request, headers = legacyHeaders(requestHeaders));
+}
+
+isolated function plainSessionOf(string token) returns string|error {
+    http:Response initialized = check plainSessionPost(token, legacyRequest(REQUEST_INITIALIZE, {
+        protocolVersion: LATEST_LEGACY_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: {name: "test", version: "1"}
+    }));
+    test:assertEquals(initialized.statusCode, 200);
+    return initialized.getHeader(SESSION_ID_HEADER);
+}
+
+@test:Config {}
+function testListenerAuthSessionIsBoundToItsCreator() returns error? {
+    string alice = check serverAuthToken(audience = "plain");
+    string bob = check serverAuthToken(subject = "bob", audience = "plain");
+    string aliceSession = check plainSessionOf(alice);
+    string bobSession = check plainSessionOf(bob);
+
+    http:Response hijacked = check plainSessionPost(bob, legacyRequest(REQUEST_LIST_TOOLS), aliceSession);
+    test:assertEquals(hijacked.statusCode, 404);
+    http:Response deleted = check serverAuthClient->delete("/plainSessions",
+            headers = legacyHeaders({[AUTHORIZATION_HEADER]: "Bearer " + bob, [SESSION_ID_HEADER]: aliceSession}));
+    test:assertEquals(deleted.statusCode, 404);
+    http:Response owned = check plainSessionPost(alice, legacyRequest(REQUEST_LIST_TOOLS), aliceSession);
+    test:assertEquals(owned.statusCode, 200);
+
+    // A caller over its own cap evicts its own older session, not another caller's.
+    string aliceReplacement = check plainSessionOf(alice);
+    http:Response evicted = check plainSessionPost(alice, legacyRequest(REQUEST_LIST_TOOLS), aliceSession);
+    test:assertEquals(evicted.statusCode, 404);
+    http:Response replacement = check plainSessionPost(alice, legacyRequest(REQUEST_LIST_TOOLS), aliceReplacement);
+    test:assertEquals(replacement.statusCode, 200);
+    http:Response untouched = check plainSessionPost(bob, legacyRequest(REQUEST_LIST_TOOLS), bobSession);
+    test:assertEquals(untouched.statusCode, 200);
+}
+
+@test:Config {}
+function testListenerAuthPrincipal() returns error? {
+    test:assertEquals(listenerAuthPrincipal("Basic " + "alice:secret".toBytes().toBase64()), "[\"alice\"]");
+    test:assertEquals(listenerAuthPrincipal("Basic " + "alice".toBytes().toBase64()), ());
+    test:assertEquals(listenerAuthPrincipal("Bearer " + check serverAuthToken()),
+            [PROTECTED_ISSUER, (), "alice"].toJsonString());
+    string clientToken = check jwt:issue({
+        issuer: PROTECTED_ISSUER,
+        customClaims: {client_id: "desktop"},
+        signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
+    });
+    test:assertEquals(listenerAuthPrincipal("Bearer " + clientToken),
+            [PROTECTED_ISSUER, "desktop", ()].toJsonString());
+    string anonymousToken = check jwt:issue({
+        issuer: PROTECTED_ISSUER,
+        signatureConfig: {algorithm: jwt:HS256, config: SIGNING_KEY}
+    });
+    test:assertEquals(listenerAuthPrincipal("Bearer " + anonymousToken), ());
+    // An opaque token names no principal without another introspection call.
+    test:assertTrue(listenerAuthPrincipal("Bearer opaque-alice") is error);
+    test:assertEquals(listenerAuthPrincipal("Digest username=alice"), ());
+}
+
 // Scope hierarchies: a broader scope satisfies the narrower scopes it implies.
 @StreamableHttpServiceConfig {
     info: {name: "protected-hierarchy", version: "1"},

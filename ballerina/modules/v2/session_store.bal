@@ -17,27 +17,16 @@
 import ballerina/time;
 import ballerina/uuid;
 
-// A legacy session unused for this long is evicted; the client re-initializes on the resulting 404.
-const decimal SESSION_IDLE_TIMEOUT_SECONDS = 1800;
-// Owned sessions are capped per principal, so one caller cannot use up the room of others.
-const int MAX_SESSIONS_PER_OWNER = 100;
-// Sessions without an owner share one cap, as their callers cannot be told apart.
-const int MAX_ANONYMOUS_SESSIONS = 10000;
-
-type SessionLimits record {|
-    decimal idleTimeoutSeconds = SESSION_IDLE_TIMEOUT_SECONDS;
-    int maxPerOwner = MAX_SESSIONS_PER_OWNER;
-    int maxAnonymous = MAX_ANONYMOUS_SESSIONS;
-|};
-
 type SessionEntry record {|
     HttpSession session;
-    # Principal that created the session, when the service uses an `mcp:OAuthProtectedResourceConfig`
+    # Principal that created the session, when the caller could be identified
     string? owner;
     decimal lastSeen;
 |};
 
 # Holds the legacy sessions of a service, evicting idle ones and bounding how many may exist.
+# A full pool evicts its least recently used session rather than refusing new ones, so no caller can
+# hold all of the room by keeping its sessions alive.
 isolated class SessionStore {
     private final map<SessionEntry> entries = {};
     private final readonly & SessionLimits limits;
@@ -48,23 +37,31 @@ isolated class SessionStore {
         self.clock = clock;
     }
 
-    # Creates a session for the given owner.
+    # Creates a session for the given owner, evicting the owner's least recently used session if its pool is full.
     #
     # + owner - Principal the session belongs to, or `()` for an anonymous session
-    # + return - The new session, or `()` if the owner's cap is reached
-    isolated function create(string? owner) returns HttpSession? {
+    # + return - The new session
+    isolated function create(string? owner) returns HttpSession {
         lock {
             decimal now = self.clock();
             int ownedSessions = 0;
+            string leastRecentlyUsed = "";
+            // Later than any session was used, so the first owned session is taken.
+            decimal leastRecentlyUsedAt = now + 1d;
             foreach [string, SessionEntry] [sessionId, entry] in self.entries.entries() {
                 if self.isExpired(entry.lastSeen, now) {
                     _ = self.entries.remove(sessionId);
                 } else if entry.owner == owner {
                     ownedSessions += 1;
+                    if entry.lastSeen < leastRecentlyUsedAt {
+                        leastRecentlyUsed = sessionId;
+                        leastRecentlyUsedAt = entry.lastSeen;
+                    }
                 }
             }
-            if ownedSessions >= (owner is string ? self.limits.maxPerOwner : self.limits.maxAnonymous) {
-                return ();
+            int cap = owner is string ? self.limits.maxPerOwner : self.limits.maxAnonymous;
+            if ownedSessions >= cap {
+                _ = self.entries.removeIfHasKey(leastRecentlyUsed);
             }
             string sessionId = uuid:createRandomUuid();
             HttpSession session = new (sessionId);
@@ -76,13 +73,13 @@ isolated class SessionStore {
     # Returns a live session the caller may use, and marks it as used.
     #
     # + sessionId - The session ID
-    # + authContext - The authenticated caller, if any
+    # + caller - Principal of the caller, if it could be identified
     # + return - The session, or `()` if it is unknown, expired, or owned by another principal
-    isolated function access(string sessionId, readonly & AuthContext? authContext) returns HttpSession? {
+    isolated function access(string sessionId, string? caller) returns HttpSession? {
         lock {
             self.evictIfExpired(sessionId);
             SessionEntry? entry = self.entries[sessionId];
-            if entry is () || !isSessionOwner(entry.owner, authContext) {
+            if entry is () || !isSessionOwner(entry.owner, caller) {
                 return ();
             }
             entry.lastSeen = self.clock();
@@ -104,13 +101,13 @@ isolated class SessionStore {
     # Removes a session the caller may use.
     #
     # + sessionId - The session ID
-    # + authContext - The authenticated caller, if any
+    # + caller - Principal of the caller, if it could be identified
     # + return - `true` if the session was removed, `false` if it is unknown, expired, or owned by another principal
-    isolated function remove(string sessionId, readonly & AuthContext? authContext) returns boolean {
+    isolated function remove(string sessionId, string? caller) returns boolean {
         lock {
             self.evictIfExpired(sessionId);
             SessionEntry? entry = self.entries[sessionId];
-            if entry is () || !isSessionOwner(entry.owner, authContext) {
+            if entry is () || !isSessionOwner(entry.owner, caller) {
                 return false;
             }
             _ = self.entries.remove(sessionId);
@@ -128,5 +125,5 @@ isolated class SessionStore {
     }
 
     private isolated function isExpired(decimal lastSeen, decimal now) returns boolean =>
-        now - lastSeen >= self.limits.idleTimeoutSeconds;
+        now - lastSeen >= self.limits.idleTimeout;
 }

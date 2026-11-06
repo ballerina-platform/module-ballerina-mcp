@@ -16,6 +16,7 @@
 
 import ballerina/http;
 import ballerina/jwt;
+import ballerina/lang.array;
 import ballerina/log;
 import ballerina/oauth2;
 
@@ -708,10 +709,63 @@ isolated function principalOf(AuthContext authContext) returns string? {
     return [authContext.issuer, clientId, subject].toJsonString();
 }
 
+# Returns the principal a request's legacy session is bound to. Without `mcpv2:OAuthProtectedResourceConfig`,
+# it is taken from the credentials that `http:ListenerAuthConfig` authentication accepted.
+#
+# + config - The service configuration
+# + headers - The request headers
+# + authContext - The caller authenticated as an OAuth protected resource, if any
+# + return - The principal, or nil when the caller cannot be identified
+isolated function sessionCallerOf(StreamableHttpServiceConfiguration config, http:Headers headers,
+        AuthContext? authContext) returns string? {
+    if authContext is AuthContext {
+        return principalOf(authContext);
+    }
+    // Credentials are trusted only when the listener has verified them.
+    OAuthProtectedResourceConfig|http:ListenerAuthConfig[]? auth = config.httpConfig.auth;
+    if auth !is http:ListenerAuthConfig[] || auth.length() == 0 {
+        return;
+    }
+    string|http:HeaderNotFoundError authorization = headers.getHeader(AUTHORIZATION_HEADER);
+    string|error? principal = authorization is string ? listenerAuthPrincipal(authorization) : ();
+    return principal is string ? principal : ();
+}
+
+# Returns the principal of verified `http:ListenerAuthConfig` credentials: the user name of Basic
+# credentials, or the issuer, client and subject of a JWT bearer token, keyed as `principalOf` keys them.
+# An opaque bearer token has no principal without another introspection call, so it has none here.
+#
+# + authorization - The `Authorization` header
+# + return - The principal, nil when the credentials name none, or an error when they cannot be decoded
+isolated function listenerAuthPrincipal(string authorization) returns string|error? {
+    string[] parts = re `\s+`.split(authorization.trim());
+    if parts.length() != 2 {
+        return;
+    }
+    if parts[0] == "Basic" {
+        string credentials = check string:fromBytes(check array:fromBase64(parts[1]));
+        int? separator = credentials.indexOf(":");
+        if separator is () {
+            return;
+        }
+        return [credentials.substring(0, separator)].toJsonString();
+    }
+    if parts[0] != "Bearer" {
+        return;
+    }
+    jwt:Payload payload = (check jwt:decode(parts[1]))[1];
+    string? subject = payload.sub;
+    anydata clientId = payload[CLIENT_ID_CLAIM] ?: payload[AZP_CLAIM];
+    if clientId !is string && subject is () {
+        return;
+    }
+    return [payload.iss, clientId is string ? clientId : (), subject].toJsonString();
+}
+
 # Returns whether a caller may use a session.
 #
-# + owner - Principal that created the session, if it was created by an authenticated caller
-# + authContext - The authenticated caller of the current request
+# + owner - Principal that created the session, if its creator could be identified
+# + caller - Principal of the current caller, if it could be identified
 # + return - `true` when the session is unowned or owned by the caller
-isolated function isSessionOwner(string? owner, AuthContext? authContext) returns boolean =>
-    owner is () || (authContext is AuthContext && principalOf(authContext) == owner);
+isolated function isSessionOwner(string? owner, string? caller) returns boolean =>
+    owner is () || owner == caller;
