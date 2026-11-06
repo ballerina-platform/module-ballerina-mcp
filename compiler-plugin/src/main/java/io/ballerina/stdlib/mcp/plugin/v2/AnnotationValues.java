@@ -59,8 +59,7 @@ final class AnnotationValues {
         Value result = defaultValue;
         for (MappingFieldNode field : mapping.fields()) {
             if (field instanceof SpecificFieldNode specific) {
-                String key = specific.fieldName().toSourceCode().trim().replace("\"", "");
-                if (name.equals(key)) {
+                if (name.equals(Utils.fieldKey(specific))) {
                     result = constant(specific.valueExpr().map(Node.class::cast)
                             .orElse(specific.fieldName()), context);
                 }

@@ -48,6 +48,7 @@ import io.ballerina.tools.diagnostics.Location;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static io.ballerina.stdlib.mcp.plugin.v2.ToolAnnotationConfig.DESCRIPTION_FIELD_NAME;
@@ -70,6 +71,8 @@ import static io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnosti
 public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalysisContext> {
     public static final String EMPTY_STRING = "";
     public static final String NIL_EXPRESSION = "()";
+    private static final Set<String> TOOL_CONFIG_FIELDS = Set.of(DESCRIPTION_FIELD_NAME, SCHEMA_FIELD_NAME,
+            OUTPUT_SCHEMA_FIELD_NAME, STRUCTURED_OUTPUT_FIELD_NAME, SCOPES_FIELD_NAME);
 
     private final Map<DocumentId, ModifierContext> modifierContextMap;
     private SyntaxNodeAnalysisContext context;
@@ -151,9 +154,10 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                     functionName));
         }
         boolean hasSpread = fields.stream().anyMatch(field -> field.kind() == SyntaxKind.SPREAD_FIELD);
-        boolean hasShorthand = fields.stream().anyMatch(field -> field instanceof SpecificFieldNode specific
-                && specific.valueExpr().isEmpty());
-        if (hasSpread || hasShorthand || !policy.known() || !suppliedSchema.known()) {
+        // A rebuilt mapping carries only the fields read here, so any other field keeps the supplied mapping.
+        boolean rebuildable = fields.stream().allMatch(field -> field instanceof SpecificFieldNode specific
+                && specific.valueExpr().isPresent() && TOOL_CONFIG_FIELDS.contains(Utils.fieldKey(specific)));
+        if (!rebuildable || !policy.known() || !suppliedSchema.known()) {
             String generatedInput;
             if (hasSpread || fieldValues.containsKey(SCHEMA_FIELD_NAME)) {
                 try {
@@ -244,8 +248,10 @@ public class RemoteFunctionAnalysisTask implements AnalysisTask<SyntaxNodeAnalys
                 .map(field -> (SpecificFieldNode) field)
                 .filter(field -> field.valueExpr().isPresent())
                 .collect(Collectors.toMap(
-                        field -> field.fieldName().toSourceCode().trim(),
-                        field -> field.valueExpr().orElse(NodeParser.parseExpression(NIL_EXPRESSION))
+                        Utils::fieldKey,
+                        field -> field.valueExpr().orElse(NodeParser.parseExpression(NIL_EXPRESSION)),
+                        // The compiler reports a duplicate key; keep analysing instead of failing here.
+                        (first, second) -> second
                 ));
     }
 

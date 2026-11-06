@@ -1,0 +1,4 @@
+[package]
+org = "mcp_test"
+name = "tool_config_field_keys"
+version = "0.1.0"

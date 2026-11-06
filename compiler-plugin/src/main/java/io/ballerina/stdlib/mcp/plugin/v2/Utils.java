@@ -49,8 +49,10 @@ import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.ServiceDeclarationNode;
 import io.ballerina.compiler.syntax.tree.SpecificFieldNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
+import io.ballerina.compiler.syntax.tree.Token;
 import io.ballerina.projects.Module;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
+import io.ballerina.runtime.api.utils.IdentifierUtils;
 import io.ballerina.stdlib.mcp.plugin.McpModule;
 import io.ballerina.stdlib.mcp.plugin.v2.diagnostics.CompilationDiagnostic;
 import io.ballerina.tools.diagnostics.Diagnostic;
@@ -161,6 +163,19 @@ public class Utils {
         return symbol.getModule().isPresent()
                 && HTTP_PACKAGE_NAME.equals(symbol.getModule().get().id().moduleName())
                 && BALLERINA_ORG.equals(symbol.getModule().get().id().orgName());
+    }
+
+    // The key as the compiler reads it: no comments, quotes or escapes, so "scopes" and 'scopes are scopes.
+    public static String fieldKey(SpecificFieldNode field) {
+        Node name = field.fieldName();
+        String text = name instanceof BasicLiteralNode literal ? literal.literalToken().text()
+                : name instanceof Token token ? token.text() : name.toSourceCode().trim();
+        String key = IdentifierUtils.unescapeBallerina(text);
+        if (name.kind() == SyntaxKind.STRING_LITERAL && key.length() >= 2 && key.startsWith("\"")
+                && key.endsWith("\"")) {
+            return key.substring(1, key.length() - 1);
+        }
+        return key.startsWith("'") ? key.substring(1) : key;
     }
 
     public static String getParameterDescription(FunctionSymbol functionSymbol, String parameterName) {

@@ -535,6 +535,32 @@ public class CompilerPluginTest {
         Assert.assertTrue(source.contains("\"description\":\"The maximum number of items\""), source);
     }
 
+    @Test
+    public void testQuotedAndCommentedToolConfigKeysAreKept() {
+        String source = compiledSource("tool_config_field_keys");
+        for (String kind : List.of("commented", "string", "quoted")) {
+            Assert.assertTrue(source.contains("scopes:[\"" + kind + "\"]"), source);
+            Assert.assertTrue(source.contains("{\"" + kind + "\": {}}"), source);
+        }
+        for (String description : List.of("Commented scopes", "String scopes", "Quoted scopes")) {
+            Assert.assertTrue(source.contains("description:\"" + description + "\""), source);
+        }
+        Assert.assertFalse(source.contains("description:\"Generated description\""), source);
+    }
+
+    // Runs the plugin, checks that the modified package compiles cleanly, and returns its source.
+    private String compiledSource(String path) {
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(), RESOURCE_DIRECTORY.resolve(path), OFFLINE);
+        DiagnosticResult result = project.currentPackage().runCodeGenAndModifyPlugins();
+        Assert.assertEquals(errorCount(result), 0L, result.diagnostics().toString());
+        DiagnosticResult compilation = project.currentPackage().getCompilation().diagnosticResult();
+        Assert.assertEquals(compilation.errorCount(), 0, compilation.errors().toString());
+        Module module = project.currentPackage().getDefaultModule();
+        return module.documentIds().stream()
+                .map(documentId -> module.document(documentId).syntaxTree().toSourceCode())
+                .collect(Collectors.joining());
+    }
+
     private static String elicitFormSchemaArgument(BuildProject project) {
         Module module = project.currentPackage().getDefaultModule();
         List<String> arguments = new ArrayList<>();
