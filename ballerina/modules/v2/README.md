@@ -460,6 +460,8 @@ with JSON-RPC `-32602` "Invalid or expired requestState" and `data.reason` `inva
 reason is logged at debug level on the server only.
 
 Request state is signed, not encrypted: the client can read it, so do not put secrets in it.
+It is also not single-use: a continuation can be replayed until the state expires, so a tool that must act at most
+once has to enforce that itself.
 
 Configure signing with `requestState` on `@mcpv2:StreamableHttpServiceConfig`:
 
@@ -578,7 +580,8 @@ service mcpv2:StreamableHttpService /files on mcpListener {
 
 `httpConfig.auth` still accepts `http:ListenerAuthConfig[]`, HTTP listener authentication without discovery, exactly
 as in 1.x. Failures are answered with `401` or `403` without a challenge, and tool scopes and `mcpv2:AuthContext` are
-not available.
+not available. Legacy sessions are not bound to the caller, so any authenticated client that knows a session ID can use
+it.
 
 ## Client
 
