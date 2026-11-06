@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/log;
 
 isolated service class DispatcherService {
     *http:Service;
@@ -145,6 +146,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 var modernResponse = trap handleModernRequest(mcpService, request, httpRequest, headers, routeConfig,
                         self.requestStateSigner, self.authenticator, authContext);
                 if modernResponse is error {
+                    log:printError("Modern MCP request failed", modernResponse, method = request.method);
                     return createJsonRpcErrorResponse(INTERNAL_ERROR, "Failed to process MCP request", request.id);
                 }
                 return modernResponse;
