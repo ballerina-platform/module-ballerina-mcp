@@ -323,8 +323,9 @@ public final class McpServiceMethodHelper {
                                                      boolean structuredResult) {
         BString toolName = (BString) params.get(fromString(NAME_FIELD_NAME));
 
+        // Only '@mcp:Tool' methods are tools, as in listing and scope checks.
         Optional<RemoteMethodType> method = getRemoteMethods(mcpService).stream()
-                .filter(rmt -> rmt.getName().equals(toolName.getValue()))
+                .filter(rmt -> rmt.getName().equals(toolName.getValue()) && isToolMethod(rmt))
                 .findFirst();
 
         if (method.isEmpty()) {
@@ -470,6 +471,11 @@ public final class McpServiceMethodHelper {
             }
         }
         return tool;
+    }
+
+    private static boolean isToolMethod(RemoteMethodType method) {
+        return method.getAnnotations().entrySet().stream()
+                .anyMatch(entry -> ModuleUtils.isModuleAnnotation(entry.getKey().getValue(), ANNOTATION_MCP_TOOL));
     }
 
     private static boolean isStructuredOutputEnabled(RemoteMethodType method) {

@@ -71,6 +71,9 @@ service StreamableHttpService /autoSession on legacyDispatcherListener {
 
     @Tool {description: "Accepts a missing session", schema: {'type: "object"}}
     remote isolated function peek(HttpSession? session) returns boolean => session is HttpSession;
+
+    // Not a tool: without `@Tool` it is neither listed nor callable.
+    remote isolated function internal() returns string => "internal";
 }
 
 @StreamableHttpServiceConfig {info: {name: "auto-session-advanced", version: "1"}}
@@ -336,4 +339,19 @@ function testToolRequiringSessionRejectsSessionlessAutoRequests() returns error?
     CallToolResult sessionResult = check sessionBody.result.ensureType();
     TextContent sessionText = check sessionResult.content[0].ensureType();
     test:assertEquals(sessionText.text, sessionId);
+}
+
+@test:Config {}
+function testLegacyCallToolIgnoresRemoteMethodsWithoutToolAnnotation() returns error? {
+    http:Response listResponse = check legacyPost("/autoSession", legacyRequest(REQUEST_LIST_TOOLS));
+    JsonRpcResponse listBody = check (check listResponse.getJsonPayload()).cloneWithType();
+    ListToolsResult listResult = check listBody.result.cloneWithType();
+    test:assertEquals(listResult.tools.map(toolInfo => toolInfo.name).sort(), ["peek", "remember"]);
+
+    http:Response callResponse = check legacyPost("/autoSession", legacyRequest(REQUEST_CALL_TOOL, {"name": "internal"}));
+    JsonRpcResponse callBody = check (check callResponse.getJsonPayload()).cloneWithType();
+    CallToolResult callResult = check callBody.result.ensureType();
+    test:assertEquals(callResult.isError, true);
+    TextContent textContent = check callResult.content[0].ensureType();
+    test:assertEquals(textContent.text, "Unknown tool: internal");
 }
