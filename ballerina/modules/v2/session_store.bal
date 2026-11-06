@@ -1,0 +1,132 @@
+// Copyright (c) 2026 WSO2 LLC (http://www.wso2.com).
+//
+// WSO2 LLC. licenses this file to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+import ballerina/time;
+import ballerina/uuid;
+
+// A legacy session unused for this long is evicted; the client re-initializes on the resulting 404.
+const decimal SESSION_IDLE_TIMEOUT_SECONDS = 1800;
+// Owned sessions are capped per principal, so one caller cannot use up the room of others.
+const int MAX_SESSIONS_PER_OWNER = 100;
+// Sessions without an owner share one cap, as their callers cannot be told apart.
+const int MAX_ANONYMOUS_SESSIONS = 10000;
+
+type SessionLimits record {|
+    decimal idleTimeoutSeconds = SESSION_IDLE_TIMEOUT_SECONDS;
+    int maxPerOwner = MAX_SESSIONS_PER_OWNER;
+    int maxAnonymous = MAX_ANONYMOUS_SESSIONS;
+|};
+
+type SessionEntry record {|
+    HttpSession session;
+    # Principal that created the session, when the service uses an `mcp:OAuthProtectedResourceConfig`
+    string? owner;
+    decimal lastSeen;
+|};
+
+# Holds the legacy sessions of a service, evicting idle ones and bounding how many may exist.
+isolated class SessionStore {
+    private final map<SessionEntry> entries = {};
+    private final readonly & SessionLimits limits;
+    private final isolated function () returns decimal clock;
+
+    isolated function init(SessionLimits limits = {}, isolated function () returns decimal clock = time:monotonicNow) {
+        self.limits = limits.cloneReadOnly();
+        self.clock = clock;
+    }
+
+    # Creates a session for the given owner.
+    #
+    # + owner - Principal the session belongs to, or `()` for an anonymous session
+    # + return - The new session, or `()` if the owner's cap is reached
+    isolated function create(string? owner) returns HttpSession? {
+        lock {
+            decimal now = self.clock();
+            int ownedSessions = 0;
+            foreach [string, SessionEntry] [sessionId, entry] in self.entries.entries() {
+                if self.isExpired(entry.lastSeen, now) {
+                    _ = self.entries.remove(sessionId);
+                } else if entry.owner == owner {
+                    ownedSessions += 1;
+                }
+            }
+            if ownedSessions >= (owner is string ? self.limits.maxPerOwner : self.limits.maxAnonymous) {
+                return ();
+            }
+            string sessionId = uuid:createRandomUuid();
+            HttpSession session = new (sessionId);
+            self.entries[sessionId] = {session, owner, lastSeen: now};
+            return session;
+        }
+    }
+
+    # Returns a live session the caller may use, and marks it as used.
+    #
+    # + sessionId - The session ID
+    # + authContext - The authenticated caller, if any
+    # + return - The session, or `()` if it is unknown, expired, or owned by another principal
+    isolated function access(string sessionId, readonly & AuthContext? authContext) returns HttpSession? {
+        lock {
+            self.evictIfExpired(sessionId);
+            SessionEntry? entry = self.entries[sessionId];
+            if entry is () || !isSessionOwner(entry.owner, authContext) {
+                return ();
+            }
+            entry.lastSeen = self.clock();
+            return entry.session;
+        }
+    }
+
+    # Returns whether a live session with the given ID exists, whoever owns it.
+    #
+    # + sessionId - The session ID
+    # + return - `true` if the session exists
+    isolated function contains(string sessionId) returns boolean {
+        lock {
+            self.evictIfExpired(sessionId);
+            return self.entries.hasKey(sessionId);
+        }
+    }
+
+    # Removes a session the caller may use.
+    #
+    # + sessionId - The session ID
+    # + authContext - The authenticated caller, if any
+    # + return - `true` if the session was removed, `false` if it is unknown, expired, or owned by another principal
+    isolated function remove(string sessionId, readonly & AuthContext? authContext) returns boolean {
+        lock {
+            self.evictIfExpired(sessionId);
+            SessionEntry? entry = self.entries[sessionId];
+            if entry is () || !isSessionOwner(entry.owner, authContext) {
+                return false;
+            }
+            _ = self.entries.remove(sessionId);
+            return true;
+        }
+    }
+
+    private isolated function evictIfExpired(string sessionId) {
+        lock {
+            SessionEntry? entry = self.entries[sessionId];
+            if entry is SessionEntry && self.isExpired(entry.lastSeen, self.clock()) {
+                _ = self.entries.remove(sessionId);
+            }
+        }
+    }
+
+    private isolated function isExpired(decimal lastSeen, decimal now) returns boolean =>
+        now - lastSeen >= self.limits.idleTimeoutSeconds;
+}

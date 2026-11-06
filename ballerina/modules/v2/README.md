@@ -331,6 +331,10 @@ service mcpv2:StreamableHttpService /mcp on mcpListener {
 
 Prefer explicit application-level handles for state that modern clients must access.
 
+A session expires after 30 minutes without a request; the service then answers its ID with `404`, and the client
+initializes again. A service holds at most 100 sessions for each authenticated caller and 10,000 sessions without an
+owner, and answers `initialize` with `503` beyond that.
+
 ## Advanced server
 
 Use `mcpv2:StreamableHttpAdvancedService` when the application must define tool discovery and dispatch itself.

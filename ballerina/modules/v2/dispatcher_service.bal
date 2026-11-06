@@ -15,21 +15,18 @@
 // under the License.
 
 import ballerina/http;
-import ballerina/uuid;
 
 isolated service class DispatcherService {
     *http:Service;
 }
 
 isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
-        ServerAuthenticator? serviceAuthenticator, RequestStateSigner serviceRequestStateSigner)
-        returns DispatcherService {
+        ServerAuthenticator? serviceAuthenticator, RequestStateSigner serviceRequestStateSigner,
+        SessionStore sessionStore = new) returns DispatcherService {
     return @http:ServiceConfig {
         ...httpServiceConfig
     } isolated service object {
-        private map<HttpSession> sessionMap = {};
-        // Principal that created each session, when the service uses an `mcp:OAuthProtectedResourceConfig`.
-        private map<string> sessionOwners = {};
+        private final SessionStore sessions = sessionStore;
         private final ServerAuthenticator? authenticator = serviceAuthenticator;
         private final RequestStateSigner requestStateSigner = serviceRequestStateSigner;
         private StreamableHttpServiceConfiguration? cachedServiceConfig = ();
@@ -83,13 +80,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 };
             }
 
-            lock {
-                if !self.sessionMap.hasKey(sessionId) || !isSessionOwner(self.sessionOwners[sessionId], authContext) {
-                    return createSessionNotFoundResponse(sessionId);
-                }
-
-                _ = self.sessionMap.remove(sessionId);
-                _ = self.sessionOwners.removeIfHasKey(sessionId);
+            if !self.sessions.remove(sessionId, authContext) {
+                return createSessionNotFoundResponse(sessionId);
             }
 
             return <http:Ok>{
@@ -199,7 +191,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 
         private isolated function processJsonRpcRequest(JsonRpcRequest request, http:Request httpRequest,
                 http:Headers headers, readonly & AuthContext? authContext)
-            returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError {
+            returns http:BadRequest|http:NotFound|http:Ok|http:Forbidden|http:InternalServerError|
+                    http:ServiceUnavailable {
             match request.method {
                 REQUEST_INITIALIZE => {
                     return self.handleInitializeRequest(request, headers, authContext);
@@ -235,7 +228,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 
         private isolated function handleInitializeRequest(JsonRpcRequest jsonRpcRequest, http:Headers headers,
                 readonly & AuthContext? authContext)
-            returns http:Ok {
+            returns http:Ok|http:ServiceUnavailable {
             JsonRpcRequest {jsonrpc: _, id, ...request} = jsonRpcRequest;
             InitializeRequest|error initRequest = request.cloneWithType();
             if initRequest is error {
@@ -292,30 +285,26 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
 
             string? existingSessionId = getSessionIdFromHeaders(headers);
 
-            lock {
-                // If there's an existing session ID and it's already in the map, return error
-                if existingSessionId is string && self.sessionMap.hasKey(existingSessionId) {
-                    return createJsonRpcErrorResponse(INVALID_REQUEST,
-                            string `Session already initialized: ${existingSessionId}`, id);
-                }
+            if existingSessionId is string && self.sessions.contains(existingSessionId) {
+                return createJsonRpcErrorResponse(INVALID_REQUEST,
+                        string `Session already initialized: ${existingSessionId}`, id);
+            }
 
-                string newSessionId = uuid:createRandomUuid();
-                HttpSession session = new (newSessionId);
-                self.sessionMap[newSessionId] = session;
-                if sessionOwner is string {
-                    // A session belongs to the principal that created it; others cannot use it.
-                    self.sessionOwners[newSessionId] = sessionOwner;
-                }
-
-                return <http:Ok>{
-                    headers: {[SESSION_ID_HEADER]: newSessionId},
-                    body: {
-                        jsonrpc: JSONRPC_VERSION,
-                        id: id,
-                        result: initResult.clone()
-                    }
+            // A session belongs to the principal that created it; others cannot use it.
+            HttpSession? session = self.sessions.create(sessionOwner);
+            if session is () {
+                return <http:ServiceUnavailable>{
+                    body: createJsonRpcError(INTERNAL_ERROR, "Too many active sessions; try again later", id)
                 };
             }
+            return <http:Ok>{
+                headers: {[SESSION_ID_HEADER]: session.getSessionId()},
+                body: {
+                    jsonrpc: JSONRPC_VERSION,
+                    id: id,
+                    result: initResult
+                }
+            };
         }
 
         private isolated function handleListToolsRequest(JsonRpcRequest request, http:Request httpRequest,
@@ -338,11 +327,8 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                     };
                 }
 
-                lock {
-                    if !self.sessionMap.hasKey(sessionId) ||
-                            !isSessionOwner(self.sessionOwners[sessionId], authContext) {
-                        return createSessionNotFoundResponse(sessionId, request.id);
-                    }
+                if self.sessions.access(sessionId, authContext) is () {
+                    return createSessionNotFoundResponse(sessionId, request.id);
                 }
             }
 
@@ -390,6 +376,7 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
             HttpSessionMode effectiveSessionMode = determineEffectiveSessionMode(serviceConfig, headers, REQUEST_CALL_TOOL);
 
             string? sessionId = ();
+            HttpSession? session = ();
 
             if effectiveSessionMode == STATEFUL {
                 sessionId = getSessionIdFromHeaders(headers);
@@ -400,11 +387,9 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                     };
                 }
 
-                lock {
-                    if !self.sessionMap.hasKey(sessionId) ||
-                            !isSessionOwner(self.sessionOwners[sessionId], authContext) {
-                        return createSessionNotFoundResponse(sessionId, request.id);
-                    }
+                session = self.sessions.access(sessionId, authContext);
+                if session is () {
+                    return createSessionNotFoundResponse(sessionId, request.id);
                 }
             }
 
@@ -420,11 +405,6 @@ isolated function getDispatcherService(http:HttpServiceConfig httpServiceConfig,
                 if denied is http:Forbidden {
                     return denied;
                 }
-            }
-
-            HttpSession? session;
-            lock {
-                session = sessionId is string ? self.sessionMap[sessionId] : ();
             }
 
             CallToolResult|error callToolResult = self.executeOnCallTool(params, session, headers, httpRequest,

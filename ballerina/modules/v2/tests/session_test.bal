@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/http;
 import ballerina/test;
 
 isolated class SessionCounter {
@@ -141,4 +142,91 @@ function testSessionGetWithType() {
     if absentValue is Error {
         test:assertTrue(absentValue.message().includes("no member found"));
     }
+}
+
+isolated decimal fakeSessionNow = 0;
+
+isolated function fakeSessionClock() returns decimal {
+    lock {
+        return fakeSessionNow;
+    }
+}
+
+isolated function advanceFakeSessionClock(decimal seconds) {
+    lock {
+        fakeSessionNow += seconds;
+    }
+}
+
+@test:Config {}
+function testSessionStoreEvictsIdleSessions() {
+    SessionStore store = new ({idleTimeoutSeconds: 60}, fakeSessionClock);
+    string activeId = (<HttpSession>store.create(())).getSessionId();
+    string idleId = (<HttpSession>store.create(())).getSessionId();
+
+    advanceFakeSessionClock(59);
+    // Using a session restarts its idle timer.
+    test:assertTrue(store.access(activeId, ()) is HttpSession);
+    advanceFakeSessionClock(1);
+    test:assertTrue(store.access(idleId, ()) is ());
+    test:assertFalse(store.contains(idleId));
+    test:assertTrue(store.contains(activeId));
+
+    advanceFakeSessionClock(60);
+    test:assertFalse(store.remove(activeId, ()));
+}
+
+@test:Config {}
+function testSessionStoreCapsSessionsPerOwner() {
+    SessionStore store = new ({idleTimeoutSeconds: 60, maxPerOwner: 2, maxAnonymous: 1}, fakeSessionClock);
+    test:assertTrue(store.create("alice") is HttpSession);
+    test:assertTrue(store.create("alice") is HttpSession);
+    test:assertTrue(store.create("alice") is ());
+    // Other principals and anonymous callers are not affected by one owner reaching its cap.
+    test:assertTrue(store.create("bob") is HttpSession);
+    test:assertTrue(store.create(()) is HttpSession);
+    test:assertTrue(store.create(()) is ());
+
+    // Idle sessions are evicted on the next initialize, freeing room.
+    advanceFakeSessionClock(60);
+    test:assertTrue(store.create("alice") is HttpSession);
+    test:assertTrue(store.create(()) is HttpSession);
+}
+
+@test:Config {}
+function testSessionCapAndIdleEvictionOverHttp() returns error? {
+    http:Listener httpListener = check new (3242);
+    DispatcherService dispatcher = getDispatcherService({}, (), check new ({}),
+            new ({idleTimeoutSeconds: 60, maxAnonymous: 1}, fakeSessionClock));
+    check addMcpServiceToDispatcher(dispatcher, newUnconfiguredService());
+    check httpListener.attach(dispatcher, "/capped");
+    check httpListener.'start();
+    error? assertionResult = trap assertSessionCapAndIdleEviction();
+    check httpListener.immediateStop();
+    return assertionResult;
+}
+
+isolated function assertSessionCapAndIdleEviction() returns error? {
+    http:Client cappedClient = check new ("http://localhost:3242");
+    json initRequest = legacyRequest(REQUEST_INITIALIZE, {
+        "protocolVersion": LATEST_LEGACY_PROTOCOL_VERSION,
+        "capabilities": {},
+        "clientInfo": {"name": "capped-test", "version": "1"}
+    });
+    http:Response first = check cappedClient->post("/capped", initRequest, headers = legacyHeaders());
+    test:assertEquals(first.statusCode, 200);
+    string sessionId = check first.getHeader(SESSION_ID_HEADER);
+
+    http:Response overCap = check cappedClient->post("/capped", initRequest, headers = legacyHeaders());
+    test:assertEquals(overCap.statusCode, 503);
+    JsonRpcError capError = check (check overCap.getJsonPayload()).cloneWithType();
+    test:assertEquals(capError.id, 1);
+
+    advanceFakeSessionClock(60);
+    http:Response evicted = check cappedClient->post("/capped", legacyRequest(REQUEST_LIST_TOOLS),
+            headers = legacyHeaders({[SESSION_ID_HEADER]: sessionId}));
+    test:assertEquals(evicted.statusCode, 404);
+
+    http:Response replacement = check cappedClient->post("/capped", initRequest, headers = legacyHeaders());
+    test:assertEquals(replacement.statusCode, 200);
 }
