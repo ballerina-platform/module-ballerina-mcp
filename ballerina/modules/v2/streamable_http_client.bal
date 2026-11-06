@@ -124,12 +124,19 @@ public distinct isolated client class StreamableHttpClient {
 
     # Connects to the MCP server and negotiates the protocol version.
     #
+    # Set `legacyInitialize` to `false` to connect to a legacy-protocol server without the `initialize`
+    # handshake, so that no HTTP session is created. The connection then sends no `MCP-Protocol-Version`
+    # header, reports `2025-03-26` (the version a server assumes without that header) and reports empty
+    # server capabilities. In `legacy` protocol mode it makes no network call; in `auto` mode discovery
+    # still runs. It has no effect when a modern version is selected or a session ID was supplied.
+    #
     # + clientInfo - Client implementation information
     # + capabilities - Client capabilities to advertise
     # + headers - Optional headers to include with the request
+    # + legacyInitialize - Whether a legacy connection runs the `initialize` handshake
     # + return - Negotiated connection information or a client error
     isolated remote function connect(Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
-            ClientCapabilities capabilities = {}, map<string|string[]> headers = {})
+            ClientCapabilities capabilities = {}, map<string|string[]> headers = {}, boolean legacyInitialize = true)
             returns ConnectionInfo|ClientError {
         ClientCapabilities withExtension = withOAuthExtensionCapability(capabilities, self.transport.oauthExtension());
         ClientCapabilities & readonly advertisedCapabilities = withExtension.cloneReadOnly();
@@ -141,13 +148,14 @@ public distinct isolated client class StreamableHttpClient {
             if self.connected {
                 return self.getConnectionInfo();
             }
-            return self.handshake(connectingClient, advertisedCapabilities, modernCapabilities, requestHeaders);
+            return self.handshake(connectingClient, advertisedCapabilities, modernCapabilities, requestHeaders,
+                    legacyInitialize);
         }
     }
 
     private isolated function handshake(Implementation & readonly clientInfo,
             ClientCapabilities & readonly advertisedCapabilities, ClientCapabilities & readonly modernCapabilities,
-            map<string|string[]> & readonly headers) returns ConnectionInfo|ClientError {
+            map<string|string[]> & readonly headers, boolean legacyInitialize) returns ConnectionInfo|ClientError {
         lock {
             self.clientInfo = clientInfo;
             self.clientCapabilities = modernCapabilities;
@@ -190,7 +198,21 @@ public distinct isolated client class StreamableHttpClient {
                 return discovered;
             }
         }
+        if !legacyInitialize {
+            return self.connectLegacyWithoutHandshake();
+        }
         return self.initializeLegacyConnection(clientInfo, advertisedCapabilities, headers);
+    }
+
+    // No protocol version is recorded on the transport, so requests carry no MCP-Protocol-Version header.
+    private isolated function connectLegacyWithoutHandshake() returns ConnectionInfo|ClientError {
+        lock {
+            self.negotiatedProtocolVersion = ASSUMED_LEGACY_PROTOCOL_VERSION;
+            self.serverCapabilities = {};
+            self.serverInfo = ();
+            self.connected = true;
+        }
+        return self.getConnectionInfo();
     }
 
     # Performs the legacy initialize handshake explicitly and connects this client.
@@ -423,6 +445,9 @@ public distinct isolated client class StreamableHttpClient {
     public isolated function adoptDiscovery(DiscoverResult discovered,
             Implementation clientInfo = {name: "MCP Client", version: "1.0.0"},
             ClientCapabilities capabilities = {}) returns ConnectionInfo|ClientError {
+        if self.protocolMode == "legacy" {
+            return error ClientInitializationError("Discovery cannot be adopted in legacy protocol mode");
+        }
         string? modernVersion = selectModernProtocolVersion(discovered.supportedVersions);
         if modernVersion is () {
             return error ProtocolVersionError("Discovery result does not advertise the modern protocol version");

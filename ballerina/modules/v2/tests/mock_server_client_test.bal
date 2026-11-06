@@ -143,6 +143,10 @@ service /mock on new http:Listener(3210) {
         json payload = check request.getJsonPayload();
         JsonRpcRequest|error parsedRequest = payload.cloneWithType();
         if parsedRequest is error {
+            json notificationMethod = payload is map<json> ? payload["method"] : ();
+            if notificationMethod is string {
+                _ = nextMockCall(string `${scenario}:${notificationMethod}`);
+            }
             // Notifications carry no id and expect no body in return.
             http:Response acknowledgement = new;
             acknowledgement.statusCode = http:STATUS_ACCEPTED;
@@ -158,8 +162,11 @@ service /mock on new http:Listener(3210) {
                 "noWireDefaults" => {
                     return mockDiscoverResult(requestId, includeWireDefaults = false);
                 }
-                "legacyOnly" => {
+                "legacyOnly"|"legacySkipInit"|"legacyFullInit" => {
                     return mockDiscoverResult(requestId, [LATEST_LEGACY_PROTOCOL_VERSION]);
+                }
+                "unauthorizedProbe" => {
+                    return mockJson({"error": "unauthorized"}, 401);
                 }
                 "mixedVersions" => {
                     return mockDiscoverResult(requestId, ["2099-01-01", LATEST_LEGACY_PROTOCOL_VERSION, "2026-07-28"]);
@@ -245,6 +252,13 @@ service /mock on new http:Listener(3210) {
         }
 
         if method == REQUEST_LIST_TOOLS {
+            _ = nextMockCall(string `${scenario}:${REQUEST_LIST_TOOLS}`);
+            if request.hasHeader(PROTOCOL_VERSION_HEADER) {
+                _ = nextMockCall(string `${scenario}:${REQUEST_LIST_TOOLS}:versionHeader`);
+            }
+            if request.hasHeader(SESSION_ID_HEADER) {
+                _ = nextMockCall(string `${scenario}:${REQUEST_LIST_TOOLS}:sessionHeader`);
+            }
             match scenario {
                 "legacyErrorStatus" => {
                     return mockJson({"error": "unavailable"}, 503);
@@ -508,6 +522,7 @@ service /mock on new http:Listener(3210) {
     }
 
     resource function delete [string scenario]() returns http:Response {
+        _ = nextMockCall(string `${scenario}:delete`);
         http:Response deleteResponse = new;
         // 405 signals a peer that does not support session termination.
         deleteResponse.statusCode = scenario == "noTermination" ? 405 : scenario == "sessionGone" ? 404 : 200;
@@ -882,4 +897,77 @@ function testAdditionalRequestHeadersAreReconciledWithProtocolHeaders() returns 
         test:assertTrue(conflictResult.message().includes("conflicts with generated protocol header"));
     }
     check modernClient->close();
+}
+
+@test:Config {}
+function testAutoClientSkipsLegacyInitializeWhenAsked() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("legacySkipInit"), protocolMode = "auto");
+    ConnectionInfo connection = check mockClient->connect(legacyInitialize = false);
+    test:assertEquals(connection, {protocolVersion: "2025-03-26", capabilities: {}});
+    ConnectionInfo reconnection = check mockClient->connect(legacyInitialize = false);
+    test:assertEquals(reconnection, connection);
+    test:assertEquals(mockCallCount("legacySkipInit:discover"), 1);
+    test:assertEquals(mockCallCount("legacySkipInit:initialize"), 0);
+    test:assertEquals(mockCallCount("legacySkipInit:notifications/initialized"), 0);
+
+    ListToolsResult toolList = check mockClient->listTools();
+    test:assertEquals(toolList.tools.map(toolInfo => toolInfo.name), ["echo"]);
+    test:assertEquals(mockCallCount("legacySkipInit:tools/list"), 1);
+    test:assertEquals(mockCallCount("legacySkipInit:tools/list:versionHeader"), 0);
+    test:assertEquals(mockCallCount("legacySkipInit:tools/list:sessionHeader"), 0);
+
+    check mockClient->close();
+    test:assertEquals(mockCallCount("legacySkipInit:delete"), 0);
+}
+
+@test:Config {}
+function testAutoClientRunsLegacyInitializeByDefault() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("legacyFullInit"), protocolMode = "auto");
+    ConnectionInfo connection = check mockClient->connect();
+    test:assertEquals(connection.protocolVersion, LATEST_LEGACY_PROTOCOL_VERSION);
+    test:assertEquals(mockCallCount("legacyFullInit:initialize"), 1);
+    test:assertEquals(mockCallCount("legacyFullInit:notifications/initialized"), 1);
+    _ = check mockClient->listTools();
+    test:assertEquals(mockCallCount("legacyFullInit:tools/list:versionHeader"), 1);
+    check mockClient->close();
+}
+
+@test:Config {}
+function testLegacyClientSkipsInitializeWithoutNetwork() returns error? {
+    StreamableHttpClient legacyClient = check new ("http://localhost:9/mcp", protocolMode = "legacy");
+    ConnectionInfo connection = check legacyClient->connect(legacyInitialize = false);
+    test:assertEquals(connection, {protocolVersion: "2025-03-26", capabilities: {}});
+    check legacyClient->close();
+}
+
+@test:Config {}
+function testSkippingLegacyInitializeKeepsModernAndSessionConnections() returns error? {
+    StreamableHttpClient modernClient = check new (mockUrl("modernSkipInit"), protocolMode = "auto");
+    ConnectionInfo modernConnection = check modernClient->connect(legacyInitialize = false);
+    test:assertEquals(modernConnection.protocolVersion, LATEST_PROTOCOL_VERSION);
+    check modernClient->close();
+
+    StreamableHttpClient sessionClient = check new (mockUrl("ok"), sessionId = "existing-session");
+    ConnectionInfo sessionConnection = check sessionClient->connect(legacyInitialize = false);
+    test:assertEquals(sessionConnection, {protocolVersion: LATEST_LEGACY_PROTOCOL_VERSION, capabilities: {}});
+    _ = check sessionClient->listTools();
+    check sessionClient->close();
+}
+
+@test:Config {}
+function testSkippingLegacyInitializeStillFailsOnUnauthorizedProbe() returns error? {
+    StreamableHttpClient mockClient = check new (mockUrl("unauthorizedProbe"), protocolMode = "auto");
+    var connectResult = mockClient->connect(legacyInitialize = false);
+    test:assertTrue(connectResult is ClientError);
+    test:assertEquals(mockCallCount("unauthorizedProbe:initialize"), 0);
+}
+
+@test:Config {}
+function testAdoptDiscoveryRejectsLegacyProtocolMode() returns error? {
+    DiscoverResult modernDiscovery = {supportedVersions: [LATEST_PROTOCOL_VERSION], capabilities: {}};
+    StreamableHttpClient legacyClient = check new (mockUrl("ok"), protocolMode = "legacy");
+    test:assertTrue(legacyClient.adoptDiscovery(modernDiscovery) is ClientInitializationError);
+
+    StreamableHttpClient sessionClient = check new (mockUrl("ok"), sessionId = "existing-session");
+    test:assertTrue(sessionClient.adoptDiscovery(modernDiscovery) is ClientInitializationError);
 }

@@ -32,6 +32,8 @@ public const SUPPORTED_PROTOCOL_VERSIONS = [...MODERN_PROTOCOL_VERSIONS, ...LEGA
 public const LATEST_PROTOCOL_VERSION = "2026-07-28";
 # The newest legacy revision, offered in `initialize`.
 public const LATEST_LEGACY_PROTOCOL_VERSION = "2025-11-25";
+// The version a server assumes for a legacy request without the MCP-Protocol-Version header.
+const ASSUMED_LEGACY_PROTOCOL_VERSION = "2025-03-26";
 
 const PROTOCOL_META_KEY = "io.modelcontextprotocol/protocolVersion";
 const CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities";

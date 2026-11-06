@@ -727,8 +727,13 @@ Use `callToolOnce()` when the application needs to handle each continuation itse
 The lower-level lifecycle methods are available for applications that manage discovery themselves:
 
 - `discover()` fetches modern discovery data without connecting the client.
-- `adoptDiscovery()` connects from a previously obtained `DiscoverResult`.
+- `adoptDiscovery()` connects an `auto` or `modern` client from a previously obtained `DiscoverResult`.
 - `initializeLegacy()` explicitly performs the older initialize handshake.
+
+To reach a legacy server without creating an HTTP session, for example when each call carries a different user's
+token, call `connect(legacyInitialize = false)`. The client then skips the `initialize` handshake, sends no
+`MCP-Protocol-Version` header and reports version `2025-03-26` with empty server capabilities. In `legacy` protocol
+mode this makes no network call. Modern connections and clients given a session ID ignore the option.
 
 ## Caching
 
