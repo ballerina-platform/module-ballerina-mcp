@@ -429,9 +429,9 @@ isolated function normalizeIssuerPath(string path) returns string {
 # + return - The client, or a `OAuthDiscoveryError` if it could not be created
 isolated function createAuthClient(string origin, readonly & AuthHttpConfig config)
         returns http:Client|Error {
-    if !origin.toLowerAscii().startsWith("https://") {
+    if !origin.toLowerAscii().startsWith("https://") && !isLoopbackHttpOrigin(origin) {
         return error OAuthDiscoveryError(string `'${origin}' does not use HTTPS. MCP authorization ` +
-            string `endpoints must be served over HTTPS.`);
+            string `endpoints must be served over HTTPS unless they are on a loopback interface.`);
     }
     http:Client|error httpClient = new (origin, {
         httpVersion: config.httpVersion,

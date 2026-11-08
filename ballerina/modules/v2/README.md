@@ -727,7 +727,9 @@ final mcpv2:StreamableHttpClient mcpClient = check new ("http://localhost:9090/m
 HTTP settings go under `httpConfig`, an `mcpv2:HttpClientConfig` with the fields and defaults of
 `http:ClientConfiguration`, except that `auth` also accepts `mcpv2:OAuth2DiscoveryConfig`. With
 `mcpv2:OAuth2DiscoveryConfig`, redirects are not followed and `init` returns an error if `followRedirects` enables them;
-the metadata and token endpoint requests reuse `secureSocket` and `proxy`.
+the metadata and token endpoint requests reuse `secureSocket` and `proxy`. The MCP server, authorization server and
+client metadata URLs must use HTTPS, except on a loopback host (`localhost`, `127.0.0.1` or `[::1]`), so the flow
+can be developed against local servers.
 
 Configuring `elicitationHandler` advertises the `elicitation` capability with form and URL modes on every modern
 request, merged with the capabilities passed to `connect()`. The client does not validate answers against the

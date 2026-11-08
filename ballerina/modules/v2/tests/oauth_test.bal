@@ -200,6 +200,17 @@ function testValidatePreRegisteredClient() {
     };
     test:assertTrue(validateConfig(insecureIssuer) is Error);
 
+    OAuth2DiscoveryConfig loopbackIssuer = {
+        grant: {
+            clientConfig: {
+                clientId: "reporting-agent",
+                issuer: "http://localhost:8080/realms/mcp",
+                clientAuth: {clientSecret: "secret"}
+            }
+        }
+    };
+    test:assertTrue(validateConfig(loopbackIssuer) is ());
+
     OAuth2DiscoveryConfig issuerWithQuery = {
         grant: {
             clientConfig: {
@@ -782,4 +793,17 @@ function testTokenStoreRefreshTokenHandling() {
 
     tokenStore.update({access_token: "d", token_type: "Bearer"}, []);
     test:assertTrue(tokenStore.getRefreshToken() is ());
+}
+
+@test:Config {}
+function testLoopbackHttpOrigins() {
+    foreach string origin in ["http://localhost", "http://localhost:3000", "HTTP://LOCALHOST:3000",
+            "http://127.0.0.1:9090", "http://[::1]:8443"] {
+        test:assertTrue(isLoopbackHttpOrigin(origin), origin);
+    }
+    foreach string origin in ["https://localhost:3000", "http://localhost.example.com",
+            "http://127.0.0.1.example.com", "http://localhost:", "http://localhost:80.example.com",
+            "http://127.0.0.2", "http://mcp.example.com"] {
+        test:assertFalse(isLoopbackHttpOrigin(origin), origin);
+    }
 }
