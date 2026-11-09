@@ -302,7 +302,7 @@ isolated function assertJsonRpcError(http:Response response, int expectedStatus,
 function testToolLookupStopsAfterAPageLimit() returns error? {
     http:Response response = check dispatcherPost("/endlessPages", REQUEST_CALL_TOOL, {"name": "missing"},
             {[NAME_HEADER]: "missing"});
-    check assertJsonRpcError(response, 200, INVALID_PARAMS, "Unknown tool name");
+    check assertJsonRpcError(response, 200, INVALID_PARAMS, "Unknown tool: missing");
     lock {
         test:assertTrue(endlessListings > 1 && endlessListings <= 100, endlessListings.toString());
     }
@@ -359,7 +359,7 @@ function testDispatcherValidatesToolCallHeaders() returns error? {
 
     http:Response unknownTool = check dispatcherPost("/tools", REQUEST_CALL_TOOL, {"name": "ghost"},
             {[NAME_HEADER]: "ghost"});
-    check assertJsonRpcError(unknownTool, 200, INVALID_PARAMS, "Unknown tool name");
+    check assertJsonRpcError(unknownTool, 200, INVALID_PARAMS, "Unknown tool: ghost");
 
     http:Response invalidParams = check dispatcherPost("/tools", REQUEST_CALL_TOOL, {"name": 42});
     check assertJsonRpcError(invalidParams, 200, INVALID_PARAMS, "Invalid tool call parameters");

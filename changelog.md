@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - `Origin` validation. A service checks the `Origin` header of every request, on both protocols and before authentication, against `httpConfig.cors.allowOrigins`, and answers an origin that is not listed with `403 Forbidden`. A request without an `Origin` header is accepted.
   - The client skips SSE events without data, such as keep-alive comments and priming events, instead of ending the stream with an error.
   - On the legacy protocol, the client ignores the `resultType`, `ttlMs`, and `cacheScope` result fields of MCP `2026-07-28`, so a server that sends them with values outside that schema no longer fails the request.
+  - A call to an unknown tool is answered with a JSON-RPC `INVALID_PARAMS` error on both protocols, as the specification shows. The root module still returns a tool result with `isError` set.
 
 ### Changed
 - In the v2 module, `McpToolConfig.structuredOutput` is now `boolean?` with default `()`: automatic, required (`true`), or disabled (`false`). Configuration records, shorthand and spreads preserve the same policy as inline fields. Known invalid configurations report `MCP_221` or `MCP_222`; runtime configurations are validated before service attachment. These checks apply in auto/modern protocol modes; legacy-only basic services keep text-only output.

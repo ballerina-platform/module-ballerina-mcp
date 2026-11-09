@@ -212,11 +212,11 @@ function testServiceSurvivesPanickingTool() returns error? {
 }
 
 @test:Config
-function testUnknownToolIsReportedAsToolExecutionError() returns error? {
+function testUnknownToolIsReportedAsInvalidParams() returns error? {
     http:Response response = check callTool(errorHandlingClient, "noSuchTool");
     test:assertEquals(response.statusCode, http:STATUS_OK);
-    [boolean, string] [isError, message] = check getToolError(check response.getJsonPayload());
-    test:assertTrue(isError);
+    [int, string] [code, message] = check getJsonRpcError(check response.getJsonPayload());
+    test:assertEquals(code, mcpv2:INVALID_PARAMS);
     test:assertEquals(message, "Unknown tool: noSuchTool");
 }
 
