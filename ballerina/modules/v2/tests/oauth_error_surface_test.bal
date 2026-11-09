@@ -24,7 +24,7 @@ isolated function challengeResponse() returns http:Response {
     http:Response challenge = new;
     challenge.statusCode = http:STATUS_UNAUTHORIZED;
     challenge.setHeader(WWW_AUTHENTICATE_HEADER,
-        "Bearer resource_metadata=\"http://localhost:3218/.well-known/oauth-protected-resource\"");
+        "Bearer resource_metadata=\"http://mcp.example.com/.well-known/oauth-protected-resource\"");
     return challenge;
 }
 
@@ -36,7 +36,7 @@ function assertAuthorizationFailure(any|error result) {
     if result !is AuthorizationError {
         test:assertFail(string `Expected an AuthorizationError, found: ${result is error ? result.message() : "a value"}`);
     }
-    test:assertTrue(result.message().includes("Last error: 'http://localhost:3218' does not use HTTPS"), result.message());
+    test:assertTrue(result.message().includes("Last error: 'http://mcp.example.com' does not use HTTPS"), result.message());
 }
 
 @test:Config {}

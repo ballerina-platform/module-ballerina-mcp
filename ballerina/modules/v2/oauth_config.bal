@@ -70,17 +70,30 @@ isolated function validateRedirectUri(string redirectUri) returns Error? {
     if parsed is Error {
         return error OAuthConfigError("'redirectUri' must be an absolute HTTP or HTTPS URL.", parsed);
     }
-    if parsed.scheme == "https" {
-        return;
-    }
-    string authority = parsed.origin.substring("http://".length());
-    if authority == "localhost" || authority.startsWith("localhost:") ||
-            authority == "127.0.0.1" || authority.startsWith("127.0.0.1:") ||
-            authority == "[::1]" || authority.startsWith("[::1]:") {
+    if parsed.scheme == "https" || isLoopbackHttpOrigin(parsed.origin) {
         return;
     }
     return error OAuthConfigError(
         "'redirectUri' must use HTTPS unless it addresses a loopback interface.");
+}
+
+// Plain HTTP is allowed on loopback hosts, so servers and authorization servers can run locally.
+isolated function isLoopbackHttpOrigin(string origin) returns boolean {
+    string lowered = origin.toLowerAscii();
+    if !lowered.startsWith("http://") {
+        return false;
+    }
+    string authority = lowered.substring("http://".length());
+    foreach string host in ["localhost", "127.0.0.1", "[::1]"] {
+        if authority == host {
+            return true;
+        }
+        if authority.startsWith(host + ":") {
+            string port = authority.substring(host.length() + 1);
+            return port != "" && port.toCodePointInts().every(c => c >= 48 && c <= 57);
+        }
+    }
+    return false;
 }
 
 # Validates an HTTPS configuration URL.
@@ -97,8 +110,9 @@ isolated function validateHttpsUrl(string value, string fieldName, boolean requi
     if parsed is Error {
         return error OAuthConfigError(string `'${fieldName}' must be an absolute HTTPS URL.`, parsed);
     }
-    if parsed.scheme != "https" {
-        return error OAuthConfigError(string `'${fieldName}' must use HTTPS. Found '${value}'.`);
+    if parsed.scheme != "https" && !isLoopbackHttpOrigin(parsed.origin) {
+        return error OAuthConfigError(string `'${fieldName}' must use HTTPS unless it addresses a loopback ` +
+            string `interface. Found '${value}'.`);
     }
     if requirePath && (parsed.path == "" || parsed.path == "/") {
         return error OAuthConfigError(string `'${fieldName}' must include a non-root document path. ` +
