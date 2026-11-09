@@ -354,9 +354,7 @@ function testLegacyCallToolIgnoresRemoteMethodsWithoutToolAnnotation() returns e
     test:assertEquals(listResult.tools.map(toolInfo => toolInfo.name).sort(), ["peek", "remember"]);
 
     http:Response callResponse = check legacyPost("/autoSession", legacyRequest(REQUEST_CALL_TOOL, {"name": "internal"}));
-    JsonRpcResponse callBody = check (check callResponse.getJsonPayload()).cloneWithType();
-    CallToolResult callResult = check callBody.result.ensureType();
-    test:assertEquals(callResult.isError, true);
-    TextContent textContent = check callResult.content[0].ensureType();
-    test:assertEquals(textContent.text, "Unknown tool: internal");
+    JsonRpcError callError = check (check callResponse.getJsonPayload()).cloneWithType();
+    test:assertEquals(callError.'error.code, INVALID_PARAMS);
+    test:assertEquals(callError.'error.message, "Unknown tool: internal");
 }

@@ -328,8 +328,9 @@ public final class McpServiceMethodHelper {
                 .filter(rmt -> rmt.getName().equals(toolName.getValue()) && isToolMethod(rmt))
                 .findFirst();
 
+        // An unknown tool is a protocol error (INVALID_PARAMS), like a binding failure.
         if (method.isEmpty()) {
-            return createCallToolError(typed, "Unknown tool: " + toolName.getValue());
+            return ModuleUtils.createParameterBindingError("Unknown tool: " + toolName.getValue());
         }
 
         // Extract metadata from params

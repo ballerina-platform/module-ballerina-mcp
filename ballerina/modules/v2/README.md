@@ -842,6 +842,8 @@ Other differences from the 1.x API:
   `mcpv2:InvalidParamsError` from an advanced service, is a JSON-RPC `INVALID_PARAMS` error. An
   `mcpv2:ServerError` from an advanced service gets a JSON-RPC error with its message, and another error or a panic
   gets an `INTERNAL_ERROR` with a generic message.
+- A call to an unknown tool is a JSON-RPC `INVALID_PARAMS` error on both protocols, where 1.x returned a tool result
+  with `isError` set. On a legacy call to an advanced service, `onCallTool` receives the name and decides the response.
 - Change notifications are not supported. `subscribeToServerMessages()` has no replacement, a modern service answers
   `subscriptions/listen` with `METHOD_NOT_FOUND`, and `tools.listChanged` is advertised as `false`. Proper support for
   change notification subscriptions is planned for a later release.

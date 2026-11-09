@@ -166,7 +166,7 @@ isolated function handleModernRequest(StreamableHttpService|StreamableHttpAdvanc
         nextCursor = page.nextCursor;
     }
     if selectedTool is () {
-        return createJsonRpcErrorResponse(INVALID_PARAMS, "Unknown tool name", requestMessage.id);
+        return createJsonRpcErrorResponse(INVALID_PARAMS, string `Unknown tool: ${callParams.name}`, requestMessage.id);
     }
     if authenticator is ServerAuthenticator && authContext is AuthContext {
         http:Forbidden? denied = authenticator.authorizeTool(authContext, callParams.name);
