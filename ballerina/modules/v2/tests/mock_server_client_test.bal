@@ -179,6 +179,12 @@ service /mock on new http:Listener(3210) {
                     textResponse.setTextPayload("not json at all");
                     return textResponse;
                 }
+                "textErrorStatus" => {
+                    http:Response textResponse = new;
+                    textResponse.statusCode = 502;
+                    textResponse.setTextPayload("upstream unavailable");
+                    return textResponse;
+                }
                 "malformedJson" => {
                     return mockJson({"jsonrpc": JSONRPC_VERSION, "unexpected": true});
                 }
@@ -641,6 +647,22 @@ function testModernClientRejectsMalformedHttpResponses() returns error? {
             test:assertTrue(discoverResult.message().includes(expectedMessage),
                     string `${scenario}: unexpected message '${discoverResult.message()}'`);
         }
+    }
+}
+
+@test:Config {}
+function testModernClientReportsErrorStatusWithoutJsonRpcBody() returns error? {
+    map<string> expectedMessages = {
+        "unauthorizedProbe": "Server returned error status 401: Unauthorized",
+        "textErrorStatus": "Server returned error status 502: Bad Gateway"
+    };
+    foreach var [scenario, expectedMessage] in expectedMessages.entries() {
+        StreamableHttpClient mockClient = check new (mockUrl(scenario), protocolMode = "modern");
+        var discoverResult = mockClient->discover();
+        if discoverResult !is HttpClientError {
+            test:assertFail(string `${scenario} should fail with an HttpClientError`);
+        }
+        test:assertEquals(discoverResult.message(), expectedMessage);
     }
 }
 
