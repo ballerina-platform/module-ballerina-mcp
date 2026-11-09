@@ -3,7 +3,7 @@ This file contains all the notable changes done to the Ballerina MCP package thr
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.5.0] - 2026-11-09
 
 ### Added
 - The `ballerina/mcp.v2` module, which supports MCP protocol version `2026-07-28`. Import it with `import ballerina/mcp.v2 as mcpv2;`. The root module keeps the 1.x API unchanged, so both can be used in one package. The v2 module's compiler diagnostics use their own codes, `MCP_2xx` and `MCP_WARNING_2xx`. Its documentation describes how to migrate from the 1.x API. The v2 module provides:
