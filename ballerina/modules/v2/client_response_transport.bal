@@ -80,17 +80,26 @@ isolated function readProtocolResponse(http:Response httpResponse, RequestId req
         }
         return responseValue;
     }
+    int statusCode = httpResponse.statusCode;
+    // An error status is explained only by a JSON-RPC error in the body; any other body is reported by the status.
+    boolean errorStatus = statusCode < 200 || statusCode >= 300;
     var payloadValue = httpResponse.getJsonPayload();
     if payloadValue is error {
-        return error HttpClientError("Server returned a non-JSON response", statusCode = httpResponse.statusCode);
+        return errorStatus ? httpStatusError(httpResponse)
+            : error HttpClientError("Server returned a non-JSON response", statusCode = statusCode);
     }
     WireMessage|error parsedValue = payloadValue.cloneWithType();
     if parsedValue is error {
-        return error ResponseParsingError("Malformed JSON-RPC response", parsedValue, statusCode = httpResponse.statusCode);
+        return errorStatus ? httpStatusError(httpResponse)
+            : error ResponseParsingError("Malformed JSON-RPC response", parsedValue, statusCode = statusCode);
     }
     messageValue = parsedValue;
     return protocolMessageResult(messageValue, requestId, modernResponse, httpResponse.statusCode);
 }
+
+isolated function httpStatusError(http:Response httpResponse) returns HttpClientError =>
+    error HttpClientError(string `Server returned error status ${httpResponse.statusCode}: ${httpResponse.reasonPhrase}`,
+            statusCode = httpResponse.statusCode);
 
 isolated function readProtocolStream(ProtocolMessageStream messageStream, RequestId requestId, boolean modernResponse)
         returns Result|ClientError {
